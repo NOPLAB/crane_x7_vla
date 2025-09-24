@@ -1,6 +1,22 @@
 # CRANE-X7
 未来ロボティクス学科 ロボット設計制作論実習3
 
+## 開発
+
+### Docker
+
+ビルド
+
+```bash
+./scripts/build.sh
+```
+
+実行
+
+```bash
+./scripts/run.sh
+```
+
 ## 参考情報
 
 ### RT
