@@ -1,0 +1,7 @@
+#!/bin/bash
+
+DOCKER_IMAGE_NAME=ros
+DOCKER_CONTAINER_NAME=ros-dev
+
+docker run --rm -e DISPLAY=$DISPLAY --name $DOCKER_CONTAINER_NAME -it $DOCKER_IMAGE_NAME
+
