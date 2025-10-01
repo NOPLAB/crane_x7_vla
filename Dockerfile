@@ -7,7 +7,6 @@ RUN apt update && apt install -y --no-install-recommends \
 
 RUN mkdir /workspace
 WORKDIR /workspace
-COPY . /workspace/
 
 FROM base AS dev
 
