@@ -5,13 +5,19 @@ DOCKER_CONTAINER_NAME=ros-dev
 
 DOCKER_OPTION=
 DOCKER_WSL_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg"
+DOCKER_LINUX_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix"
 
 if [[ "$(uname -r)" == *-microsoft-standard-WSL2 ]]; then
     # WSL
+    echo "Run on WSL"
     DOCKER_OPTION=$DOCKER_WSL_OPTION
+elif [[ "$(uname)" == "Linux" ]]; then
+    echo "Run on Linux"
+    xhost +
+    DOCKER_OPTION=$DOCKER_LINUX_OPTION
 else
-    # Other
-    DISPLAY=host.docker.internal:0.0
+    echo "Cloudn't detect your system"
+    return -1;
 fi
 
 docker run \
