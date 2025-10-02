@@ -4,9 +4,7 @@ SCRIPT_DIR=$(cd $(dirname $0); pwd)
 DOCKER_IMAGE_NAME=ros-dev
 DOCKER_CONTAINER_NAME=ros-dev
 
-echo "Script directory is $SCRIPT_DIR"
-
-DOCKER_OPTION="-v $SCRIPT_DIR/..:/workspace"
+DOCKER_OPTION=" -v $SCRIPT_DIR/..:/workspace"
 DOCKER_WSL_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg"
 DOCKER_LINUX_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix"
 
@@ -22,8 +20,6 @@ else
     echo "Cloudn't detect your system"
     return -1;
 fi
-
-echo "Docker option is $DOCKER_OPTION"
 
 docker run \
     -e DISPLAY=$DISPLAY	\

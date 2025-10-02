@@ -20,17 +20,13 @@ RUN apt-get update && apt install -y --no-install-recommends \
     tmux \
     x11-apps
 
-CMD ["/bin/bash"]
+CMD [ "/workspace/scripts/docker/entrypoint.sh" ]
 
 FROM base AS ros2_demo_real
 
-WORKDIR /workspace/ros2
-
-CMD ["./scripts/demo/launch_real.sh"]
+CMD ["/workspace/ros2/scripts/demo/launch_real.sh"]
 
 FROM base AS ros2_demo_sim
 
-WORKDIR /workspace/ros2
-
-CMD ["./scripts/demo/launch_sim.sh"]
+CMD ["/workspace/ros2/scripts/demo/launch_sim.sh"]
 
