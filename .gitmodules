@@ -1,0 +1,4 @@
+[submodule "ros2/src/crane_x7_ros"]
+	path = ros2/src/crane_x7_ros
+	url = https://github.com/NOPLAB/crane_x7_ros
+	branch = humble
