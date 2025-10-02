@@ -8,8 +8,14 @@ VLAを使ってマニュピレータを制御する。
 
 ## 必須
 
-- Native Linux or WSL
+- Native Linux
 - Docker
+
+## リポジトリのクローン
+
+```bash
+git clone --recursive https://github.com/NOPLAB/crane_x7_vla
+```
 
 ## 実行
 
