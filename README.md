@@ -15,6 +15,9 @@
 
 ```bash
 ./scripts/run.sh
+
+# rosdep install -r -y -i --from-paths .
+# colcon build --symlink-install
 ```
 
 ## 参考情報
@@ -25,3 +28,4 @@
 - https://github.com/rt-net/crane_x7_ros
 - https://github.com/rt-net/crane_x7_Hardware
 - https://github.com/rt-net/crane_x7_samples
+
