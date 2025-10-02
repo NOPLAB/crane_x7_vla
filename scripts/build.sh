@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_DIR=$(cd $(dirname $0); pwd)
-DOCKER_FILE_DIR=$SCRIPT_DIR
+DOCKER_FILE_DIR=$SCRIPT_DIR/..
 DOCKER_DEV_IMAGE_NAME=ros-dev
 
 # Build dev
