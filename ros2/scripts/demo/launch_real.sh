@@ -3,7 +3,7 @@
 USB_DEVICE=$1
 
 SCRIPT_DIR=$(cd $(dirname $0); pwd)
-ROS2_WORKSPACE=$SCRIPT_DIR/..
+ROS2_WORKSPACE=$SCRIPT_DIR/../..
 
 if [ ! -e USB_DEVICE ]; then
     echo "Not found USB device: $USB_DEVICE"

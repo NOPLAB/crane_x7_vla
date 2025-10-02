@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: base
+      target: ros2_demo_real
     volumes:
       - type: bind
         source: "."
@@ -16,7 +16,6 @@ services:
         target: "/tmp/.X11-unix"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
-    command: /workspace/ros2/scripts/launch.sh /dev/ttyUSB0
 
   crane_x7_ros2_sim:
     profiles:
@@ -25,7 +24,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: base
+      target: ros2_demo_sim
     volumes:
       - type: bind
         source: "."
@@ -33,5 +32,4 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
-    command: /workspace/ros2/scripts/launch_sim.sh
 

@@ -22,3 +22,15 @@ RUN apt-get update && apt install -y --no-install-recommends \
 
 CMD ["/bin/bash"]
 
+FROM base AS ros2_demo_real
+
+WORKDIR /workspace/ros2
+
+CMD ["./scripts/demo/launch_real.sh"]
+
+FROM base AS ros2_demo_sim
+
+WORKDIR /workspace/ros2
+
+CMD ["./scripts/demo/launch_sim.sh"]
+
