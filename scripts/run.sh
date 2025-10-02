@@ -1,9 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR=$(cd $(dirname $0); pwd)
 DOCKER_IMAGE_NAME=ros-dev
 DOCKER_CONTAINER_NAME=ros-dev
-
-SCRIPT_DIR=$(cd $(dirname $0); pwd)
 
 echo "Script directory is $SCRIPT_DIR"
 
