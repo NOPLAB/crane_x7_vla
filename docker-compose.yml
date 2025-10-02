@@ -1,0 +1,37 @@
+services:
+  crane_x7_ros2_real:
+    profiles:
+      - real
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+    devices:
+      - "$USB_DEVICE:/dev/ttyUSB0"
+    command: /workspace/ros2/scripts/launch.sh /dev/ttyUSB0
+
+  crane_x7_ros2_sim:
+    profiles:
+      - sim
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+    command: /workspace/ros2/scripts/launch_sim.sh
+

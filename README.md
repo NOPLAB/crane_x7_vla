@@ -1,23 +1,63 @@
 # CRANE-X7
+
 未来ロボティクス学科 ロボット設計制作論実習3
+
+## 概要
+
+VLAを使ってマニュピレータを制御する。
+
+## 必須
+
+- Native Linux or WSL
+- Docker
+
+## 実行
+
+1. .envの作成
+
+.env.templateからコピーして作成
+
+各環境変数の説明
+- `USB_DEVICE` ホストに認識されているのUSBデバイスのパス
+
+2. 実行
+
+実機の場合
+```bash
+docker compose --profile real up
+```
+
+シミュレータ(Gazebo)の場合
+```bash
+docker compose --profile sim up
+```
 
 ## 開発
 
 ### Docker
 
-ビルド
+1. ビルド
 
 ```bash
 ./scripts/build.sh
 ```
 
-実行
+2. 実行
 
+実機で実行
 ```bash
-./scripts/run.sh
+./scripts/run.sh real
 
-# rosdep install -r -y -i --from-paths .
 # colcon build --symlink-install
+# source install/setup.bash
+```
+
+シミュレータ(Gazebo)で実行
+```bash
+./scripts/run.sh sim
+
+# colcon build --symlink-install
+# source install/setup.bash
 ```
 
 ## 参考情報

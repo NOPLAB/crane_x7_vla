@@ -6,3 +6,7 @@
 	path = ros2/src/crane_x7_description
 	url = https://github.com/rt-net/crane_x7_description.git
 	branch = humble
+[submodule "openvla"]
+	path = openvla
+	url = https://github.com/NOPLAB/openvla
+	branch = main
