@@ -10,11 +10,11 @@ DOCKER_LINUX_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix"
 if [[ "$(uname -r)" == *-microsoft-standard-WSL2 ]]; then
     # WSL
     echo "Run on WSL"
-    DOCKER_OPTION=$DOCKER_WSL_OPTION
+    DOCKER_OPTION=$DOCKER_OPTION $DOCKER_WSL_OPTION
 elif [[ "$(uname)" == "Linux" ]]; then
     echo "Run on Linux"
     xhost +
-    DOCKER_OPTION=$DOCKER_LINUX_OPTION
+    DOCKER_OPTION=$DOCKER_OPTION $DOCKER_LINUX_OPTION
 else
     echo "Cloudn't detect your system"
     return -1;
