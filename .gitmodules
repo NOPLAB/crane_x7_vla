@@ -2,3 +2,7 @@
 	path = ros2/src/crane_x7_ros
 	url = https://github.com/NOPLAB/crane_x7_ros
 	branch = humble
+[submodule "ros2/src/crane_x7_description"]
+	path = ros2/src/crane_x7_description
+	url = https://github.com/rt-net/crane_x7_description.git
+	branch = humble
