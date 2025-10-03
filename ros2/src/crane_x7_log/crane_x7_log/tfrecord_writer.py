@@ -2,7 +2,7 @@
 # Copyright 2025
 # Licensed under the MIT License
 
-"""TFRecord writer for OXE (Open X-Embodiment) dataset format."""
+"""TFRecord writer for robot data logging."""
 
 import tensorflow as tf
 import numpy as np
@@ -10,12 +10,12 @@ from typing import Dict, List, Any
 import os
 
 
-class OXEWriter:
-    """Writes episode data to TFRecord format compatible with OXE dataset."""
+class TFRecordWriter:
+    """Writes episode data to TFRecord format."""
 
     def __init__(self, output_path: str):
         """
-        Initialize OXE TFRecord writer.
+        Initialize TFRecord writer.
 
         Args:
             output_path: Path to output TFRecord file
@@ -149,7 +149,7 @@ def convert_npz_to_tfrecord(npz_path: str, tfrecord_path: str):
         episode_data.append(step_data)
 
     # Write to TFRecord
-    writer = OXEWriter(tfrecord_path)
+    writer = TFRecordWriter(tfrecord_path)
     writer.write_episode(episode_data)
     writer.close()
 
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) != 3:
-        print('Usage: oxe_writer.py <input.npz> <output.tfrecord>')
+        print('Usage: tfrecord_writer.py <input.npz> <output.tfrecord>')
         sys.exit(1)
 
     npz_path = sys.argv[1]

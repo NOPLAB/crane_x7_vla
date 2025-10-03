@@ -11,11 +11,11 @@ from threading import Lock
 import os
 from datetime import datetime
 
-class OXELogger(Node):
-    """ROS 2 node for logging CRANE-X7 data in OXE format for VLA fine-tuning."""
+class TFRecordLogger(Node):
+    """ROS 2 node for logging CRANE-X7 data in TFRecord format for VLA fine-tuning."""
 
     def __init__(self):
-        super().__init__('oxe_logger')
+        super().__init__('tfrecord_logger')
 
         # Declare all parameters with defaults
         self.declare_parameter('output_dir', '/workspace/data/oxe_logs')
@@ -122,7 +122,7 @@ class OXELogger(Node):
         # Timer for connection status reporting
         self.status_timer = self.create_timer(2.0, self.report_connection_status)
 
-        self.get_logger().info(f'OXE Logger initialized')
+        self.get_logger().info(f'TFRecord Logger initialized')
         self.get_logger().info(f'  Output: {self.output_dir}')
         self.get_logger().info(f'  Episode length: {self.episode_length}')
         self.get_logger().info(f'  Collection rate: {self.collection_rate} Hz')
@@ -352,7 +352,7 @@ class OXELogger(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = OXELogger()
+    node = TFRecordLogger()
 
     try:
         rclpy.spin(node)

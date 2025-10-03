@@ -11,7 +11,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch file for OXE data logger."""
+    """Launch file for TFRecord data logger."""
 
     # Get config file path
     config_file = os.path.join(
@@ -39,11 +39,11 @@ def generate_launch_description():
         description='Enable camera data logging (overrides config)'
     )
 
-    # OXE Logger Node
-    oxe_logger_node = Node(
+    # TFRecord Logger Node
+    tfrecord_logger_node = Node(
         package='crane_x7_log',
-        executable='oxe_logger',
-        name='oxe_logger',
+        executable='tfrecord_logger',
+        name='tfrecord_logger',
         output='screen',
         parameters=[LaunchConfiguration('config_file')]
     )
@@ -52,5 +52,5 @@ def generate_launch_description():
         declare_config_file,
         declare_output_dir,
         declare_use_camera,
-        oxe_logger_node,
+        tfrecord_logger_node,
     ])

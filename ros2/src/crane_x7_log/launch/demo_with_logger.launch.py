@@ -3,7 +3,7 @@
 # Licensed under the MIT License
 
 """
-Launch file that starts CRANE-X7 Gazebo simulation with OXE data logger.
+Launch file that starts CRANE-X7 Gazebo simulation with TFRecord data logger.
 """
 
 import os
@@ -16,7 +16,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch Gazebo simulation with OXE logger."""
+    """Launch Gazebo simulation with TFRecord logger."""
 
     # Get package directories
     crane_x7_gazebo_dir = get_package_share_directory('crane_x7_gazebo')
@@ -29,7 +29,7 @@ def generate_launch_description():
     # Launch arguments
     declare_output_dir = DeclareLaunchArgument(
         'output_dir',
-        default_value='/workspace/data/oxe_logs',
+        default_value='/workspace/data/tfrecord_logs',
         description='Directory to save logged data'
     )
 
@@ -44,11 +44,11 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(gazebo_launch)
     )
 
-    # OXE Logger Node
-    oxe_logger_node = Node(
+    # TFRecord Logger Node
+    tfrecord_logger_node = Node(
         package='crane_x7_log',
-        executable='oxe_logger',
-        name='oxe_logger',
+        executable='tfrecord_logger',
+        name='tfrecord_logger',
         output='screen',
         parameters=[LaunchConfiguration('config_file')]
     )
@@ -57,5 +57,5 @@ def generate_launch_description():
         declare_output_dir,
         declare_config_file,
         gazebo_sim,
-        oxe_logger_node,
+        tfrecord_logger_node,
     ])

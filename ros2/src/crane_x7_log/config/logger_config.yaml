@@ -1,7 +1,7 @@
-oxe_logger:
+tfrecord_logger:
   ros__parameters:
     # Output settings
-    output_dir: "/workspace/data/oxe_logs"
+    output_dir: "/workspace/data/tfrecord_logs"
 
     # Episode settings
     episode_length: 100  # Number of steps per episode
@@ -39,5 +39,5 @@ oxe_logger:
     camera_info_topic: "/camera/color/camera_info"
 
     # Data format
-    save_format: "npz"  # npz or tfrecord
+    save_format: "tfrecord"  # npz or tfrecord
     auto_convert_tfrecord: false  # Automatically convert NPZ to TFRecord after saving

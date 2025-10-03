@@ -24,13 +24,13 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='root@todo.todo',
-    description='Data logging package for CRANE-X7 in OXE format for VLA fine-tuning',
+    description='Data logging package for CRANE-X7 in TFRecord format for VLA fine-tuning',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'oxe_logger = crane_x7_log.oxe_logger:main',
-            'oxe_writer = crane_x7_log.oxe_writer:main',
+            'tfrecord_logger = crane_x7_log.tfrecord_logger:main',
+            'tfrecord_writer = crane_x7_log.tfrecord_writer:main',
         ],
     },
 )
