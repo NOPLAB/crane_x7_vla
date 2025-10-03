@@ -4,7 +4,7 @@ SCRIPT_DIR=$(cd $(dirname $0); pwd)
 DOCKER_IMAGE_NAME=ros-dev
 DOCKER_CONTAINER_NAME=ros-dev
 
-DOCKER_OPTION=" -v $SCRIPT_DIR/..:/workspace"
+DOCKER_OPTION=" -v $SCRIPT_DIR/..:/workspace --network=crane_x7"
 DOCKER_WSL_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg"
 DOCKER_LINUX_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix"
 

@@ -35,3 +35,7 @@ services:
         target: "/tmp/.X11-unix"
     command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
 
+networks:
+  default:
+    name: crane_x7
+

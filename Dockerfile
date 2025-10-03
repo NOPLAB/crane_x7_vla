@@ -18,6 +18,7 @@ FROM base AS dev
 RUN apt-get update && apt install -y --no-install-recommends \
     vim \
     tmux \
+    iproute2 \
     x11-apps
 
 CMD ["/bin/bash"]
