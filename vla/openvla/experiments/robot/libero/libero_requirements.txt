@@ -1,5 +1,5 @@
 imageio[ffmpeg]
-robosuite==1.4.1
+robosuite==1.5.1
 bddl
 easydict
 cloudpickle
