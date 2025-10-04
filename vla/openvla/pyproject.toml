@@ -41,7 +41,7 @@ dependencies = [
     "peft==0.11.1",
     "protobuf",
     "rich",
-    "sentencepiece==0.1.99",
+    "sentencepiece==0.2.1",
     "timm==0.9.10",
     "tokenizers==0.19.1",
     "torch==2.2.0",
