@@ -1,0 +1,28 @@
+# CRANE-X7 OpenVLA Fine-tuning Requirements
+
+# Core OpenVLA dependencies (from openvla/requirements-min.txt)
+torch>=2.2.0
+torchvision>=0.17.0
+transformers==4.40.1
+tokenizers==0.19.1
+timm==0.9.10
+Pillow>=10.0.0
+
+# Fine-tuning specific
+peft==0.11.1
+accelerate>=0.27.0
+bitsandbytes>=0.43.0
+
+# Data processing
+tensorflow>=2.15.0
+tensorflow-datasets==4.9.3
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Logging and utilities
+wandb>=0.16.0
+tqdm>=4.66.0
+
+# Optional: Flash Attention 2 for faster training
+# Requires CUDA and specific installation steps
+# flash-attn==2.5.5

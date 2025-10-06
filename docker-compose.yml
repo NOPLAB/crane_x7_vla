@@ -35,6 +35,35 @@ services:
         target: "/tmp/.X11-unix"
     command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
 
+  vla_finetune:
+    profiles:
+      - vla
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: vla
+    volumes:
+      - type: bind
+        source: "./vla"
+        target: "/workspace/vla"
+      - type: bind
+        source: "./data"
+        target: "/workspace/data"
+      - type: bind
+        source: "./outputs"
+        target: "/workspace/outputs"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '16gb'
+    ipc: host
+    working_dir: /workspace
+    command: /bin/bash
+
 networks:
   default:
     name: crane_x7
