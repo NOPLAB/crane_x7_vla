@@ -29,10 +29,10 @@ class CraneX7Dataset(Dataset):
         ...
 
     Each TFRecord contains:
-        - observation/state: Joint positions (7-DOF)
+        - observation/state: Joint positions (8-DOF: 7 arm joints + 1 gripper)
         - observation/image: RGB image (optional)
         - observation/timestamp: Timestamp
-        - action: Next state (7-DOF)
+        - action: Next state (8-DOF: 7 arm joints + 1 gripper)
     """
 
     def __init__(
@@ -101,8 +101,8 @@ class CraneX7Dataset(Dataset):
         import tensorflow as tf
 
         feature_description = {
-            'observation/state': tf.io.FixedLenFeature([7], tf.float32),
-            'action': tf.io.FixedLenFeature([7], tf.float32),
+            'observation/state': tf.io.FixedLenFeature([8], tf.float32),
+            'action': tf.io.FixedLenFeature([8], tf.float32),
             'observation/timestamp': tf.io.FixedLenFeature([1], tf.float32),
         }
 
@@ -157,8 +157,8 @@ class CraneX7Dataset(Dataset):
         Returns:
             Dictionary containing:
                 - image: RGB image tensor [C, H, W] (if use_image=True)
-                - state: Joint state tensor [7]
-                - action: Action tensor [7]
+                - state: Joint state tensor [8]
+                - action: Action tensor [8]
                 - instruction: Task instruction string
         """
         tfrecord_path, step_idx = self.samples[idx]
