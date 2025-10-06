@@ -17,16 +17,22 @@ VLAを使ってマニュピレータを制御する。
 git clone --recursive https://github.com/NOPLAB/crane_x7_vla
 ```
 
-## 実行
+## 実行方法
 
-1. .envの作成
+### 1. `.env`の作成
 
 .env.templateからコピーして作成
 
 各環境変数の説明
 - `USB_DEVICE` ホストに認識されているのUSBデバイスのパス
 
-2. 実行
+### 2. X11の許可
+
+```bash
+xhost +
+```
+
+### 3. 実行
 
 実機の場合
 ```bash
