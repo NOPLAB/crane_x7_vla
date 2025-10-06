@@ -1,3 +1,6 @@
+# ============================================================================
+# ROS2 Stage 
+# ============================================================================
 FROM osrf/ros:humble-desktop-full AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -35,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 CMD ["/bin/bash"]
 
 # ============================================================================
-# VLA Fine-tuning Stage (separate from ROS2)
+# VLA Fine-tuning Stage
 # ============================================================================
 FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 AS vla
 
