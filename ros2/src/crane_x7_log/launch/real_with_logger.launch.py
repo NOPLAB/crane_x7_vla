@@ -66,7 +66,10 @@ def generate_launch_description():
         executable='data_logger',
         name='data_logger',
         output='screen',
-        parameters=[LaunchConfiguration('config_file')]
+        parameters=[
+            LaunchConfiguration('config_file'),
+            {'output_dir': LaunchConfiguration('output_dir')}
+        ]
     )
 
     return LaunchDescription([
