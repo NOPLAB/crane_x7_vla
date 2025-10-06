@@ -1,0 +1,49 @@
+# VLA Inference Node Configuration
+
+vla_inference_node:
+  ros__parameters:
+    # Model configuration
+    model_path: '/workspace/vla/models/crane_x7_finetuned'  # Path to fine-tuned VLA model
+    model_base_name: 'openvla'  # Base model name ('openvla' or 'openvla-v01')
+
+    # Task instruction
+    task_instruction: 'pick up the object'  # Default task instruction
+
+    # Model settings
+    use_flash_attention: false  # Enable Flash Attention 2 (requires compatible GPU)
+    device: 'cpu'  # Device: 'cuda' or 'cpu'
+    unnorm_key: 'crane_x7'  # Unnormalization key for actions
+
+    # Topics
+    image_topic: '/camera/color/image_raw'  # RGB image topic
+    joint_states_topic: '/joint_states'  # Joint states topic
+    action_topic: '/vla/predicted_action'  # Output action topic
+
+    # Inference settings
+    inference_rate: 10.0  # Inference frequency (Hz)
+    center_crop: false  # Apply center crop to images (if trained with augmentation)
+
+robot_controller:
+  ros__parameters:
+    # Topics
+    action_topic: '/vla/predicted_action'  # VLA action input topic
+    joint_states_topic: '/joint_states'  # Joint states topic
+
+    # Controller configuration
+    controller_name: '/crane_x7_arm_controller/follow_joint_trajectory'
+
+    # Execution settings
+    execution_time: 1.0  # Time to execute each action (seconds)
+    position_tolerance: 0.01  # Position tolerance for goal (radians)
+    auto_execute: true  # Automatically execute received actions
+
+    # Joint names (CRANE-X7 specific)
+    joint_names:
+      - 'crane_x7_shoulder_fixed_part_pan_joint'
+      - 'crane_x7_shoulder_revolute_part_tilt_joint'
+      - 'crane_x7_upper_arm_revolute_part_twist_joint'
+      - 'crane_x7_upper_arm_revolute_part_rotate_joint'
+      - 'crane_x7_lower_arm_fixed_part_joint'
+      - 'crane_x7_lower_arm_revolute_part_joint'
+      - 'crane_x7_wrist_joint'
+      - 'crane_x7_gripper_finger_a_joint'
