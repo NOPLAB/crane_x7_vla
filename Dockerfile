@@ -2,36 +2,35 @@ FROM osrf/ros:humble-desktop-full AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt install -y --no-install-recommends \
-    xserver-xorg
-
-# Cache installtion
-RUN apt-get update && apt install -y --no-install-recommends \
-    ros-humble-moveit
-
-ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
+# Install system dependencies in single layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xserver-xorg \
+    ros-humble-moveit \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN apt-get update && apt install -y --no-install-recommends \
-    python3-pip && \
-    pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir \
     tensorflow \
     numpy \
     opencv-python
 
-# Install dependencies
+# Install ROS dependencies
+ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
 COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
-RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR}
+RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && \
+    rm -rf ${ROS2_DEPENDENCIES_DIR}
 
 WORKDIR /workspace
 
 FROM base AS dev
 
-RUN apt-get update && apt install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     tmux \
     iproute2 \
-    x11-apps
+    x11-apps \
+    && rm -rf /var/lib/apt/lists/*
 
 CMD ["/bin/bash"]
 
@@ -57,12 +56,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install PyTorch with CUDA support
+# Install PyTorch with CUDA 12.4 support
 RUN pip3 install --no-cache-dir \
-    torch==2.2.0 \
-    torchvision==0.17.0 \
-    torchaudio==2.2.0 \
-    --index-url https://download.pytorch.org/whl/cu121
+    torch==2.3.1 \
+    torchvision==0.18.1 \
+    torchaudio==2.3.1 \
+    --index-url https://download.pytorch.org/whl/cu124
 
 # Install VLA fine-tuning requirements
 COPY vla/requirements.txt /tmp/vla_requirements.txt
