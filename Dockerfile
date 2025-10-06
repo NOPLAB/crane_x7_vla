@@ -11,6 +11,14 @@ RUN apt-get update && apt install -y --no-install-recommends \
 
 ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
 
+# Install Python dependencies
+RUN apt-get update && apt install -y --no-install-recommends \
+    python3-pip && \
+    pip3 install --no-cache-dir \
+    tensorflow \
+    numpy \
+    opencv-python
+
 # Install dependencies
 COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
 RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR}
