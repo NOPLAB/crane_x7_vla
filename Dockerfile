@@ -5,10 +5,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt install -y --no-install-recommends \
     xserver-xorg
 
+# Cache installtion
+RUN apt-get update && apt install -y --no-install-recommends \
+    ros-humble-moveit
+
+ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
+
 # Install dependencies
-RUN mkdir -p /tmp/ros2_dependencies/src
-COPY ros2/src /tmp/ros2_dependencies/src
-RUN cd /tmp/ros2_dependencies && rosdep install -r -y -i --from-paths .  && rm -rf /tmp/ros2_dependencies
+COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
+RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR}
 
 RUN mkdir /workspace
 WORKDIR /workspace
