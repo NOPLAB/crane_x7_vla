@@ -15,7 +15,6 @@ ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
 COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
 RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR}
 
-RUN mkdir /workspace
 WORKDIR /workspace
 
 FROM base AS dev
