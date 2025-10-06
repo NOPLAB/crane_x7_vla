@@ -24,12 +24,12 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='root@todo.todo',
-    description='Data logging package for CRANE-X7 in TFRecord format for VLA fine-tuning',
+    description='Data logging package for CRANE-X7 in NPZ/TFRecord format for VLA fine-tuning',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'tfrecord_logger = crane_x7_log.tfrecord_logger:main',
+            'data_logger = crane_x7_log.data_logger:main',
             'tfrecord_writer = crane_x7_log.tfrecord_writer:main',
         ],
     },

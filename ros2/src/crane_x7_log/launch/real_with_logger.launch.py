@@ -3,7 +3,7 @@
 # Licensed under the MIT License
 
 """
-Launch file that starts CRANE-X7 real robot control with TFRecord data logger.
+Launch file that starts CRANE-X7 real robot control with data logger.
 """
 
 import os
@@ -16,7 +16,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch real robot control with TFRecord logger."""
+    """Launch real robot control with data logger."""
 
     # Get package directories
     crane_x7_examples_dir = get_package_share_directory('crane_x7_examples')
@@ -60,11 +60,11 @@ def generate_launch_description():
         }.items()
     )
 
-    # TFRecord Logger Node
-    tfrecord_logger_node = Node(
+    # Data Logger Node
+    data_logger_node = Node(
         package='crane_x7_log',
-        executable='tfrecord_logger',
-        name='tfrecord_logger',
+        executable='data_logger',
+        name='data_logger',
         output='screen',
         parameters=[LaunchConfiguration('config_file')]
     )
@@ -75,5 +75,5 @@ def generate_launch_description():
         declare_output_dir,
         declare_config_file,
         robot_demo,
-        tfrecord_logger_node,
+        data_logger_node,
     ])

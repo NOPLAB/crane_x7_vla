@@ -1,7 +1,7 @@
-tfrecord_logger:
+data_logger:
   ros__parameters:
     # Output settings
-    output_dir: "/workspace/data/tfrecord_logs"
+    output_dir: "/workspace/data/logs"
 
     # Episode settings
     episode_length: 100  # Number of steps per episode
@@ -40,4 +40,3 @@ tfrecord_logger:
 
     # Data format
     save_format: "tfrecord"  # npz or tfrecord
-    auto_convert_tfrecord: false  # Automatically convert NPZ to TFRecord after saving
