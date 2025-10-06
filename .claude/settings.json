@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+    ],
+    "deny": [
+	"Write(crane_x7_ros)",
+	"Write(crane_x7_description)"
+    ]
+  }
+}
+
