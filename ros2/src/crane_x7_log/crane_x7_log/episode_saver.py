@@ -8,7 +8,7 @@ import os
 import numpy as np
 from datetime import datetime
 from typing import List, Dict, Any
-from rclpy.logging import Logger
+from rclpy.impl.rcutils_logger import RcutilsLogger
 
 
 class EpisodeSaver:
@@ -18,7 +18,7 @@ class EpisodeSaver:
         self,
         output_dir: str,
         save_format: str,
-        logger: Logger
+        logger: RcutilsLogger
     ):
         """
         Initialize episode saver.

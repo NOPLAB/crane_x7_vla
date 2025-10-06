@@ -35,7 +35,7 @@ def generate_launch_description():
 
     declare_use_d435 = DeclareLaunchArgument(
         'use_d435',
-        default_value='true',
+        default_value='false',
         description='Use RealSense D435 camera'
     )
 
