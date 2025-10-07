@@ -21,8 +21,7 @@ RUN pip3 install --no-cache-dir \
 # Install ROS dependencies
 ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
 COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
-RUN rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && \
-    rm -rf ${ROS2_DEPENDENCIES_DIR}
+RUN apt-get update && rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR} && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
