@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies
 RUN pip3 install --no-cache-dir \
     tensorflow \
-    numpy \
+    "numpy<2" \
     opencv-python
 
 # Install ROS dependencies
@@ -25,14 +25,41 @@ RUN apt-get update && rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_D
 
 WORKDIR /workspace
 
+# Create a user that matches host user (UID/GID will be passed at build time)
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USERNAME=ros2
+
+RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
+    useradd -l -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USERNAME} && \
+    usermod -aG sudo ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set ownership of workspace
+RUN mkdir -p /workspace && chown -R ${USER_ID}:${GROUP_ID} /workspace
+
+USER ${USERNAME}
+
 FROM base AS dev
+
+# Need to re-declare ARGs from base stage for use in dev stage
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USERNAME=ros2
+
+# Switch back to root to install additional packages
+USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     tmux \
     iproute2 \
     x11-apps \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Switch back to the non-root user
+USER ${USERNAME}
 
 CMD ["/bin/bash"]
 

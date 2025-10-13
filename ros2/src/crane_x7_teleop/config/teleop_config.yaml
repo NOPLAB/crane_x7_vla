@@ -1,0 +1,46 @@
+teleop_hardware_node:
+  ros__parameters:
+    # 動作モード ("leader" or "follower")
+    mode: "leader"
+
+    # ハードウェア設定
+    port_name: "/dev/ttyUSB0"
+    baudrate: 3000000
+    config_file: ""  # Launchファイルで設定
+    links_file: ""   # Launchファイルで設定
+
+    # 動作設定
+    publish_rate: 30.0  # Hz
+
+    # トピック設定
+    joint_states_topic: "/joint_states"
+    leader_state_topic: "/teleop/leader/state"
+
+    # 関節名リスト
+    joint_names:
+      - crane_x7_shoulder_fixed_part_pan_joint
+      - crane_x7_shoulder_revolute_part_tilt_joint
+      - crane_x7_upper_arm_revolute_part_twist_joint
+      - crane_x7_upper_arm_revolute_part_rotate_joint
+      - crane_x7_lower_arm_fixed_part_joint
+      - crane_x7_lower_arm_revolute_part_joint
+      - crane_x7_wrist_joint
+      - crane_x7_gripper_finger_a_joint
+
+    # PIDゲイン設定
+    torque_on_gains:
+      p: 800
+      i: 0
+      d: 0
+    torque_off_gains:
+      p: 5
+      i: 0
+      d: 0
+
+    # 安全制限（ラジアン）
+    # 各関節の可動範囲（URDFの定義に基づく）
+    # Joint1: -157° to 157°, Joint2: -90° to 90°, Joint3: -157° to 157°, Joint4: -159° to 0.001°
+    # Joint5: -157° to 157°, Joint6: -90° to 90°, Joint7: -167° to 167°, Gripper: -5° to 90°
+    joint_limits:
+      min: [-2.740, -1.571, -2.740, -2.775, -2.740, -1.571, -2.915, -0.087]
+      max: [2.740, 1.571, 2.740, 0.00002, 2.740, 1.571, 2.915, 1.571]

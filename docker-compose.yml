@@ -1,4 +1,20 @@
 services:
+  ros2_builder:
+    profiles:
+      - teleop
+      - teleop-leader
+      - teleop-follower
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+    command: /workspace/scripts/docker/build-entrypoint.sh
+
   crane_x7_ros2_real:
     profiles:
       - real
@@ -16,6 +32,9 @@ services:
         target: "/tmp/.X11-unix"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
+    group_add:
+      - dialout
+      - "985"  # uucp group GID on Arch Linux
     command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
 
   crane_x7_ros2_sim:
@@ -34,6 +53,56 @@ services:
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
     command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
+
+  crane_x7_teleop_leader:
+    profiles:
+      - teleop-leader
+      - teleop
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+    devices:
+      - "$USB_DEVICE:/dev/ttyUSB0"
+    group_add:
+      - dialout
+      - "985"  # uucp group GID on Arch Linux
+    depends_on:
+      - ros2_builder
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_leader.launch.py
+
+  crane_x7_teleop_follower:
+    profiles:
+      - teleop-follower
+      - teleop
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+    devices:
+      - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
+    group_add:
+      - dialout
+      - "985"  # uucp group GID on Arch Linux
+    depends_on:
+      - ros2_builder
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_with_logger.launch.py
 
   vla_finetune:
     profiles:
