@@ -28,4 +28,4 @@ docker run \
     -it \
     $DOCKER_OPTION \
     $DOCKER_IMAGE_NAME \
-    /bin/bash
+    /workspace/scripts/docker/entrypoint.sh

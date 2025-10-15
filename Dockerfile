@@ -1,5 +1,5 @@
 # ============================================================================
-# ROS2 Stage 
+# ROS2 Stage
 # ============================================================================
 FROM osrf/ros:humble-desktop-full AS base
 
@@ -10,18 +10,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xserver-xorg \
     ros-humble-moveit \
     python3-pip \
+    python3-opencv \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies with fixed versions
 RUN pip3 install --no-cache-dir \
-    tensorflow \
-    "numpy<2" \
-    opencv-python
+    tensorflow==2.15.1 \
+    "numpy<2"
 
-# Install ROS dependencies
+# Install ROS dependencies with caching optimization
+# Copy only package.xml files first for better layer caching
 ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
+
+# Copy all package.xml files while preserving directory structure
+# This uses a shell script to find and copy package.xml files automatically
 COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
-RUN apt-get update && rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && rm -rf ${ROS2_DEPENDENCIES_DIR} && rm -rf /var/lib/apt/lists/*
+RUN find ${ROS2_DEPENDENCIES_DIR}/src -type f ! -name "package.xml" -delete && \
+    find ${ROS2_DEPENDENCIES_DIR}/src -type d -empty -delete
+
+# Install dependencies based on package.xml files
+RUN apt-get update && \
+    rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && \
+    rm -rf ${ROS2_DEPENDENCIES_DIR} && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
@@ -55,7 +67,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     iproute2 \
     x11-apps \
-    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Switch back to the non-root user
@@ -96,11 +107,14 @@ RUN pip3 install --no-cache-dir \
 COPY vla/requirements.txt /tmp/vla_requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/vla_requirements.txt
 
-# Install Flash Attention 2 (optional, for faster training)
-# This can take several minutes to compile
+# Install Flash Attention 2 (OPTIONAL - for faster training)
+# This can take 5-10 minutes to compile and requires compatible GPU
+# If installation fails, training will fall back to standard attention mechanism
 RUN pip3 install --no-cache-dir packaging ninja && \
-    pip3 install --no-cache-dir flash-attn==2.5.5 --no-build-isolation || \
-    echo "Flash Attention installation failed - continuing without it"
+    (pip3 install --no-cache-dir flash-attn==2.5.5 --no-build-isolation && \
+     echo "Flash Attention 2 installed successfully") || \
+    (echo "WARNING: Flash Attention 2 installation failed - training will use standard attention" && \
+     echo "This is expected on non-NVIDIA GPUs or incompatible CUDA versions")
 
 # Set up workspace
 WORKDIR /workspace
