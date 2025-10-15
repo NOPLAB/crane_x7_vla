@@ -38,6 +38,8 @@ services:
     group_add:
       - dialout
       - "985"  # uucp group GID on Arch Linux
+    depends_on:
+      - ros2_builde
     command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
 
   crane_x7_ros2_sim:
@@ -55,6 +57,8 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+    depends_on:
+      - ros2_builde
     command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
 
   crane_x7_teleop_leader:
