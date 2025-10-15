@@ -75,6 +75,7 @@ source install/setup.bash
 
 Create `.env` from `.env.template` and configure:
 - `USB_DEVICE`: USB device path (default: `/dev/ttyUSB0`)
+- `USB_DEVICE_FOLLOWER`: USB device path for follower robot (default: `/dev/ttyUSB1`)
 - `DISPLAY`: X11 display (default: `:0`)
 
 Run with real robot:
@@ -85,6 +86,27 @@ docker compose --profile real up
 Run in simulation:
 ```bash
 docker compose --profile sim up
+```
+
+Run with teleoperation (kinesthetic teaching):
+```bash
+# Leader mode only (manual teaching without recording)
+docker compose --profile teleop-leader up
+
+# Leader mode with data logger (manual teaching with recording)
+docker compose --profile teleop-leader-logger up
+
+# Follower mode only (requires 2 robots)
+docker compose --profile teleop-follower up
+
+# Follower mode with data logger (imitation recording, requires 2 robots)
+docker compose --profile teleop-follower-logger up
+
+# Both leader and follower simultaneously
+docker compose --profile teleop up
+
+# Both leader and follower with data logger
+docker compose --profile teleop-logger up
 ```
 
 ### ROS 2 Launch Commands

@@ -1,9 +1,12 @@
 services:
   ros2_builder:
     profiles:
+      - sim
+      - real
       - teleop
       - teleop-leader
       - teleop-follower
+      - teleop-logger
     env_file: .env
     build:
       context: .
@@ -35,7 +38,7 @@ services:
     group_add:
       - dialout
       - "985"  # uucp group GID on Arch Linux
-    command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
 
   crane_x7_ros2_sim:
     profiles:
@@ -52,7 +55,7 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
-    command: /workspace/scripts/docker/entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
 
   crane_x7_teleop_leader:
     profiles:
@@ -77,7 +80,7 @@ services:
       - "985"  # uucp group GID on Arch Linux
     depends_on:
       - ros2_builder
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_leader.launch.py
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader.launch.py
 
   crane_x7_teleop_follower:
     profiles:
@@ -102,7 +105,25 @@ services:
       - "985"  # uucp group GID on Arch Linux
     depends_on:
       - ros2_builder
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_with_logger.launch.py
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_follower.launch.py
+
+  crane_x7_teleop_logger:
+    profiles:
+      - teleop-logger
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: "."
+        target: "/workspace"
+    network_mode: "service:crane_x7_teleop_leader"
+    depends_on:
+      - ros2_builder
+      - crane_x7_teleop_leader
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log data_logger.launch.py output_dir:=/workspace/data/teleop_logs
 
   vla_finetune:
     profiles:
