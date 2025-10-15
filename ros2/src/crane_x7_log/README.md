@@ -1,39 +1,41 @@
 # crane_x7_log
 
-Data logging package for CRANE-X7 robotic arm in OXE (Open X-Embodiment) format for VLA fine-tuning.
+VLAファインチューニング用のOXE（Open X-Embodiment）フォーマットでCRANE-X7ロボットアームのデータを記録するパッケージ。
 
-## Overview
+## 概要
 
-This package provides ROS 2 nodes to record CRANE-X7 manipulation data in a format compatible with the Open X-Embodiment dataset specification, suitable for fine-tuning Vision-Language-Action (VLA) models like OpenVLA.
+このパッケージは、OpenVLAのようなVision-Language-Action（VLA）モデルのファインチューニングに適した、Open X-Embodimentデータセット仕様に準拠した形式でCRANE-X7のマニピュレーションデータを記録するROS 2ノードを提供します。
 
-## Features
+## 機能
 
-- **Multi-modal data logging**: Joint states, RGB images, depth images (optional)
-- **OXE format compatibility**: TFRecord output format for VLA training
-- **Configurable episodes**: Adjustable episode length and data collection rate
-- **Automatic saving**: Episodes saved automatically when reaching target length
+- **マルチモーダルデータ記録**: 関節状態、RGB画像、深度画像（オプション）
+- **OXEフォーマット互換性**: VLA学習用のTFRecord出力形式
+- **設定可能なエピソード**: エピソード長とデータ収集レートの調整可能
+- **自動保存**: 目標長に達すると自動的にエピソードを保存
 
-## Nodes
+## ノード
 
 ### oxe_logger
 
-Main data collection node that subscribes to robot and camera topics.
+ロボットとカメラのトピックをサブスクライブするメインデータ収集ノード。
 
-**Subscribed Topics:**
-- `/joint_states` (sensor_msgs/JointState): Robot joint positions
-- `/camera/color/image_raw` (sensor_msgs/Image): RGB camera feed
-- `/camera/color/camera_info` (sensor_msgs/CameraInfo): Camera calibration
-- `/camera/aligned_depth_to_color/image_raw` (sensor_msgs/Image): Depth image (optional)
+**サブスクライブするトピック:**
 
-**Parameters:**
-- `output_dir` (string, default: `/workspace/data/oxe_logs`): Output directory
-- `episode_length` (int, default: 100): Steps per episode
-- `use_camera` (bool, default: true): Enable camera logging
-- `use_depth` (bool, default: false): Enable depth logging
+- `/joint_states` (sensor_msgs/JointState): ロボット関節位置
+- `/camera/color/image_raw` (sensor_msgs/Image): RGBカメラフィード
+- `/camera/color/camera_info` (sensor_msgs/CameraInfo): カメラキャリブレーション
+- `/camera/aligned_depth_to_color/image_raw` (sensor_msgs/Image): 深度画像（オプション）
 
-## Usage
+**パラメータ:**
 
-### Building
+- `output_dir` (string, デフォルト: `/workspace/data/oxe_logs`): 出力ディレクトリ
+- `episode_length` (int, デフォルト: 100): エピソードあたりのステップ数
+- `use_camera` (bool, デフォルト: true): カメラ記録を有効化
+- `use_depth` (bool, デフォルト: false): 深度記録を有効化
+
+## 使い方
+
+### ビルド
 
 ```bash
 cd /workspace/ros2
@@ -41,28 +43,28 @@ colcon build --packages-select crane_x7_log --symlink-install
 source install/setup.bash
 ```
 
-### Running with real robot
+### 実機ロボットでの実行
 
 ```bash
-# Launch robot control with data logger
+# データロガー付きでロボット制御を起動
 ros2 launch crane_x7_log real_with_logger.launch.py port_name:=/dev/ttyUSB0 use_d435:=true
 ```
 
-Or separately:
+または別々に起動：
 
 ```bash
-# Start robot control
+# ロボット制御を起動
 ros2 launch crane_x7_examples demo.launch.py port_name:=/dev/ttyUSB0 use_d435:=true
 
-# In another terminal, start logger
+# 別のターミナルでロガーを起動
 ros2 launch crane_x7_log data_logger.launch.py
 ```
 
-### Running with teleoperation (kinesthetic teaching)
+### テレオペレーションでの実行（キネステティックティーチング）
 
-#### Leader Mode (Manual Teaching)
+#### Leaderモード（手動教示）
 
-Launch the Leader robot (torque OFF for manual movement) with data logger:
+Leaderロボット（手動移動のためトルクOFF）をデータロガー付きで起動：
 
 ```bash
 ros2 launch crane_x7_log teleop_leader_with_logger.launch.py \
@@ -70,37 +72,37 @@ ros2 launch crane_x7_log teleop_leader_with_logger.launch.py \
   output_dir:=/workspace/data/teleop_demonstrations
 ```
 
-The Leader robot can be manually moved to demonstrate tasks. Joint states are published to `/joint_states` and `/teleop/leader/state` and automatically recorded by the data logger.
+Leaderロボットは手動で動かしてタスクをデモンストレーションできます。関節状態は `/joint_states` と `/teleop/leader/state` にパブリッシュされ、データロガーによって自動的に記録されます。
 
-#### Follower Mode (Imitation Recording)
+#### Followerモード（模倣記録）
 
-If you have a second CRANE-X7 that follows the Leader's movements:
+Leaderの動きに追従する2台目のCRANE-X7がある場合：
 
 ```bash
-# This launch file is in crane_x7_teleop package
+# このlaunchファイルはcrane_x7_teleopパッケージにあります
 ros2 launch crane_x7_teleop teleop_with_logger.launch.py \
   port_name:=/dev/ttyUSB1 \
   output_dir:=/workspace/data/follower_demonstrations
 ```
 
-### Running in simulation
+### シミュレーションでの実行
 
 ```bash
-# Launch Gazebo simulation with data logger
+# データロガー付きでGazeboシミュレーションを起動
 ros2 launch crane_x7_log demo_with_logger.launch.py
 ```
 
-Or separately:
+または別々に起動：
 
 ```bash
-# Start Gazebo simulation
+# Gazeboシミュレーションを起動
 ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py
 
-# In another terminal, start logger (without camera)
+# 別のターミナルでロガーを起動（カメラなし）
 ros2 launch crane_x7_log data_logger.launch.py output_dir:=/workspace/data/sim_logs
 ```
 
-### Custom parameters
+### カスタムパラメータ
 
 ```bash
 ros2 launch crane_x7_log real_with_logger.launch.py \
@@ -109,49 +111,52 @@ ros2 launch crane_x7_log real_with_logger.launch.py \
   use_d435:=true
 ```
 
-All launch files accept these common parameters:
-- `output_dir`: Directory to save logged data (default: `/workspace/data/tfrecord_logs`)
-- `config_file`: Path to logger config file (optional)
+すべてのlaunchファイルは以下の共通パラメータを受け付けます：
 
-For teleop leader mode:
-- `port_name`: USB port for Leader robot (default: `/dev/ttyUSB0`)
-- `use_d435`: Enable RealSense D435 camera (default: `false`)
+- `output_dir`: ログデータを保存するディレクトリ（デフォルト: `/workspace/data/tfrecord_logs`）
+- `config_file`: ロガー設定ファイルへのパス（オプション）
 
-## Data Format
+teleop leaderモード用：
 
-### NPZ Format (Intermediate)
+- `port_name`: LeaderロボットのUSBポート（デフォルト: `/dev/ttyUSB0`）
+- `use_d435`: RealSense D435カメラを有効化（デフォルト: `false`）
 
-Episodes are initially saved as compressed NumPy archives (`.npz`):
+## データフォーマット
+
+### NPZフォーマット（中間形式）
+
+エピソードは最初に圧縮されたNumPyアーカイブ（`.npz`）として保存されます：
 
 ```
 episode_0000_20250102_120000/
   └── episode_data.npz
-      ├── states: (N, 8) - 7 arm joints + 1 gripper
-      ├── actions: (N, 8) - next state (shifted by 1)
-      ├── timestamps: (N,) - UNIX timestamps
-      ├── images: (N, H, W, 3) - RGB images (if enabled)
-      └── depths: (N, H, W) - depth images (if enabled)
+      ├── states: (N, 8) - 7つのアーム関節 + 1つのグリッパー
+      ├── actions: (N, 8) - 次の状態（1ステップシフト）
+      ├── timestamps: (N,) - UNIXタイムスタンプ
+      ├── images: (N, H, W, 3) - RGB画像（有効時）
+      └── depths: (N, H, W) - 深度画像（有効時）
 ```
 
-### TFRecord Format (OXE Compatible)
+### TFRecordフォーマット（OXE互換）
 
-Convert NPZ to TFRecord:
+NPZをTFRecordに変換：
 
 ```bash
 python3 -m crane_x7_log.oxe_writer episode_data.npz episode_data.tfrecord
 ```
 
-TFRecord features:
-- `observation/state`: float32 joint positions
-- `observation/image`: JPEG-encoded RGB image
-- `observation/depth`: float32 depth array
-- `observation/timestamp`: float32 timestamp
-- `action`: float32 target joint positions
+TFRecordの特徴量：
 
-## Dependencies
+- `observation/state`: float32 関節位置
+- `observation/image`: JPEGエンコードされたRGB画像
+- `observation/depth`: float32 深度配列
+- `observation/timestamp`: float32 タイムスタンプ
+- `action`: float32 目標関節位置
+
+## 依存関係
 
 - ROS 2 Humble
-- Python packages:
+- Pythonパッケージ：
   - rclpy
   - sensor_msgs
   - cv_bridge
@@ -159,6 +164,6 @@ TFRecord features:
   - opencv-python
   - tensorflow
 
-## License
+## ライセンス
 
 MIT License
