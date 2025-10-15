@@ -8,4 +8,5 @@ source $ROS2_WORKSPACE/install/setup.bash
 
 echo "ROS 2 workspace ready!"
 
-/bin/bash
+# Start bash shell
+exec /bin/bash
