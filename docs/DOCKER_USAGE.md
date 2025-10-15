@@ -1,61 +1,61 @@
-# VLA Fine-tuning with Docker
+# DockerによるVLAファインチューニング
 
-This guide explains how to use Docker for OpenVLA fine-tuning on CRANE-X7 data.
+このガイドでは、CRANE-X7データでOpenVLAをファインチューニングするためのDockerの使用方法を説明します。
 
-## Prerequisites
+## 前提条件
 
-- Docker with GPU support (nvidia-docker2)
-- NVIDIA GPU with CUDA 12.4+ support
-- At least 16GB GPU memory (recommended: 40GB+ for comfortable training)
+- GPU対応Docker(nvidia-docker2)
+- CUDA 12.4以降に対応したNVIDIA GPU
+- 最低16GBのGPUメモリ(推奨:快適なトレーニングのために40GB以上)
 
-## Quick Start
+## クイックスタート
 
-### 1. Build the VLA Docker Image
+### 1. VLA Dockerイメージのビルド
 
 ```bash
-# Build the VLA fine-tuning image
+# VLAファインチューニングイメージをビルド
 docker compose build vla_finetune
 ```
 
-This will create a separate Docker image with:
+これにより、以下を含むDockerイメージが作成されます:
 - CUDA 12.4
-- PyTorch 2.2.0 with CUDA support
-- OpenVLA dependencies
-- Flash Attention 2 (if build succeeds)
+- CUDA対応のPyTorch 2.2.0
+- OpenVLAの依存関係
+- Flash Attention 2(ビルドが成功した場合)
 
-### 2. Run Interactive Container
+### 2. インタラクティブコンテナの実行
 
 ```bash
-# Start interactive container
+# インタラクティブコンテナを起動
 docker compose --profile vla run --rm vla_finetune
 
-# Inside container, test dataset loading
+# コンテナ内でデータセット読み込みをテスト
 python3 vla/crane_x7_dataset.py data/tfrecord_logs
 
-# Run fine-tuning
+# ファインチューニングを実行
 cd vla
 python3 finetune.py
 ```
 
-### 3. Using the Helper Script
+### 3. ヘルパースクリプトの使用
 
 ```bash
-# Test dataset loading
+# データセット読み込みのテスト
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh test-dataset
 
-# Single GPU training
+# シングルGPUトレーニング
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh train
 
-# Multi-GPU training (2 GPUs)
+# マルチGPUトレーニング(2 GPU)
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh train-multi-gpu 2
 ```
 
-## Advanced Usage
+## 高度な使用方法
 
-### Custom Training Parameters
+### カスタムトレーニングパラメータ
 
 ```bash
 docker compose --profile vla run --rm vla_finetune bash -c "
@@ -69,7 +69,7 @@ docker compose --profile vla run --rm vla_finetune bash -c "
 "
 ```
 
-### Multi-GPU Training
+### マルチGPUトレーニング
 
 ```bash
 docker compose --profile vla run --rm vla_finetune bash -c "
@@ -79,9 +79,9 @@ docker compose --profile vla run --rm vla_finetune bash -c "
 "
 ```
 
-### Mount Additional Directories
+### 追加ディレクトリのマウント
 
-Edit `docker-compose.yml` to add more volume mounts:
+`docker-compose.yml`を編集してボリュームマウントを追加:
 
 ```yaml
 volumes:
@@ -90,27 +90,27 @@ volumes:
     target: "/workspace/custom_data"
 ```
 
-## Directory Structure in Container
+## コンテナ内のディレクトリ構造
 
 ```
 /workspace/
-├── vla/                    # Fine-tuning scripts (mounted)
+├── vla/                    # ファインチューニングスクリプト(マウント)
 │   ├── finetune.py
 │   ├── crane_x7_dataset.py
 │   ├── finetune_config.py
 │   └── README.md
-├── data/                   # Training data (mounted)
+├── data/                   # トレーニングデータ(マウント)
 │   └── tfrecord_logs/
 │       ├── episode_0000_*/
 │       ├── episode_0001_*/
 │       └── ...
-└── outputs/                # Checkpoints and logs (mounted)
+└── outputs/                # チェックポイントとログ(マウント)
     └── crane_x7_finetune/
 ```
 
-## GPU Configuration
+## GPU設定
 
-The docker-compose.yml is configured to use all available GPUs:
+docker-compose.ymlは利用可能な全GPUを使用するように設定されています:
 
 ```yaml
 deploy:
@@ -118,16 +118,16 @@ deploy:
     reservations:
       devices:
         - driver: nvidia
-          count: all          # Use all GPUs
+          count: all          # 全GPUを使用
           capabilities: [gpu]
 ```
 
-To use specific GPUs, modify `count`:
-- `count: 1` - Use 1 GPU
-- `count: 2` - Use 2 GPUs
-- `count: all` - Use all available GPUs
+特定のGPUを使用するには、`count`を変更:
+- `count: 1` - 1つのGPUを使用
+- `count: 2` - 2つのGPUを使用
+- `count: all` - 利用可能な全GPUを使用
 
-Or use `CUDA_VISIBLE_DEVICES` environment variable:
+または`CUDA_VISIBLE_DEVICES`環境変数を使用:
 
 ```bash
 docker compose --profile vla run --rm \
@@ -135,25 +135,25 @@ docker compose --profile vla run --rm \
   vla_finetune
 ```
 
-## Shared Memory Configuration
+## 共有メモリの設定
 
-The container is configured with 16GB shared memory (`shm_size: '16gb'`) for PyTorch DataLoader multiprocessing. If you encounter shared memory errors, increase this value in `docker-compose.yml`:
+コンテナはPyTorch DataLoaderのマルチプロセッシングのために16GBの共有メモリ(`shm_size: '16gb'`)で設定されています。共有メモリエラーが発生した場合は、`docker-compose.yml`でこの値を増やしてください:
 
 ```yaml
-shm_size: '32gb'  # Increase if needed
+shm_size: '32gb'  # 必要に応じて増やす
 ```
 
-## Monitoring Training
+## トレーニングの監視
 
-### Using Weights & Biases
+### Weights & Biasesの使用
 
 ```bash
-# Login to W&B (one-time setup)
+# W&Bにログイン(初回セットアップのみ)
 docker compose --profile vla run --rm vla_finetune bash -c "
   pip3 install wandb && wandb login
 "
 
-# Run training with W&B logging
+# W&Bロギングを有効にしてトレーニングを実行
 docker compose --profile vla run --rm vla_finetune bash -c "
   cd vla && python3 finetune.py \
     --use_wandb \
@@ -162,107 +162,110 @@ docker compose --profile vla run --rm vla_finetune bash -c "
 "
 ```
 
-### Viewing Logs
+### ログの表示
 
-Training logs are printed to stdout. To save logs to a file:
+トレーニングログは標準出力に出力されます。ログをファイルに保存するには:
 
 ```bash
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh train 2>&1 | tee training.log
 ```
 
-## Troubleshooting
+## トラブルシューティング
 
-### Out of Memory
+### メモリ不足
 
-1. Reduce batch size in `finetune_config.py` or via CLI:
+1. `finetune_config.py`またはCLIでバッチサイズを減らす:
    ```bash
    --batch_size 4
    ```
 
-2. Enable gradient checkpointing:
+2. 勾配チェックポインティングを有効化:
    ```python
    gradient_checkpointing: bool = True
    ```
 
-3. Reduce LoRA rank:
+3. LoRAランクを減らす:
    ```bash
    --lora_rank 16
    ```
 
-### Flash Attention Build Failed
+### Flash Attentionのビルド失敗
 
-Flash Attention 2 is optional. The container will continue without it if the build fails. Training will be slightly slower but still functional.
+Flash Attention 2はオプションです。ビルドが失敗してもコンテナは継続して動作します。トレーニングは少し遅くなりますが、機能は問題ありません。
 
-To manually install inside the container:
+コンテナ内で手動インストールする場合:
 
 ```bash
 docker compose --profile vla run --rm vla_finetune bash
-# Inside container:
+# コンテナ内で:
 pip3 install packaging ninja
 pip3 install flash-attn==2.5.5 --no-build-isolation
 ```
 
-### CUDA Version Mismatch
+### CUDAバージョンの不一致
 
-The Dockerfile uses CUDA 12.4. If you have a different CUDA version on your host, modify the base image in Dockerfile:
+DockerfileはCUDA 12.4を使用しています。ホストに異なるCUDAバージョンがある場合は、Dockerfileのベースイメージを変更してください:
 
 ```dockerfile
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 AS vla  # Change to your CUDA version
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 AS vla  # CUDAバージョンを変更
 ```
 
-Then rebuild:
+その後、再ビルド:
 ```bash
 docker compose build vla_finetune --no-cache
 ```
 
-### Permission Issues
+### パーミッションの問題
 
-If you encounter permission errors with mounted volumes:
+マウントされたボリュームでパーミッションエラーが発生した場合:
 
 ```bash
-# Run container as current user
+# 現在のユーザーとしてコンテナを実行
 docker compose --profile vla run --rm --user $(id -u):$(id -g) vla_finetune
 ```
 
-## Development Workflow
+## 開発ワークフロー
 
-1. **Data Collection**: Use ROS2 containers to collect demonstration data
+1. **データ収集**: ROS2コンテナを使用してデモンストレーションデータを収集
    ```bash
-   docker compose --profile real up  # or --profile sim
+   docker compose --profile real up  # または --profile sim
    ```
 
-2. **Fine-tuning**: Switch to VLA container for training
+2. **ファインチューニング**: VLAコンテナに切り替えてトレーニング
    ```bash
    docker compose --profile vla run --rm vla_finetune
    ```
 
-3. **Inference**: Load fine-tuned model for robot control
+3. **推論**: ファインチューニングされたモデルをロボット制御に読み込み
    ```bash
-   # (Implementation depends on your deployment setup)
+   # (実装はデプロイ設定に依存)
    ```
 
-## Resource Requirements
+## リソース要件
 
-### Minimum Requirements
-- GPU: NVIDIA GPU with 16GB VRAM (e.g., V100, RTX 4090)
-- RAM: 32GB system RAM
-- Storage: 50GB free space
+### 最小要件
 
-### Recommended Requirements
+- GPU: 16GB VRAMのNVIDIA GPU(例: V100、RTX 4090)
+- RAM: 32GBのシステムRAM
+- ストレージ: 50GBの空き容量
+
+### 推奨要件
+
 - GPU: NVIDIA A100 40GB/80GB
-- RAM: 64GB+ system RAM
-- Storage: 100GB+ free space (for datasets and checkpoints)
+- RAM: 64GB以上のシステムRAM
+- ストレージ: 100GB以上の空き容量(データセットとチェックポイント用)
 
-### Multi-GPU Scaling
-- 1x A100 (40GB): Batch size ~8-12 with LoRA
-- 2x A100 (40GB): Batch size ~16-24 with LoRA
-- 4x A100 (40GB): Batch size ~32-48 with LoRA
+### マルチGPUスケーリング
 
-## Next Steps
+- 1x A100 (40GB): バッチサイズ ~8-12(LoRA使用時)
+- 2x A100 (40GB): バッチサイズ ~16-24(LoRA使用時)
+- 4x A100 (40GB): バッチサイズ ~32-48(LoRA使用時)
 
-After fine-tuning completes:
+## 次のステップ
 
-1. Checkpoints are saved in `outputs/crane_x7_finetune/checkpoint-*/`
-2. Load the fine-tuned model for inference (see `vla/README.md`)
-3. Integrate with your robot control stack
+ファインチューニング完了後:
+
+1. チェックポイントは`outputs/crane_x7_finetune/checkpoint-*/`に保存されます
+2. ファインチューニングされたモデルを推論用に読み込みます(`vla/README.md`を参照)
+3. ロボット制御スタックと統合します
