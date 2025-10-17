@@ -46,7 +46,7 @@ dependencies = [
     "tokenizers==0.19.1",
     "torch==2.2.0",
     "torchvision==0.17.0",
-    "torchaudio==2.2.0",
+    "torchaudio==2.9.0",
     "transformers==4.40.1",
     "wandb",
     "tensorflow==2.15.0",
