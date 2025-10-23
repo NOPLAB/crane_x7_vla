@@ -15,7 +15,7 @@ bitsandbytes>=0.43.0
 
 # Data processing
 tensorflow>=2.15.0
-tensorflow-datasets==4.9.3
+tensorflow-datasets==4.9.9
 opencv-python>=4.8.0
 numpy>=1.24.0
 
