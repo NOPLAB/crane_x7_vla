@@ -3,7 +3,7 @@
 # Core OpenVLA dependencies (from openvla/requirements-min.txt)
 torch>=2.2.0
 torchvision>=0.17.0
-transformers==4.40.1
+transformers==4.57.1
 tokenizers==0.19.1
 timm==0.9.10
 Pillow>=10.0.0
