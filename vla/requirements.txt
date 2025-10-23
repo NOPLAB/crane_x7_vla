@@ -5,7 +5,7 @@ torch>=2.2.0
 torchvision>=0.17.0
 transformers==4.40.1
 tokenizers==0.19.1
-timm==0.9.10
+timm==0.9.16
 Pillow>=10.0.0
 
 # Fine-tuning specific
