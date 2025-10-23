@@ -9,7 +9,7 @@ timm==0.9.10
 Pillow>=10.0.0
 
 # Fine-tuning specific
-peft==0.11.1
+peft==0.17.1
 accelerate>=0.27.0
 bitsandbytes>=0.43.0
 
