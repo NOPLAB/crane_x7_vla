@@ -264,11 +264,24 @@ crane_x7_vla/
 
 ## ライセンス
 
-- ROS 2パッケージ: Apache License 2.0（特記なき限り）
-- `crane_x7_description`: RT Corporation非商用ライセンス（研究・内部使用のみ）
-- 商用利用にはRT Corporationからの許可が必要
-- OpenVLA: MITライセンス（コード）、ただし事前学習済みモデルには制限あり（例: Llama-2ライセンス）
-- `crane_x7_log`: MITライセンス
+### このリポジトリのオリジナルコード
+
+- **プロジェクト全体**: MIT License (Copyright 2025 nop)
+- **crane_x7_log**: MIT License
+- **crane_x7_vla**: MIT License
+- **crane_x7_teleop**: MIT License
+- **VLAファインチューニングスクリプト**: MIT License
+
+### 外部/サードパーティパッケージ（Gitサブモジュール）
+
+- **crane_x7_ros** (RT Corporation): Apache License 2.0
+- **crane_x7_description** (RT Corporation): RT Corporation非商用ライセンス
+  - 研究・内部使用のみ許可
+  - 商用利用にはRT Corporationからの事前許可が必要
+- **OpenVLA**: MIT License (コード)
+  - 事前学習済みモデルには別途制限あり（例: Llama-2ライセンス）
+
+**重要**: RT Corporationのパッケージ（`crane_x7_ros`, `crane_x7_description`）は、このリポジトリのオリジナルコードとは異なるライセンスです。使用前に各LICENSEファイルを確認してください。
 
 ## 参考情報
 

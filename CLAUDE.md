@@ -253,11 +253,24 @@ episode_0000_YYYYMMDD_HHMMSS/
 
 ## Licensing Notes
 
-- ROS 2 packages: Apache License 2.0 (unless specified otherwise)
-- `crane_x7_description`: RT Corporation non-commercial license (research/internal use only)
-- Commercial use requires permission from RT Corporation
-- OpenVLA: MIT License (code), but pretrained models may have restrictions (e.g., Llama-2 license)
-- `crane_x7_log`: MIT License
+### This Repository (Original Code)
+
+- **Project root and original code**: MIT License (Copyright 2025 nop)
+- **crane_x7_log**: MIT License
+- **crane_x7_vla**: MIT License
+- **crane_x7_teleop**: MIT License
+- **VLA fine-tuning scripts**: MIT License
+
+### External/Third-Party Packages (Git Submodules)
+
+- **crane_x7_ros** (RT Corporation): Apache License 2.0
+- **crane_x7_description** (RT Corporation): RT Corporation non-commercial license
+  - Research and internal use only
+  - Commercial use requires prior permission from RT Corporation
+- **OpenVLA**: MIT License (code)
+  - Pretrained models may have additional restrictions (e.g., Llama-2 license)
+
+**Important**: The RT Corporation packages (`crane_x7_ros`, `crane_x7_description`) have different licenses from this repository's original code. Please review their respective LICENSE files before use.
 
 ## References
 
