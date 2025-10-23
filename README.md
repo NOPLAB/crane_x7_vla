@@ -1,10 +1,8 @@
 # CRANE-X7 VLA
 
-ロボット設計制作論実習3
-
 ## 概要
 
-CRANE-X7ロボットアームとOpenVLA（Vision-Language-Action）モデルを統合したロボットマニピュレーションプロジェクトです。ROS 2 Humbleベースの制御システムと、VLAファインチューニング環境を提供します。
+CRANE-X7とVLAを使用した制御プログラムです。
 
 **主な機能:**
 
