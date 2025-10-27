@@ -98,7 +98,7 @@ CMD ["/bin/bash"]
 # ============================================================================
 # VLA Fine-tuning Stage
 # ============================================================================
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 AS vla
+FROM nvidia/cuda:12.9.1-devel-ubuntu22.04 AS vla
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
