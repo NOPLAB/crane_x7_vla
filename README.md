@@ -81,9 +81,19 @@ docker compose -f ros2/docker-compose.yml --profile teleop-leader up
 docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 ```
 
+リーダーモード + データロガー + カメラビューワー - 手動教示、記録あり、映像表示:
+```bash
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-viewer up
+```
+
 フォロワーモードのみ - 2台のロボットが必要:
 ```bash
 docker compose -f ros2/docker-compose.yml --profile teleop-follower up
+```
+
+フォロワーモード + カメラビューワー - 2台のロボット、フォロワー側の映像表示:
+```bash
+docker compose -f ros2/docker-compose.yml --profile teleop-follower-viewer up
 ```
 
 フォロワーモード + データロガー - 模倣記録、2台のロボットが必要:

@@ -109,8 +109,14 @@ docker compose -f ros2/docker-compose.yml --profile teleop-leader up
 # Leader mode with data logger (manual teaching with recording)
 docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 
+# Leader mode with data logger and camera viewer (manual teaching with recording and video display)
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-viewer up
+
 # Follower mode only (requires 2 robots)
 docker compose -f ros2/docker-compose.yml --profile teleop-follower up
+
+# Follower mode with camera viewer (follower robot with video display, requires 2 robots)
+docker compose -f ros2/docker-compose.yml --profile teleop-follower-viewer up
 
 # Follower mode with data logger (imitation recording, requires 2 robots)
 docker compose -f ros2/docker-compose.yml --profile teleop-follower-logger up
@@ -120,6 +126,9 @@ docker compose -f ros2/docker-compose.yml --profile teleop up
 
 # Both leader and follower with data logger
 docker compose -f ros2/docker-compose.yml --profile teleop-logger up
+
+# Follower with camera viewer (follower side camera display)
+docker compose -f ros2/docker-compose.yml --profile teleop-viewer up
 ```
 
 ### ROS 2 Launch Commands
