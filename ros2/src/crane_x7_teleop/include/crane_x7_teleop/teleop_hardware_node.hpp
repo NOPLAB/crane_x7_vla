@@ -4,6 +4,7 @@
 #ifndef CRANE_X7_TELEOP__TELEOP_HARDWARE_NODE_HPP_
 #define CRANE_X7_TELEOP__TELEOP_HARDWARE_NODE_HPP_
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -21,6 +22,9 @@ class TeleopHardwareNode : public rclcpp::Node
 public:
   explicit TeleopHardwareNode(const rclcpp::NodeOptions & options);
   ~TeleopHardwareNode();
+
+  // Explicit shutdown method for signal handling
+  void shutdown();
 
 private:
   // rt_manipulators_cpp Hardware interface
@@ -81,6 +85,10 @@ private:
   bool check_joint_limits(const std::vector<double> & positions);
   bool initialize_hardware();
   void set_torque(bool enable);
+  void free_servos();
+
+  // Shutdown flag to prevent double-shutdown
+  std::atomic<bool> is_shutdown_{false};
 };
 
 }  // namespace crane_x7_teleop

@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace crane_x7_teleop
@@ -80,26 +81,56 @@ TeleopHardwareNode::TeleopHardwareNode(const rclcpp::NodeOptions & options)
 
 TeleopHardwareNode::~TeleopHardwareNode()
 {
+  shutdown();
+}
+
+void TeleopHardwareNode::shutdown()
+{
+  // Prevent double-shutdown
+  if (is_shutdown_.exchange(true)) {
+    return;
+  }
+
+  RCLCPP_INFO(this->get_logger(), "Shutting down %s mode", mode_.c_str());
+
+  free_servos();
+
   if (hardware_) {
-    RCLCPP_INFO(this->get_logger(), "Shutting down - disabling torque");
-
-    // Set low PID gains for safe shutdown
-    if (!hardware_->write_position_pid_gain_to_group(
-        GROUP_NAME, torque_off_gains_.p, torque_off_gains_.i, torque_off_gains_.d))
-    {
-      RCLCPP_ERROR(this->get_logger(), "Failed to set PID gains during shutdown");
-    }
-
-    // Explicitly disable torque for safe shutdown
-    if (!hardware_->torque_off(GROUP_NAME)) {
-      RCLCPP_WARN(this->get_logger(), "Failed to disable torque during shutdown");
-    } else {
-      RCLCPP_INFO(this->get_logger(), "Torque disabled successfully");
-    }
-
     hardware_->disconnect();
     RCLCPP_INFO(this->get_logger(), "Hardware disconnected");
   }
+}
+
+void TeleopHardwareNode::free_servos()
+{
+  if (!hardware_) {
+    return;
+  }
+
+  // Set low PID gains before disabling torque
+  if (!hardware_->write_position_pid_gain_to_group(
+      GROUP_NAME, torque_off_gains_.p, torque_off_gains_.i, torque_off_gains_.d))
+  {
+    RCLCPP_ERROR(this->get_logger(), "Failed to set PID gains during shutdown");
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  // Disable torque to free servos (especially important for follower mode)
+  if (!hardware_->torque_off(GROUP_NAME)) {
+    RCLCPP_WARN(this->get_logger(), "Failed to disable torque, retrying...");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    if (!hardware_->torque_off(GROUP_NAME)) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to disable torque - servos may not be free");
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Servos freed");
+    }
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Servos freed");
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
 
 bool TeleopHardwareNode::initialize_hardware()
