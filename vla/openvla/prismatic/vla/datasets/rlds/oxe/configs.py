@@ -670,4 +670,12 @@ OXE_DATASET_CONFIGS = {
         "state_encoding": StateEncoding.POS_EULER,
         "action_encoding": ActionEncoding.EEF_POS,
     },
+    ### CRANE-X7 dataset (RLDS format from crane_x7_log package)
+    "crane_x7": {
+        "image_obs_keys": {"primary": "image_primary", "secondary": None, "wrist": None},
+        "depth_obs_keys": {"primary": "depth_primary", "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],  # 8-dim: 7 joint angles + 1 gripper
+        "state_encoding": StateEncoding.JOINT,
+        "action_encoding": ActionEncoding.JOINT_POS,
+    },
 }

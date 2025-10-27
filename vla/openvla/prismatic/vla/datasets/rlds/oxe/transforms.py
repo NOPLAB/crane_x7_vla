@@ -824,6 +824,23 @@ def tdroid_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     return trajectory
 
 
+def crane_x7_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Applies to CRANE-X7 dataset from crane_x7_log package.
+
+    Data is already in RLDS format with:
+    - observation/proprio: 8-dim (7 joint angles + 1 gripper)
+    - observation/image_primary: JPEG-encoded RGB
+    - observation/depth_primary: float32 depth (optional)
+    - action: 8-dim joint positions (next state)
+    - task/language_instruction: string task description
+
+    This is a passthrough transform since data is already standardized.
+    """
+    # Data is already in correct RLDS format, just return as-is
+    return trajectory
+
+
 def libero_dataset_transform(trajectory: Dict[str, Any]) -> Dict[str, Any]:
     # gripper action is in -1 (open)...1 (close) --> clip to 0...1, flip --> +1 = open, 0 = close
     gripper_action = trajectory["action"][:, -1:]
@@ -919,4 +936,6 @@ OXE_STANDARDIZATION_TRANSFORMS = {
     "libero_object_no_noops": libero_dataset_transform,
     "libero_goal_no_noops": libero_dataset_transform,
     "libero_10_no_noops": libero_dataset_transform,
+    ### CRANE-X7 dataset (RLDS format from crane_x7_log package)
+    "crane_x7": crane_x7_dataset_transform,
 }

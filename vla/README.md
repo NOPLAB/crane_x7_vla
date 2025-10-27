@@ -2,11 +2,30 @@
 
 このディレクトリには、CRANE-X7ロボットのデモンストレーションデータを使用してOpenVLAをファインチューニングするためのスクリプトが含まれています。
 
+## 📢 重要なお知らせ: RLDS形式への移行
+
+**crane_x7_logパッケージはRLDS（Robot Learning Dataset Standard）形式で直接データを出力するようになりました！**
+
+これにより：
+- ✅ OpenVLAとの完全な互換性
+- ✅ データ変換スクリプト不要
+- ✅ 言語インストラクション対応
+- ✅ データセット統計の自動計算
+
+詳細は [CRANE_X7_INTEGRATION.md](CRANE_X7_INTEGRATION.md) を参照してください。
+
 ## 概要
 
-ファインチューニングパイプラインは以下で構成されています：
+### 新しいRLDS統合（推奨）
 
-1. **crane_x7_dataset.py**: CRANE-X7 TFRecordデータ用のPyTorch Datasetローダー
+1. **test_crane_x7_loader.py**: RLDS形式データの検証スクリプト
+2. **CRANE_X7_INTEGRATION.md**: OpenVLAとの統合完全ガイド
+3. **openvla/prismatic/vla/datasets/rlds/oxe/configs.py**: crane_x7データセット設定
+4. **openvla/prismatic/vla/datasets/rlds/oxe/transforms.py**: crane_x7データ変換関数
+
+### レガシーファインチューニングパイプライン
+
+1. **crane_x7_dataset.py**: 旧形式TFRecordデータ用のPyTorch Datasetローダー（非推奨）
 2. **finetune_config.py**: ファインチューニングパラメータの設定データクラス
 3. **finetune.py**: LoRAサポート付きメイン学習スクリプト
 
