@@ -56,7 +56,7 @@ RUN apt-get update && \
     rm -rf ${ROS2_DEPENDENCIES_DIR} && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+WORKDIR /workspace/ros2
 
 # Create a user that matches host user (UID/GID will be passed at build time)
 ARG USER_ID=1000
@@ -69,7 +69,7 @@ RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Set ownership of workspace
-RUN mkdir -p /workspace && chown -R ${USER_ID}:${GROUP_ID} /workspace
+RUN mkdir -p /workspace/ros2 && chown -R ${USER_ID}:${GROUP_ID} /workspace
 
 USER ${USERNAME}
 
