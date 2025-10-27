@@ -39,6 +39,15 @@ class LoggerConfig:
     depth_image_topic: str
     camera_info_topic: str
 
+    # RLDS (Open X-Embodiment) settings
+    dataset_name: str
+    language_instruction_topic: str
+    default_language_instruction: str
+
+    # Dataset statistics
+    compute_dataset_statistics: bool
+    statistics_output_path: str
+
 
 class ConfigManager:
     """Manages ROS 2 parameters for DataLogger."""
@@ -70,6 +79,13 @@ class ConfigManager:
         node.declare_parameter('depth_image_topic', '/camera/aligned_depth_to_color/image_raw')
         node.declare_parameter('camera_info_topic', '/camera/color/camera_info')
         node.declare_parameter('save_format', 'tfrecord')
+        # RLDS settings
+        node.declare_parameter('dataset_name', 'crane_x7')
+        node.declare_parameter('language_instruction_topic', '/task/language_instruction')
+        node.declare_parameter('default_language_instruction', 'manipulate the object')
+        # Statistics settings
+        node.declare_parameter('compute_dataset_statistics', True)
+        node.declare_parameter('statistics_output_path', '/workspace/data/logs/dataset_statistics.json')
 
     @staticmethod
     def load_config(node: Node) -> LoggerConfig:
@@ -91,4 +107,11 @@ class ConfigManager:
             depth_image_topic=node.get_parameter('depth_image_topic').value,
             camera_info_topic=node.get_parameter('camera_info_topic').value,
             save_format=node.get_parameter('save_format').value,
+            # RLDS settings
+            dataset_name=node.get_parameter('dataset_name').value,
+            language_instruction_topic=node.get_parameter('language_instruction_topic').value,
+            default_language_instruction=node.get_parameter('default_language_instruction').value,
+            # Statistics settings
+            compute_dataset_statistics=node.get_parameter('compute_dataset_statistics').value,
+            statistics_output_path=node.get_parameter('statistics_output_path').value,
         )

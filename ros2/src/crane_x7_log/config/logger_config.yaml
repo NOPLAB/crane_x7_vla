@@ -11,7 +11,7 @@ data_logger:
     collection_rate: 10.0  # Hz (data collection frequency)
 
     # Camera settings
-    use_camera: false  # Enable RGB camera logging (set to true for real robot with D435)
+    use_camera: true  # Enable RGB camera logging (set to true for real robot with D435)
     use_depth: false  # Enable depth image logging
 
     # Image settings
@@ -40,3 +40,12 @@ data_logger:
 
     # Data format
     save_format: "tfrecord"  # npz or tfrecord
+
+    # RLDS (Open X-Embodiment) settings
+    dataset_name: "crane_x7"  # Dataset identifier for RLDS format
+    language_instruction_topic: "/task/language_instruction"  # Topic for task descriptions
+    default_language_instruction: "manipulate the object"  # Default instruction if topic not available
+
+    # Dataset statistics (for OpenVLA normalization)
+    compute_dataset_statistics: true  # Compute action statistics across episodes
+    statistics_output_path: "/workspace/data/logs/dataset_statistics.json"

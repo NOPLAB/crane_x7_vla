@@ -7,6 +7,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState, Image, CameraInfo
+from std_msgs.msg import String
 import numpy as np
 from threading import Lock
 from typing import Optional, Dict, Any, List
@@ -34,7 +35,10 @@ class DataLogger(Node):
         self.episode_saver = EpisodeSaver(
             self.config.output_dir,
             self.config.save_format,
-            self.get_logger()
+            self.get_logger(),
+            dataset_name=self.config.dataset_name,
+            compute_statistics=self.config.compute_dataset_statistics,
+            statistics_output_path=self.config.statistics_output_path
         )
 
         # Recording state
@@ -51,6 +55,7 @@ class DataLogger(Node):
         self.latest_rgb_image: Optional[Image] = None
         self.latest_depth_image: Optional[Image] = None
         self.latest_camera_info: Optional[CameraInfo] = None
+        self.latest_language_instruction: Optional[str] = None
 
         # Setup subscriptions and timers
         self._setup_subscriptions()
@@ -65,6 +70,14 @@ class DataLogger(Node):
             JointState,
             self.config.joint_states_topic,
             self._joint_state_callback,
+            10
+        )
+
+        # Language instruction subscription
+        self.language_instruction_sub = self.create_subscription(
+            String,
+            self.config.language_instruction_topic,
+            self._language_instruction_callback,
             10
         )
 
@@ -127,6 +140,12 @@ class DataLogger(Node):
         """Callback for camera info topic."""
         with self.lock:
             self.latest_camera_info = msg
+
+    def _language_instruction_callback(self, msg: String) -> None:
+        """Callback for language instruction topic."""
+        with self.lock:
+            self.latest_language_instruction = msg.data
+            self.get_logger().info(f'Received language instruction: {msg.data}')
 
     # Data collection
     def _extract_joint_positions(
@@ -248,7 +267,18 @@ class DataLogger(Node):
 
     def _save_current_episode(self) -> None:
         """Save current episode and reset counters."""
-        self.episode_saver.save(self.current_episode, self.episode_count)
+        # Use current language instruction or default
+        language_instruction = (
+            self.latest_language_instruction
+            if self.latest_language_instruction is not None
+            else self.config.default_language_instruction
+        )
+
+        self.episode_saver.save(
+            self.current_episode,
+            self.episode_count,
+            language_instruction=language_instruction
+        )
         self.current_episode = []
         self.step_count = 0
         self.episode_count += 1
@@ -308,7 +338,21 @@ class DataLogger(Node):
         """Save any remaining data before shutdown."""
         if len(self.current_episode) > 0:
             self.get_logger().info('Saving partial episode before shutdown...')
-            self.episode_saver.save(self.current_episode, self.episode_count)
+            language_instruction = (
+                self.latest_language_instruction
+                if self.latest_language_instruction is not None
+                else self.config.default_language_instruction
+            )
+            self.episode_saver.save(
+                self.current_episode,
+                self.episode_count,
+                language_instruction=language_instruction
+            )
+
+        # Compute and save dataset statistics
+        if self.config.compute_dataset_statistics:
+            self.get_logger().info('Computing dataset statistics...')
+            self.episode_saver.compute_and_save_statistics()
 
 
 def main(args=None):
