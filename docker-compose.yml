@@ -118,6 +118,7 @@ services:
   crane_x7_teleop_logger:
     profiles:
       - teleop-logger
+      - teleop
     env_file: .env
     build:
       context: .
