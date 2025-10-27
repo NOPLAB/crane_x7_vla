@@ -13,6 +13,3 @@ colcon build --symlink-install
 source $ROS2_WORKSPACE/install/setup.bash
 
 echo "Build completed successfully!"
-
-# Keep container running so other services can depend on it
-tail -f /dev/null

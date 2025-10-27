@@ -87,7 +87,7 @@ services:
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader.launch.py
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_leader.launch.py
 
   crane_x7_teleop_follower:
     profiles:
