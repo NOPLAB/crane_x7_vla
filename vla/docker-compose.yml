@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  vla-train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+      args:
+        CUDA_VERSION: 12.1.0
+        PYTHON_VERSION: 3.10
+    image: crane_x7_vla:latest
+    container_name: crane_x7_vla_train
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      # Mount training scripts and code
+      - ./finetune.py:/workspace/finetune.py
+      - ./finetune_config.py:/workspace/finetune_config.py
+      - ./crane_x7_dataset.py:/workspace/crane_x7_dataset.py
+      # Mount data directory
+      - ${DATA_DIR:-../data}:/workspace/data
+      # Mount checkpoints directory
+      - ${CHECKPOINT_DIR:-./checkpoints}:/workspace/checkpoints
+      # Mount logs directory
+      - ${LOG_DIR:-./logs}:/workspace/logs
+      # Mount HuggingFace cache
+      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    shm_size: 16gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  vla-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        CUDA_VERSION: 12.1.0
+        PYTHON_VERSION: 3.10
+    image: crane_x7_vla:dev
+    container_name: crane_x7_vla_dev
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      # Mount entire vla directory for development
+      - .:/workspace
+      # Mount data directory
+      - ${DATA_DIR:-../data}:/workspace/data
+      # Mount checkpoints directory
+      - ${CHECKPOINT_DIR:-./checkpoints}:/workspace/checkpoints
+      # Mount logs directory
+      - ${LOG_DIR:-./logs}:/workspace/logs
+      # Mount HuggingFace cache
+      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    shm_size: 16gb
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+      - "${TENSORBOARD_PORT:-6006}:6006"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles:
+      - dev

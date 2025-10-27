@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data and checkpoints (mount these as volumes)
+data/
+checkpoints/
+logs/
+*.tfrecord
+*.npz
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Cache
+.cache/
+*.cache/
+openvla/.cache/
+
+# OS
+.DS_Store
+Thumbs.db
