@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List
 from .config_manager import ConfigManager, LoggerConfig
 from .image_processor import ImageProcessor
 from .episode_saver import EpisodeSaver
+from .voice_notifier import VoiceNotifier
 
 
 class DataLogger(Node):
@@ -40,11 +41,20 @@ class DataLogger(Node):
             compute_statistics=self.config.compute_dataset_statistics,
             statistics_output_path=self.config.statistics_output_path
         )
+        self.voice_notifier = VoiceNotifier(
+            logger=self,
+            enabled=self.config.enable_voice_notifications,
+            language=self.config.voice_language,
+            speed=self.config.voice_speed
+        )
 
         # Recording state
         self.is_recording = self.config.auto_start_recording
+        self.is_waiting_between_episodes = False
         self.episode_count = 0
         self.step_count = 0
+        self.resume_timer = None
+        self.notified_time_marks = set()  # Track which time notifications have been sent
 
         # Data buffers
         self.lock = Lock()
@@ -63,6 +73,10 @@ class DataLogger(Node):
 
         # Log initialization
         self._log_initialization()
+
+        # Voice notification for first episode if auto-start
+        if self.config.auto_start_recording and self.config.notify_on_episode_start:
+            self.voice_notifier.notify_episode_start(self.episode_count)
 
     def _setup_subscriptions(self) -> None:
         """Setup ROS 2 topic subscriptions."""
@@ -115,6 +129,7 @@ class DataLogger(Node):
         self.get_logger().info(f'  Output: {self.config.output_dir}')
         self.get_logger().info(f'  Format: {self.config.save_format}')
         self.get_logger().info(f'  Episode length: {self.config.episode_length}')
+        self.get_logger().info(f'  Inter-episode delay: {self.config.inter_episode_delay}s')
         self.get_logger().info(f'  Collection rate: {self.config.collection_rate} Hz')
         self.get_logger().info(f'  Camera: {self.config.use_camera}, Depth: {self.config.use_depth}')
         self.get_logger().info(f'  Auto-start: {self.config.auto_start_recording}')
@@ -186,7 +201,7 @@ class DataLogger(Node):
     def _collect_step(self) -> None:
         """Collect one step of data (timer callback)."""
         with self.lock:
-            if not self.is_recording:
+            if not self.is_recording or self.is_waiting_between_episodes:
                 return
 
             # Check minimum required data
@@ -209,9 +224,27 @@ class DataLogger(Node):
             self.current_episode.append(step_data)
             self.step_count += 1
 
+            # Check for time remaining notifications
+            if self.config.notify_time_remaining:
+                self._check_time_notifications()
+
             # Save episode if complete
             if self.step_count >= self.config.episode_length:
                 self._save_current_episode()
+
+    def _check_time_notifications(self) -> None:
+        """Check if we should announce time remaining."""
+        steps_remaining = self.config.episode_length - self.step_count
+        # Convert steps to seconds
+        seconds_remaining = int(steps_remaining / self.config.collection_rate)
+
+        for threshold in self.config.time_notification_intervals:
+            # Notify if we just crossed this threshold and haven't notified yet
+            if (seconds_remaining <= threshold and
+                threshold not in self.notified_time_marks and
+                seconds_remaining > 0):
+                self.voice_notifier.notify_time_remaining(threshold)
+                self.notified_time_marks.add(threshold)
 
     def _has_required_data(self) -> bool:
         """Check if we have minimum required data to record a step."""
@@ -279,9 +312,53 @@ class DataLogger(Node):
             self.episode_count,
             language_instruction=language_instruction
         )
+
+        # Voice notification for episode completion
+        if self.config.notify_on_episode_complete:
+            self.voice_notifier.notify_episode_complete(self.episode_count)
+
         self.current_episode = []
         self.step_count = 0
         self.episode_count += 1
+        self.notified_time_marks.clear()  # Reset time notifications for next episode
+
+        # Enter waiting state between episodes
+        if self.config.inter_episode_delay > 0:
+            self.is_waiting_between_episodes = True
+            self.get_logger().info(
+                f'Episode {self.episode_count - 1} saved. '
+                f'Waiting {self.config.inter_episode_delay}s before next episode...'
+            )
+
+            # Voice notification about delay
+            self.voice_notifier.notify_resuming(
+                self.episode_count,
+                self.config.inter_episode_delay
+            )
+
+            # Cancel previous timer if exists
+            if self.resume_timer is not None:
+                self.resume_timer.cancel()
+
+            # Create one-shot timer to resume recording
+            self.resume_timer = self.create_timer(
+                self.config.inter_episode_delay,
+                self._resume_recording
+            )
+
+    def _resume_recording(self) -> None:
+        """Resume recording after inter-episode delay."""
+        self.is_waiting_between_episodes = False
+        self.get_logger().info(f'Resuming recording for episode {self.episode_count}')
+
+        # Voice notification for episode start
+        if self.config.notify_on_episode_start:
+            self.voice_notifier.notify_episode_start(self.episode_count)
+
+        # Cancel and clean up the one-shot timer
+        if self.resume_timer is not None:
+            self.resume_timer.cancel()
+            self.resume_timer = None
 
     # Status reporting
     def _report_status(self) -> None:
@@ -294,7 +371,11 @@ class DataLogger(Node):
         )
         self._log_topic_publishers()
 
-        if self.is_recording:
+        if self.is_waiting_between_episodes:
+            self.get_logger().info(
+                f'  Status: Waiting between episodes (next: Episode {self.episode_count})'
+            )
+        elif self.is_recording:
             self.get_logger().info(
                 f'  Recording: Episode {self.episode_count}, '
                 f'Step {self.step_count}/{self.config.episode_length}'
@@ -336,6 +417,11 @@ class DataLogger(Node):
     # Shutdown
     def shutdown(self) -> None:
         """Save any remaining data before shutdown."""
+        # Cancel resume timer if active
+        if self.resume_timer is not None:
+            self.resume_timer.cancel()
+            self.resume_timer = None
+
         if len(self.current_episode) > 0:
             self.get_logger().info('Saving partial episode before shutdown...')
             language_instruction = (

@@ -33,16 +33,22 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
     privileged: true  # Required for RealSense camera USB access
     group_add:
       - dialout
+      - audio
       - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
     environment:
       - CUDA_VISIBLE_DEVICES=""
       - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
@@ -63,9 +69,17 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
+    devices:
+      - "/dev/snd:/dev/snd"
+    group_add:
+      - audio
     environment:
       - CUDA_VISIBLE_DEVICES=""
       - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
@@ -88,22 +102,28 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
     privileged: true  # Required for RealSense camera USB access
     group_add:
       - dialout
+      - audio
       - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
     environment:
       - CUDA_VISIBLE_DEVICES=""
       - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true output_dir:=/workspace/data/teleop_logs
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true
 
   crane_x7_teleop_follower:
     profiles:
@@ -121,12 +141,19 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
     devices:
       - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
     group_add:
       - dialout
+      - audio
       - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
     depends_on:
       ros2_builder:
         condition: service_completed_successfully

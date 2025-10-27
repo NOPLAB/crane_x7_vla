@@ -2,16 +2,18 @@
 
 ## 概要
 
-CRANE-X7とVLAを使用した制御プログラムです。
+CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 
 **主な機能:**
 
 - CRANE-X7の実機制御とGazeboシミュレーション
-- デモンストレーションデータの収集（Open X-Embodiment形式）
+- RLDS形式でのデモンストレーションデータ収集
+- 言語インストラクション対応のデータロギング
 - OpenVLAモデルのファインチューニング
-- テレオペレーション（キネステティックティーチング）モード
+- テレオペレーションモード（キネステティックティーチング）
+- RealSenseカメラ対応（RGB + 深度画像）
 
-## 必須
+## 必要なもの
 
 - Native Linux
 - Docker
@@ -26,13 +28,13 @@ git clone --recursive https://github.com/NOPLAB/crane_x7_vla
 
 ### 1. `.env`の作成
 
-.env.templateからコピーして作成
+`.env.template`をコピーして`.env`を作成します。
 
 各環境変数の説明:
 
-- `USB_DEVICE`: リーダーロボットのUSBデバイスパス（デフォルト: `/dev/ttyUSB0`）
-- `USB_DEVICE_FOLLOWER`: フォロワーロボットのUSBデバイスパス（デフォルト: `/dev/ttyUSB1`）
-- `DISPLAY`: X11ディスプレイ（デフォルト: `:0`）
+- `USB_DEVICE`: リーダーロボットのUSBデバイスパス、デフォルトは `/dev/ttyUSB0`
+- `USB_DEVICE_FOLLOWER`: フォロワーロボットのUSBデバイスパス、デフォルトは `/dev/ttyUSB1`
+- `DISPLAY`: X11ディスプレイ、デフォルトは `:0`
 
 ### 2. X11の許可
 
@@ -44,36 +46,36 @@ xhost +
 
 #### 基本制御モード
 
-実機の場合:
+実機:
 ```bash
 docker compose --profile real up
 ```
 
-シミュレータ(Gazebo)の場合:
+シミュレーション:
 ```bash
 docker compose --profile sim up
 ```
 
-#### テレオペレーション（キネステティックティーチング）モード
+#### テレオペレーションモード
 
 手動でロボットを動かしてデモンストレーションを記録します。
 
-リーダーモードのみ（手動教示、記録なし）:
+リーダーモードのみ - 手動教示、記録なし:
 ```bash
 docker compose --profile teleop-leader up
 ```
 
-リーダーモード + データロガー（手動教示、記録あり）:
+リーダーモード + データロガー - 手動教示、記録あり:
 ```bash
 docker compose --profile teleop-leader-logger up
 ```
 
-フォロワーモードのみ（2台のロボットが必要）:
+フォロワーモードのみ - 2台のロボットが必要:
 ```bash
 docker compose --profile teleop-follower up
 ```
 
-フォロワーモード + データロガー（模倣記録、2台のロボットが必要）:
+フォロワーモード + データロガー - 模倣記録、2台のロボットが必要:
 ```bash
 docker compose --profile teleop-follower-logger up
 ```
@@ -105,13 +107,13 @@ docker compose --profile vla run --rm vla_finetune \
 
 ### 3. ファインチューニングの実行
 
-シングルGPUの場合:
+シングルGPU:
 ```bash
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh train
 ```
 
-マルチGPU（2台）の場合:
+マルチGPU - 2台を使う場合:
 ```bash
 docker compose --profile vla run --rm vla_finetune \
   /workspace/scripts/docker/vla_finetune.sh train-multi-gpu 2
@@ -126,7 +128,7 @@ cd vla
 python3 finetune.py --batch_size 16 --learning_rate 1e-4
 ```
 
-### 4. 詳細なドキュメント
+### 4. 詳細ドキュメント
 
 - [VLAファインチューニングの詳細](vla/README.md)
 - [Docker使用方法](docs/DOCKER_USAGE.md)
@@ -156,7 +158,7 @@ outputs/
 
 2. 実行
 
-実機で実行
+実機:
 ```bash
 ./scripts/run.sh real
 
@@ -164,7 +166,7 @@ outputs/
 # source install/setup.bash
 ```
 
-シミュレータ(Gazebo)で実行
+シミュレーション:
 ```bash
 ./scripts/run.sh sim
 
@@ -178,37 +180,47 @@ outputs/
 crane_x7_vla/
 ├── ros2/                          # ROS 2ワークスペース
 │   └── src/
-│       ├── crane_x7_ros/          # CRANE-X7公式パッケージ（Gitサブモジュール）
+│       ├── crane_x7_ros/          # CRANE-X7公式パッケージ - Gitサブモジュール
 │       │   ├── crane_x7_control/  # ハードウェア制御インターフェース
 │       │   ├── crane_x7_examples/ # サンプルプログラム
 │       │   ├── crane_x7_gazebo/   # Gazeboシミュレーション
 │       │   └── crane_x7_moveit_config/ # MoveIt2設定
-│       ├── crane_x7_description/  # URDFロボットモデル（Gitサブモジュール）
-│       └── crane_x7_log/          # データロギングパッケージ
-│           ├── crane_x7_log/      # ROS 2ノード実装
-│           │   ├── data_logger.py # メインデータ収集ノード
-│           │   ├── episode_saver.py # エピソード保存（NPZ/TFRecord）
-│           │   └── tfrecord_writer.py # TFRecord変換
+│       ├── crane_x7_description/  # URDFロボットモデル - Gitサブモジュール
+│       ├── crane_x7_log/          # データロギングパッケージ - RLDS形式対応
+│       │   ├── crane_x7_log/      # ROS 2ノード実装
+│       │   │   ├── data_logger.py # メインデータ収集ノード
+│       │   │   ├── episode_saver.py # エピソード保存 NPZ/TFRecord
+│       │   │   └── tfrecord_writer.py # TFRecord変換
+│       │   └── launch/            # 起動ファイル
+│       │       ├── real_with_logger.launch.py # 実機 + ロガー
+│       │       ├── demo_with_logger.launch.py # シミュレーション + ロガー
+│       │       ├── teleop_leader_with_logger.launch.py # テレオペ + ロガー
+│       │       └── data_logger.launch.py # スタンドアローンロガー
+│       └── crane_x7_teleop/       # テレオペレーションパッケージ
+│           ├── src/               # C++実装
+│           │   └── teleop_hardware_node.cpp # トルクOFF制御ノード
 │           └── launch/            # 起動ファイル
-│               ├── real_with_logger.launch.py # 実機 + ロガー
-│               ├── demo_with_logger.launch.py # シミュレーション + ロガー
-│               └── data_logger.launch.py # スタンドアローンロガー
+│               ├── teleop_leader.launch.py # リーダーロボット
+│               └── teleop_follower.launch.py # フォロワーロボット
 ├── vla/                           # VLAファインチューニング
 │   ├── crane_x7_dataset.py        # CRANE-X7データセットローダー
 │   ├── finetune_config.py         # ファインチューニング設定
 │   ├── finetune.py                # カスタム学習スクリプト
+│   ├── test_crane_x7_loader.py    # RLDS形式データ検証スクリプト
 │   ├── requirements.txt           # Python依存関係
 │   ├── README.md                  # VLAドキュメント
-│   └── openvla/                   # OpenVLA本体（Gitサブモジュール）
+│   └── openvla/                   # OpenVLA本体 - Gitサブモジュール
 │       ├── prismatic/             # Prismatic VLMライブラリ
+│       │   └── vla/datasets/rlds/oxe/  # CRANE-X7データセット統合
 │       ├── vla-scripts/           # 公式学習・デプロイスクリプト
 │       └── experiments/           # ロボット評価実験
 ├── data/                          # データ保存ディレクトリ
 │   └── tfrecord_logs/             # 収集されたエピソード
 │       ├── episode_0000_YYYYMMDD_HHMMSS/
 │       │   └── episode_data.tfrecord
-│       └── episode_0001_YYYYMMDD_HHMMSS/
-│           └── episode_data.tfrecord
+│       ├── episode_0001_YYYYMMDD_HHMMSS/
+│       │   └── episode_data.tfrecord
+│       └── dataset_statistics.json # データセット統計情報
 ├── outputs/                       # モデル出力ディレクトリ
 │   └── crane_x7_finetune/         # ファインチューニング結果
 │       ├── checkpoint-500/
@@ -226,7 +238,7 @@ crane_x7_vla/
 ├── Dockerfile                     # マルチステージDockerfile
 │   ├── base: ROS 2基本環境
 │   ├── dev: ROS 2開発環境
-│   └── vla_finetune: VLA学習環境（ROS 2と独立）
+│   └── vla_finetune: VLA学習環境、ROS 2と独立
 ├── docker-compose.yml             # Docker Composeプロファイル
 │   ├── real: 実機制御
 │   ├── sim: Gazeboシミュレーション
@@ -239,47 +251,85 @@ crane_x7_vla/
 
 ## データ収集ワークフロー
 
-1. **デモンストレーション収集**: テレオペレーションモードでロボットを手動操作
-   ```bash
-   docker compose --profile teleop-leader-logger up
-   ```
-   - エピソードは自動的に `data/tfrecord_logs/` に保存されます
-   - エピソード長、保存形式（NPZ/TFRecord）は起動パラメータで設定可能
+### 1. デモンストレーション収集
 
-2. **データ形式変換**（NPZ使用時）:
-   ```bash
-   python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
-   ```
+テレオペレーションモードでロボットを手動操作してデータを収集します:
 
-3. **VLAファインチューニング**:
-   - `vla/openvla/` ディレクトリで事前学習済みOpenVLAモデルをファインチューニング
-   - LoRAおよびフルファインチューニングをサポート
-   - 詳細は[vla/README.md](vla/README.md)を参照
+```bash
+docker compose --profile teleop-leader-logger up
+```
 
-4. **デプロイ**:
-   - ファインチューニング済みモデルをREST API経由でデプロイ（`vla/openvla/vla-scripts/deploy.py`）
-   - ROS 2制御スタックと統合してクローズドループマニピュレーション
+**収集されるデータ:**
+- ロボットの関節状態（7関節 + グリッパー）
+- RGB画像（RealSense D435使用時）
+- 深度画像（オプション）
+- タスクの言語インストラクション
+- タイムスタンプ
+
+**保存形式:**
+- RLDS形式のTFRecordファイル
+- 自動的に `data/tfrecord_logs/` に保存
+- エピソード長、収集レート、保存形式は設定ファイルで調整可能
+
+### 2. 言語インストラクションの設定
+
+各エピソードにタスクの説明を紐付けます:
+
+```bash
+# 別のターミナルで実行
+ros2 topic pub /task/language_instruction std_msgs/String \
+  "data: '赤いキューブを掴んで青いコンテナに入れる'"
+```
+
+### 3. データセット統計の確認
+
+収集後、データセット統計が自動的に計算されます:
+
+```bash
+cat data/tfrecord_logs/dataset_statistics.json
+```
+
+### 4. VLAファインチューニング
+
+事前学習済みOpenVLAモデルをファインチューニングします:
+
+```bash
+docker compose --profile vla run --rm vla_finetune \
+  /workspace/scripts/docker/vla_finetune.sh train
+```
+
+- LoRAおよびフルファインチューニングをサポート
+- 詳細は[vla/README.md](vla/README.md)を参照
+
+### 5. デプロイ
+
+ファインチューニング済みモデルをデプロイしてROS 2と統合します:
+
+```bash
+# REST API経由でデプロイ
+python vla/openvla/vla-scripts/deploy.py
+```
 
 ## ライセンス
 
 ### このリポジトリのオリジナルコード
 
-- **プロジェクト全体**: MIT License (Copyright 2025 nop)
+- **プロジェクト全体**: MIT License - Copyright 2025 nop
 - **crane_x7_log**: MIT License
 - **crane_x7_vla**: MIT License
 - **crane_x7_teleop**: MIT License
 - **VLAファインチューニングスクリプト**: MIT License
 
-### 外部/サードパーティパッケージ（Gitサブモジュール）
+### 外部/サードパーティパッケージ - Gitサブモジュール
 
-- **crane_x7_ros** (RT Corporation): Apache License 2.0
-- **crane_x7_description** (RT Corporation): RT Corporation非商用ライセンス
+- **crane_x7_ros** - RT Corporation: Apache License 2.0
+- **crane_x7_description** - RT Corporation: RT Corporation非商用ライセンス
   - 研究・内部使用のみ許可
   - 商用利用にはRT Corporationからの事前許可が必要
-- **OpenVLA**: MIT License (コード)
-  - 事前学習済みモデルには別途制限あり（例: Llama-2ライセンス）
+- **OpenVLA**: MIT License - コード部分
+  - 事前学習済みモデルには別途制限あり、例えばLlama-2ライセンスなど
 
-**重要**: RT Corporationのパッケージ（`crane_x7_ros`, `crane_x7_description`）は、このリポジトリのオリジナルコードとは異なるライセンスです。使用前に各LICENSEファイルを確認してください。
+**重要**: RT Corporationのパッケージ `crane_x7_ros` と `crane_x7_description` は、このリポジトリのオリジナルコードとは異なるライセンスです。使用前に各LICENSEファイルを確認してください。
 
 ## 参考情報
 

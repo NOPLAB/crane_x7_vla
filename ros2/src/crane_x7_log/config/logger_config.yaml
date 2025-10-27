@@ -1,14 +1,15 @@
 data_logger:
   ros__parameters:
     # Output settings
-    output_dir: "/workspace/data/logs"
+    output_dir: "/workspace/data/tfrecord_logs"
 
     # Episode settings
-    episode_length: 100  # Number of steps per episode
+    episode_length: 600  # Number of steps per episode
     auto_start_recording: true  # Start recording automatically on launch
+    inter_episode_delay: 15.0  # Delay between episodes in seconds (for resetting environment)
 
     # Data collection rate
-    collection_rate: 10.0  # Hz (data collection frequency)
+    collection_rate: 30.0  # Hz (data collection frequency)
 
     # Camera settings
     use_camera: true  # Enable RGB camera logging (set to true for real robot with D435)
@@ -48,4 +49,13 @@ data_logger:
 
     # Dataset statistics (for OpenVLA normalization)
     compute_dataset_statistics: true  # Compute action statistics across episodes
-    statistics_output_path: "/workspace/data/logs/dataset_statistics.json"
+    statistics_output_path: "/workspace/data/tfrecord_logs/dataset_statistics.json"
+
+    # Voice notification settings
+    enable_voice_notifications: true  # Enable audio notifications for episode events
+    voice_language: "en"  # Language for TTS (en, ja, etc.)
+    voice_speed: 120  # Speech speed in words per minute
+    notify_on_episode_start: true  # Announce episode start
+    notify_on_episode_complete: true  # Announce episode completion
+    notify_time_remaining: true  # Announce remaining time at intervals
+    time_notification_intervals: [20, 10]  # Notify at these seconds before episode end
