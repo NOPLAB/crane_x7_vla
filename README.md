@@ -28,7 +28,13 @@ git clone --recursive https://github.com/NOPLAB/crane_x7_vla
 
 ### 1. `.env`の作成
 
-`.env.template`をコピーして`.env`を作成します。
+`ros2/.env.template`をコピーして`ros2/.env`を作成します。
+
+```bash
+cd ros2
+cp .env.template .env
+# 必要に応じて編集
+```
 
 各環境変数の説明:
 
@@ -48,12 +54,17 @@ xhost +
 
 実機:
 ```bash
-docker compose --profile real up
+docker compose -f ros2/docker-compose.yml --profile real up
 ```
 
 シミュレーション:
 ```bash
-docker compose --profile sim up
+docker compose -f ros2/docker-compose.yml --profile sim up
+```
+
+実機 + カメラビューワー（RealSense映像表示）:
+```bash
+docker compose -f ros2/docker-compose.yml --profile real-viewer up
 ```
 
 #### テレオペレーションモード
@@ -62,32 +73,32 @@ docker compose --profile sim up
 
 リーダーモードのみ - 手動教示、記録なし:
 ```bash
-docker compose --profile teleop-leader up
+docker compose -f ros2/docker-compose.yml --profile teleop-leader up
 ```
 
 リーダーモード + データロガー - 手動教示、記録あり:
 ```bash
-docker compose --profile teleop-leader-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 ```
 
 フォロワーモードのみ - 2台のロボットが必要:
 ```bash
-docker compose --profile teleop-follower up
+docker compose -f ros2/docker-compose.yml --profile teleop-follower up
 ```
 
 フォロワーモード + データロガー - 模倣記録、2台のロボットが必要:
 ```bash
-docker compose --profile teleop-follower-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-follower-logger up
 ```
 
 リーダー + フォロワー同時実行:
 ```bash
-docker compose --profile teleop up
+docker compose -f ros2/docker-compose.yml --profile teleop up
 ```
 
 リーダー + フォロワー + データロガー:
 ```bash
-docker compose --profile teleop-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-logger up
 ```
 
 ## VLAファインチューニング
@@ -95,33 +106,33 @@ docker compose --profile teleop-logger up
 ### 1. VLA Dockerイメージのビルド
 
 ```bash
-docker compose build vla_finetune
+docker compose -f ros2/docker-compose.yml build vla_finetune
 ```
 
 ### 2. データセットの確認
 
 ```bash
-docker compose --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh test-dataset
+docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
+  /workspace/ros2/scripts/docker/vla_finetune.sh test-dataset
 ```
 
 ### 3. ファインチューニングの実行
 
 シングルGPU:
 ```bash
-docker compose --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh train
+docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
+  /workspace/ros2/scripts/docker/vla_finetune.sh train
 ```
 
 マルチGPU - 2台を使う場合:
 ```bash
-docker compose --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh train-multi-gpu 2
+docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
+  /workspace/ros2/scripts/docker/vla_finetune.sh train-multi-gpu 2
 ```
 
 対話型シェルで実行:
 ```bash
-docker compose --profile vla run --rm vla_finetune bash
+docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune bash
 
 # コンテナ内で
 cd vla
@@ -153,14 +164,14 @@ outputs/
 1. ビルド
 
 ```bash
-./scripts/build.sh
+./ros2/scripts/build.sh
 ```
 
 2. 実行
 
 実機:
 ```bash
-./scripts/run.sh real
+./ros2/scripts/run.sh real
 
 # colcon build --symlink-install
 # source install/setup.bash
@@ -168,7 +179,7 @@ outputs/
 
 シミュレーション:
 ```bash
-./scripts/run.sh sim
+./ros2/scripts/run.sh sim
 
 # colcon build --symlink-install
 # source install/setup.bash
@@ -221,31 +232,37 @@ crane_x7_vla/
 │       ├── episode_0001_YYYYMMDD_HHMMSS/
 │       │   └── episode_data.tfrecord
 │       └── dataset_statistics.json # データセット統計情報
+├── ros2/                          # ROS 2ワークスペース（Docker設定含む）
+│   ├── Dockerfile                 # マルチステージDockerfile
+│   │   ├── base: ROS 2基本環境
+│   │   ├── dev: ROS 2開発環境
+│   │   └── vla: VLA学習環境、ROS 2と独立
+│   ├── docker-compose.yml         # Docker Composeプロファイル
+│   │   ├── real: 実機制御
+│   │   ├── sim: Gazeboシミュレーション
+│   │   ├── teleop-*: テレオペレーションモード
+│   │   └── vla: VLAファインチューニング
+│   ├── .env.template              # 環境変数テンプレート
+│   ├── .dockerignore              # Dockerビルド除外設定
+│   ├── scripts/                   # ユーティリティスクリプト
+│   │   ├── build.sh               # Dockerビルドスクリプト
+│   │   ├── run.sh                 # Docker実行スクリプト
+│   │   ├── read_tfrecord.py       # TFRecord読み込みツール
+│   │   └── docker/
+│   │       ├── build-entrypoint.sh    # ビルド用エントリーポイント
+│   │       ├── run-entrypoint.sh      # 実行用エントリーポイント
+│   │       ├── entrypoint.sh          # 開発用エントリーポイント
+│   │       └── vla_finetune.sh        # VLA実行ヘルパー
+│   └── src/                       # 上記のROS 2パッケージ
 ├── outputs/                       # モデル出力ディレクトリ
 │   └── crane_x7_finetune/         # ファインチューニング結果
 │       ├── checkpoint-500/
 │       ├── checkpoint-1000/
 │       └── checkpoint-1500/
-├── scripts/                       # ユーティリティスクリプト
-│   ├── build.sh                   # Dockerビルドスクリプト
-│   ├── run.sh                     # Docker実行スクリプト
-│   ├── docker/
-│   │   └── vla_finetune.sh        # VLA実行ヘルパー
-│   └── read_tfrecord.py           # TFRecord読み込みツール
 ├── docs/                          # ドキュメント
 │   ├── DOCKER_USAGE.md            # Docker使用方法
 │   └── SPEC.md                    # プロジェクト仕様
-├── Dockerfile                     # マルチステージDockerfile
-│   ├── base: ROS 2基本環境
-│   ├── dev: ROS 2開発環境
-│   └── vla_finetune: VLA学習環境、ROS 2と独立
-├── docker-compose.yml             # Docker Composeプロファイル
-│   ├── real: 実機制御
-│   ├── sim: Gazeboシミュレーション
-│   ├── teleop-*: テレオペレーションモード
-│   └── vla: VLAファインチューニング
 ├── CLAUDE.md                      # Claude Code指示
-├── .env.template                  # 環境変数テンプレート
 └── README.md                      # 本ファイル
 ```
 
@@ -256,7 +273,7 @@ crane_x7_vla/
 テレオペレーションモードでロボットを手動操作してデータを収集します:
 
 ```bash
-docker compose --profile teleop-leader-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 ```
 
 **収集されるデータ:**

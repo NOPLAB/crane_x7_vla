@@ -3,32 +3,33 @@ services:
     profiles:
       - sim
       - real
+      - real-viewer
       - teleop
       - teleop-leader
       - teleop-follower
       - teleop-logger
     env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: base
     volumes:
       - type: bind
-        source: "."
+        source: ".."
         target: "/workspace"
-    command: /workspace/scripts/docker/build-entrypoint.sh
+    command: /workspace/ros2/scripts/docker/build-entrypoint.sh
 
   crane_x7_ros2_real:
     profiles:
       - real
     env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: base
     volumes:
       - type: bind
-        source: "."
+        source: ".."
         target: "/workspace"
       - type: bind
         source: "/tmp/.X11-unix"
@@ -52,19 +53,55 @@ services:
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
+
+  crane_x7_ros2_real_viewer:
+    profiles:
+      - real-viewer
+    env_file: .env
+    build:
+      context: ..
+      dockerfile: ros2/Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
+    devices:
+      - "$USB_DEVICE:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
+    privileged: true  # Required for RealSense camera USB access
+    group_add:
+      - dialout
+      - audio
+      - "984"  # video group GID on Arch Linux
+      - "985"  # uucp group GID on Arch Linux
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    depends_on:
+      ros2_builder:
+        condition: service_completed_successfully
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger_and_viewer.launch.py use_d435:=true
 
   crane_x7_ros2_sim:
     profiles:
       - sim
     env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: base
     volumes:
       - type: bind
-        source: "."
+        source: ".."
         target: "/workspace"
       - type: bind
         source: "/tmp/.X11-unix"
@@ -83,7 +120,7 @@ services:
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log demo_with_logger.launch.py
 
   crane_x7_teleop_leader:
     profiles:
@@ -92,12 +129,12 @@ services:
       - teleop-logger
     env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: base
     volumes:
       - type: bind
-        source: "."
+        source: ".."
         target: "/workspace"
       - type: bind
         source: "/tmp/.X11-unix"
@@ -123,7 +160,7 @@ services:
         condition: service_completed_successfully
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true
 
   crane_x7_teleop_follower:
     profiles:
@@ -131,12 +168,12 @@ services:
       - teleop
     env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: base
     volumes:
       - type: bind
-        source: "."
+        source: ".."
         target: "/workspace"
       - type: bind
         source: "/tmp/.X11-unix"
@@ -159,24 +196,24 @@ services:
         condition: service_completed_successfully
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_follower.launch.py
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_follower.launch.py
 
   vla_finetune:
     profiles:
       - vla
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ros2/Dockerfile
       target: vla
     volumes:
       - type: bind
-        source: "./vla"
+        source: "../vla"
         target: "/workspace/vla"
       - type: bind
-        source: "./data"
+        source: "../data"
         target: "/workspace/data"
       - type: bind
-        source: "./outputs"
+        source: "../outputs"
         target: "/workspace/outputs"
     deploy:
       resources:

@@ -1,10 +1,11 @@
 #!/bin/bash
 
 SCRIPT_DIR=$(cd $(dirname $0); pwd)
+PROJECT_ROOT=$SCRIPT_DIR/../..
 DOCKER_IMAGE_NAME=ros-dev
 DOCKER_CONTAINER_NAME=ros-dev
 
-DOCKER_OPTION=" -v $SCRIPT_DIR/..:/workspace --network=crane_x7"
+DOCKER_OPTION=" -v $PROJECT_ROOT:/workspace --network=crane_x7"
 DOCKER_WSL_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix -v /mnt/wslg:/mnt/wslg"
 DOCKER_LINUX_OPTION="-v /tmp/.X11-unix:/tmp/.X11-unix"
 
@@ -28,4 +29,4 @@ docker run \
     -it \
     $DOCKER_OPTION \
     $DOCKER_IMAGE_NAME \
-    /workspace/scripts/docker/entrypoint.sh
+    /workspace/ros2/scripts/docker/entrypoint.sh

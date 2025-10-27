@@ -35,8 +35,9 @@ This repository contains ROS 2 Humble code for controlling the CRANE-X7 robotic 
 
 ### Development Modes
 
-The repository supports two execution modes controlled via docker-compose profiles:
+The repository supports multiple execution modes controlled via docker-compose profiles:
 - **real**: Connect to physical CRANE-X7 via USB (`/dev/ttyUSB0`)
+- **real-viewer**: Real robot with camera viewer (displays RealSense D435 stream)
 - **sim**: Run Gazebo simulation without hardware
 
 ## Common Commands
@@ -45,17 +46,17 @@ The repository supports two execution modes controlled via docker-compose profil
 
 Build the Docker image:
 ```bash
-./scripts/build.sh
+./ros2/scripts/build.sh
 ```
 
 Run interactive development container (with real robot hardware):
 ```bash
-./scripts/run.sh real
+./ros2/scripts/run.sh real
 ```
 
 Or run with simulation:
 ```bash
-./scripts/run.sh sim
+./ros2/scripts/run.sh sim
 ```
 
 Inside the container, build ROS packages:
@@ -73,40 +74,52 @@ source install/setup.bash
 
 ### Docker Compose (Quick Start)
 
-Create `.env` from `.env.template` and configure:
+Create `.env` from `.env.template` in the `ros2/` directory and configure:
 - `USB_DEVICE`: USB device path (default: `/dev/ttyUSB0`)
 - `USB_DEVICE_FOLLOWER`: USB device path for follower robot (default: `/dev/ttyUSB1`)
 - `DISPLAY`: X11 display (default: `:0`)
 
+```bash
+# Create .env file from template
+cd ros2
+cp .env.template .env
+# Edit .env as needed
+```
+
 Run with real robot:
 ```bash
-docker compose --profile real up
+docker compose -f ros2/docker-compose.yml --profile real up
 ```
 
 Run in simulation:
 ```bash
-docker compose --profile sim up
+docker compose -f ros2/docker-compose.yml --profile sim up
+```
+
+Run with real robot and camera viewer (displays RealSense D435 stream):
+```bash
+docker compose -f ros2/docker-compose.yml --profile real-viewer up
 ```
 
 Run with teleoperation (kinesthetic teaching):
 ```bash
 # Leader mode only (manual teaching without recording)
-docker compose --profile teleop-leader up
+docker compose -f ros2/docker-compose.yml --profile teleop-leader up
 
 # Leader mode with data logger (manual teaching with recording)
-docker compose --profile teleop-leader-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 
 # Follower mode only (requires 2 robots)
-docker compose --profile teleop-follower up
+docker compose -f ros2/docker-compose.yml --profile teleop-follower up
 
 # Follower mode with data logger (imitation recording, requires 2 robots)
-docker compose --profile teleop-follower-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-follower-logger up
 
 # Both leader and follower simultaneously
-docker compose --profile teleop up
+docker compose -f ros2/docker-compose.yml --profile teleop up
 
 # Both leader and follower with data logger
-docker compose --profile teleop-logger up
+docker compose -f ros2/docker-compose.yml --profile teleop-logger up
 ```
 
 ### ROS 2 Launch Commands
@@ -132,6 +145,16 @@ ros2 launch crane_x7_description display.launch.py
 ```
 
 For RealSense D435 camera mount, add `use_d435:=true` to launch commands.
+
+Display RealSense camera stream (standalone):
+```bash
+ros2 launch crane_x7_log camera_viewer.launch.py
+```
+
+Display RealSense camera stream with custom topic:
+```bash
+ros2 launch crane_x7_log camera_viewer.launch.py image_topic:=/camera/depth/image_rect_raw
+```
 
 ### Data Logging
 
@@ -232,7 +255,7 @@ episode_0000_YYYYMMDD_HHMMSS/
 ## VLA Training Workflow
 
 1. **Data Collection**: Use `crane_x7_log` to collect demonstration episodes
-   - Run robot with logger: `docker compose --profile real up`
+   - Run robot with logger: `docker compose -f ros2/docker-compose.yml --profile real up`
    - Episodes saved automatically to `/workspace/data/tfrecord_logs`
    - Configure episode length, save format (NPZ/TFRecord) via launch parameters
 
