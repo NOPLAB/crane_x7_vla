@@ -35,9 +35,14 @@ services:
         target: "/tmp/.X11-unix"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
+    privileged: true  # Required for RealSense camera USB access
     group_add:
       - dialout
+      - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
@@ -58,6 +63,9 @@ services:
       - type: bind
         source: "/tmp/.X11-unix"
         target: "/tmp/.X11-unix"
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
@@ -67,6 +75,7 @@ services:
     profiles:
       - teleop-leader
       - teleop
+      - teleop-logger
     env_file: .env
     build:
       context: .
@@ -81,13 +90,20 @@ services:
         target: "/tmp/.X11-unix"
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
+    privileged: true  # Required for RealSense camera USB access
     group_add:
       - dialout
+      - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_leader.launch.py
+    stop_grace_period: 5s
+    stop_signal: SIGINT
+    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true output_dir:=/workspace/data/teleop_logs
 
   crane_x7_teleop_follower:
     profiles:
@@ -109,32 +125,14 @@ services:
       - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
     group_add:
       - dialout
+      - "984"  # video group GID on Arch Linux
       - "985"  # uucp group GID on Arch Linux
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
+    stop_grace_period: 5s
+    stop_signal: SIGINT
     command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_follower.launch.py
-
-  crane_x7_teleop_logger:
-    profiles:
-      - teleop-logger
-      - teleop
-    env_file: .env
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: base
-    volumes:
-      - type: bind
-        source: "."
-        target: "/workspace"
-    network_mode: "service:crane_x7_teleop_leader"
-    depends_on:
-      ros2_builder:
-        condition: service_completed_successfully
-      crane_x7_teleop_leader:
-        condition: service_started
-    command: /workspace/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log data_logger.launch.py output_dir:=/workspace/data/teleop_logs
 
   vla_finetune:
     profiles:

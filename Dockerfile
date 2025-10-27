@@ -5,10 +5,28 @@ FROM osrf/ros:humble-desktop-full AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Add Intel RealSense repository
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null \
+    && echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list \
+    && apt-get update \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install system dependencies in single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xserver-xorg \
     ros-humble-moveit \
+    ros-humble-realsense2-camera \
+    ros-humble-realsense2-description \
+    librealsense2 \
+    librealsense2-utils \
+    librealsense2-dev \
+    v4l-utils \
     python3-pip \
     python3-opencv \
     sudo \
