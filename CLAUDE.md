@@ -1,314 +1,314 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、Claude Code (claude.ai/code) がこのリポジトリのコードを扱う際のガイダンスを提供します。
 
-## Overview
+## 概要
 
-This repository contains ROS 2 Humble code for controlling the CRANE-X7 robotic arm, along with an OpenVLA (Vision-Language-Action) integration for vision-based manipulation tasks. The project supports both real hardware and Gazebo simulation.
+このリポジトリには、CRANE-X7ロボットアームを制御するためのROS 2 Humbleコード、およびビジョンベースのマニピュレーションタスクのためのOpenVLA（Vision-Language-Action）統合が含まれています。このプロジェクトは実機とGazeboシミュレーションの両方をサポートしています。
 
-## Architecture
+## アーキテクチャ
 
-### Main Components
+### 主要コンポーネント
 
-1. **ROS 2 Workspace** (`ros2/`)
-   - `crane_x7_ros/`: RT Corporation's official ROS 2 packages for CRANE-X7
-     - `crane_x7_control`: Hardware control interface and USB communication
-     - `crane_x7_examples`: Sample programs demonstrating robot capabilities
-     - `crane_x7_gazebo`: Gazebo simulation environment
-     - `crane_x7_moveit_config`: MoveIt2 configuration for motion planning
-   - `crane_x7_description/`: URDF/xacro robot model definitions
-   - `crane_x7_log/`: Data logging package for VLA training
-     - Collects robot manipulation episodes in OXE-compatible format
-     - Supports both NPZ and TFRecord output formats
-     - Captures joint states, RGB images, and optional depth data
+1. **ROS 2ワークスペース** (`ros2/`)
+   - `crane_x7_ros/`: RT CorporationのCRANE-X7用公式ROS 2パッケージ
+     - `crane_x7_control`: ハードウェア制御インターフェースとUSB通信
+     - `crane_x7_examples`: ロボットの機能を示すサンプルプログラム
+     - `crane_x7_gazebo`: Gazeboシミュレーション環境
+     - `crane_x7_moveit_config`: モーションプランニング用MoveIt2設定
+   - `crane_x7_description/`: URDF/xacroロボットモデル定義
+   - `crane_x7_log/`: VLAトレーニング用データロギングパッケージ
+     - OXE互換形式でロボットマニピュレーションエピソードを収集
+     - NPZおよびTFRecord両方の出力形式をサポート
+     - 関節状態、RGB画像、オプションのデプス情報をキャプチャ
 
 2. **OpenVLA** (`vla/openvla/`)
-   - Vision-Language-Action model for robotic manipulation
-   - Based on Prismatic VLMs
-   - Supports fine-tuning and deployment for embodied AI tasks
-   - Trained on Open X-Embodiment dataset mixtures
+   - ロボットマニピュレーション用Vision-Language-Actionモデル
+   - Prismatic VLMsに基づく
+   - Embodied AIタスクのファインチューニングとデプロイメントをサポート
+   - Open X-Embodimentデータセットミックスで訓練
 
-3. **Docker Environment**
-   - Multi-stage Dockerfile with `base` (production) and `dev` (development) targets
-   - ROS Humble base image (Ubuntu 22.04)
-   - X11 forwarding for GUI applications (RViz, Gazebo)
+3. **Docker環境**
+   - `base`（本番環境）と`dev`（開発環境）ターゲットを持つマルチステージDockerfile
+   - ROS Humbleベースイメージ（Ubuntu 22.04）
+   - GUIアプリケーション（RViz、Gazebo）用X11フォワーディング
 
-### Development Modes
+### 開発モード
 
-The repository supports multiple execution modes controlled via docker-compose profiles:
-- **real**: Connect to physical CRANE-X7 via USB (`/dev/ttyUSB0`)
-- **real-viewer**: Real robot with camera viewer (displays RealSense D435 stream)
-- **sim**: Run Gazebo simulation without hardware
+リポジトリはdocker-composeプロファイルで制御される複数の実行モードをサポートしています：
+- **real**: 物理的なCRANE-X7にUSB経由で接続（`/dev/ttyUSB0`）
+- **real-viewer**: カメラビューア付き実機（RealSense D435ストリームを表示）
+- **sim**: ハードウェアなしでGazeboシミュレーションを実行
 
-## Common Commands
+## よく使うコマンド
 
-### Docker Development
+### Docker開発
 
-Build the Docker image:
+Dockerイメージのビルド：
 ```bash
 ./ros2/scripts/build.sh
 ```
 
-Run interactive development container (with real robot hardware):
+インタラクティブな開発用コンテナの実行（実機ロボットハードウェア使用）：
 ```bash
 ./ros2/scripts/run.sh real
 ```
 
-Or run with simulation:
+シミュレーションでの実行：
 ```bash
 ./ros2/scripts/run.sh sim
 ```
 
-Inside the container, build ROS packages:
+コンテナ内でROSパッケージをビルド：
 ```bash
 cd /workspace/ros2
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-Build specific package:
+特定のパッケージをビルド：
 ```bash
 colcon build --packages-select crane_x7_log --symlink-install
 source install/setup.bash
 ```
 
-### Docker Compose (Quick Start)
+### Docker Compose（クイックスタート）
 
-Create `.env` from `.env.template` in the `ros2/` directory and configure:
-- `USB_DEVICE`: USB device path (default: `/dev/ttyUSB0`)
-- `USB_DEVICE_FOLLOWER`: USB device path for follower robot (default: `/dev/ttyUSB1`)
-- `DISPLAY`: X11 display (default: `:0`)
+`ros2/`ディレクトリ内の`.env.template`から`.env`を作成し、以下を設定：
+- `USB_DEVICE`: USBデバイスパス（デフォルト：`/dev/ttyUSB0`）
+- `USB_DEVICE_FOLLOWER`: フォロワーロボット用USBデバイスパス（デフォルト：`/dev/ttyUSB1`）
+- `DISPLAY`: X11ディスプレイ（デフォルト：`:0`）
 
 ```bash
-# Create .env file from template
+# テンプレートから.envファイルを作成
 cd ros2
 cp .env.template .env
-# Edit .env as needed
+# 必要に応じて.envを編集
 ```
 
-Run with real robot:
+実機ロボットで実行：
 ```bash
 docker compose -f ros2/docker-compose.yml --profile real up
 ```
 
-Run in simulation:
+シミュレーションで実行：
 ```bash
 docker compose -f ros2/docker-compose.yml --profile sim up
 ```
 
-Run with real robot and camera viewer (displays RealSense D435 stream):
+実機ロボットとカメラビューアで実行（RealSense D435ストリームを表示）：
 ```bash
 docker compose -f ros2/docker-compose.yml --profile real-viewer up
 ```
 
-Run with teleoperation (kinesthetic teaching):
+テレオペレーション（動作教示）で実行：
 ```bash
-# Leader mode only (manual teaching without recording)
+# リーダーモードのみ（記録なしの手動教示）
 docker compose -f ros2/docker-compose.yml --profile teleop-leader up
 
-# Leader mode with data logger (manual teaching with recording)
+# データロガー付きリーダーモード（記録ありの手動教示）
 docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
 
-# Leader mode with data logger and camera viewer (manual teaching with recording and video display)
+# データロガーとカメラビューア付きリーダーモード（記録とビデオ表示ありの手動教示）
 docker compose -f ros2/docker-compose.yml --profile teleop-leader-viewer up
 
-# Follower mode only (requires 2 robots)
+# フォロワーモードのみ（2台のロボットが必要）
 docker compose -f ros2/docker-compose.yml --profile teleop-follower up
 
-# Follower mode with camera viewer (follower robot with video display, requires 2 robots)
+# カメラビューア付きフォロワーモード（ビデオ表示付きフォロワーロボット、2台のロボットが必要）
 docker compose -f ros2/docker-compose.yml --profile teleop-follower-viewer up
 
-# Follower mode with data logger (imitation recording, requires 2 robots)
+# データロガー付きフォロワーモード（模倣記録、2台のロボットが必要）
 docker compose -f ros2/docker-compose.yml --profile teleop-follower-logger up
 
-# Both leader and follower simultaneously
+# リーダーとフォロワーを同時実行
 docker compose -f ros2/docker-compose.yml --profile teleop up
 
-# Both leader and follower with data logger
+# データロガー付きでリーダーとフォロワーを同時実行
 docker compose -f ros2/docker-compose.yml --profile teleop-logger up
 
-# Follower with camera viewer (follower side camera display)
+# カメラビューア付きフォロワー（フォロワー側カメラ表示）
 docker compose -f ros2/docker-compose.yml --profile teleop-viewer up
 ```
 
-### ROS 2 Launch Commands
+### ROS 2起動コマンド
 
-Launch demo with real robot (inside container):
+実機ロボットでデモを起動（コンテナ内）：
 ```bash
 ros2 launch crane_x7_examples demo.launch.py port_name:=/dev/ttyUSB0
 ```
 
-Launch Gazebo simulation:
+Gazeboシミュレーションを起動：
 ```bash
 ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py
 ```
 
-Run example programs (in separate terminal):
+サンプルプログラムを実行（別のターミナルで）：
 ```bash
 ros2 launch crane_x7_examples example.launch.py example:='gripper_control'
 ```
 
-Display robot model in RViz:
+RVizでロボットモデルを表示：
 ```bash
 ros2 launch crane_x7_description display.launch.py
 ```
 
-For RealSense D435 camera mount, add `use_d435:=true` to launch commands.
+RealSense D435カメラマウントの場合、起動コマンドに`use_d435:=true`を追加してください。
 
-Display RealSense camera stream (standalone):
+RealSenseカメラストリームを表示（スタンドアロン）：
 ```bash
 ros2 launch crane_x7_log camera_viewer.launch.py
 ```
 
-Display RealSense camera stream with custom topic:
+カスタムトピックでRealSenseカメラストリームを表示：
 ```bash
 ros2 launch crane_x7_log camera_viewer.launch.py image_topic:=/camera/depth/image_rect_raw
 ```
 
-### Data Logging
+### データロギング
 
-Launch robot control with data logger (real robot):
+データロガー付きでロボット制御を起動（実機ロボット）：
 ```bash
 ros2 launch crane_x7_log real_with_logger.launch.py port_name:=/dev/ttyUSB0 use_d435:=true
 ```
 
-Launch robot control with data logger (simulation):
+データロガー付きでロボット制御を起動（シミュレーション）：
 ```bash
 ros2 launch crane_x7_log demo_with_logger.launch.py
 ```
 
-Standalone data logger (requires robot already running):
+スタンドアロンデータロガー（ロボットがすでに実行中の場合）：
 ```bash
 ros2 launch crane_x7_log data_logger.launch.py output_dir:=/workspace/data/tfrecord_logs
 ```
 
-Convert NPZ episode to TFRecord format:
+NPZエピソードをTFRecord形式に変換：
 ```bash
 python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
 ```
 
-### ROS 2 Build System
+### ROS 2ビルドシステム
 
-The workspace uses colcon build system:
-- `colcon build --symlink-install`: Build all packages with symlinks (recommended for development)
-- `colcon build --packages-select <package_name>`: Build specific package
-- `source install/setup.bash`: Source the workspace after building
+ワークスペースはcolconビルドシステムを使用します：
+- `colcon build --symlink-install`: シンボリックリンク付きですべてのパッケージをビルド（開発時推奨）
+- `colcon build --packages-select <package_name>`: 特定のパッケージをビルド
+- `source install/setup.bash`: ビルド後にワークスペースをソース
 
-## Key Architecture Details
+## 主要なアーキテクチャの詳細
 
-### Launch Flow
+### 起動フロー
 
-**Real Robot**:
-- Docker Compose: Runs `crane_x7_log/real_with_logger.launch.py`
-  - Includes `crane_x7_examples/demo.launch.py` (MoveIt2 + hardware control)
-  - Adds data logger node for OXE data collection
-- Manual: `ros2 launch crane_x7_examples demo.launch.py port_name:=/dev/ttyUSB0`
-  - Starts MoveIt2 (`crane_x7_moveit_config`) and hardware controllers (`crane_x7_control`)
+**実機ロボット**：
+- Docker Compose：`crane_x7_log/real_with_logger.launch.py`を実行
+  - `crane_x7_examples/demo.launch.py`（MoveIt2 + ハードウェア制御）を含む
+  - OXEデータ収集用のデータロガーノードを追加
+- 手動：`ros2 launch crane_x7_examples demo.launch.py port_name:=/dev/ttyUSB0`
+  - MoveIt2（`crane_x7_moveit_config`）とハードウェアコントローラ（`crane_x7_control`）を起動
 
-**Simulation**:
-- Docker Compose: Runs `crane_x7_log/demo_with_logger.launch.py`
-  - Includes Gazebo simulation with data logger
-- Manual: `ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py`
-  - Starts Gazebo with robot model and MoveIt2
+**シミュレーション**：
+- Docker Compose：`crane_x7_log/demo_with_logger.launch.py`を実行
+  - データロガー付きGazeboシミュレーションを含む
+- 手動：`ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py`
+  - ロボットモデルとMoveIt2付きでGazeboを起動
 
-### USB Device Access
+### USBデバイスアクセス
 
-The real robot requires USB access to Dynamixel servos. The docker-compose setup:
-- Maps host device `$USB_DEVICE` to `/dev/ttyUSB0` inside container
-- See `crane_x7_control/README.md` for USB permission setup
+実機ロボットはDynamixelサーボへのUSBアクセスが必要です。docker-compose設定：
+- ホストデバイス`$USB_DEVICE`をコンテナ内の`/dev/ttyUSB0`にマッピング
+- USB権限設定については`crane_x7_control/README.md`を参照
 
-### X11 Display
+### X11ディスプレイ
 
-Both WSL and native Linux are supported via different volume mounts:
-- WSL: Mounts `/tmp/.X11-unix` and `/mnt/wslg`
-- Linux: Mounts `/tmp/.X11-unix` (requires `xhost +`)
+WSLとネイティブLinuxの両方が異なるボリュームマウントでサポートされています：
+- WSL：`/tmp/.X11-unix`と`/mnt/wslg`をマウント
+- Linux：`/tmp/.X11-unix`をマウント（`xhost +`が必要）
 
-### Data Logging Architecture
+### データロギングアーキテクチャ
 
-The `crane_x7_log` package implements an OXE-compatible data collection pipeline:
+`crane_x7_log`パッケージはOXE互換のデータ収集パイプラインを実装しています：
 
-**Data Flow**:
-1. **Subscriptions**: `data_logger` node subscribes to:
-   - `/joint_states`: 7 arm joints + 1 gripper state
-   - `/camera/color/image_raw`: RGB camera feed (optional)
-   - `/camera/aligned_depth_to_color/image_raw`: Depth image (optional)
-2. **Buffering**: Steps are buffered in memory until episode length is reached
-3. **Action Assignment**: `action[t] = state[t+1]` (next-state prediction format)
-4. **Saving**: Episodes saved to disk in NPZ or TFRecord format
+**データフロー**：
+1. **サブスクリプション**：`data_logger`ノードは以下をサブスクライブ：
+   - `/joint_states`: 7つのアーム関節 + 1つのグリッパー状態
+   - `/camera/color/image_raw`: RGBカメラフィード（オプション）
+   - `/camera/aligned_depth_to_color/image_raw`: デプス画像（オプション）
+2. **バッファリング**：エピソード長に達するまでステップをメモリにバッファ
+3. **アクション割り当て**：`action[t] = state[t+1]`（次状態予測形式）
+4. **保存**：エピソードをNPZまたはTFRecord形式でディスクに保存
 
-**Key Components**:
-- `data_logger.py`: Main ROS 2 node that collects multi-modal data
-- `episode_saver.py`: Handles episode persistence (NPZ/TFRecord)
-- `tfrecord_writer.py`: Converts episode data to TFRecord format for VLA training
-- `image_processor.py`: Image encoding and processing utilities
-- `config_manager.py`: Configuration loading and validation
+**主要コンポーネント**：
+- `data_logger.py`: マルチモーダルデータを収集するメインROS 2ノード
+- `episode_saver.py`: エピソードの永続化を処理（NPZ/TFRecord）
+- `tfrecord_writer.py`: エピソードデータをVLAトレーニング用TFRecord形式に変換
+- `image_processor.py`: 画像エンコードと処理ユーティリティ
+- `config_manager.py`: 設定の読み込みと検証
 
-**Output Format** (NPZ):
+**出力形式**（NPZ）：
 ```
 episode_0000_YYYYMMDD_HHMMSS/
   └── episode_data.npz
-      ├── states: (N, 8)      # Joint positions
-      ├── actions: (N, 8)     # Next state (shifted by 1)
-      ├── timestamps: (N,)    # UNIX timestamps
-      ├── images: (N, H, W, 3) # RGB images (optional)
-      └── depths: (N, H, W)   # Depth images (optional)
+      ├── states: (N, 8)      # 関節位置
+      ├── actions: (N, 8)     # 次状態（1つシフト）
+      ├── timestamps: (N,)    # UNIXタイムスタンプ
+      ├── images: (N, H, W, 3) # RGB画像（オプション）
+      └── depths: (N, H, W)   # デプス画像（オプション）
 ```
 
-**Output Format** (TFRecord):
-- `observation/state`: Joint positions (float32)
-- `observation/image`: JPEG-encoded RGB image (bytes)
-- `observation/depth`: Depth array (bytes, float32)
-- `observation/timestamp`: UNIX timestamp (float32)
-- `action`: Target joint positions (float32)
+**出力形式**（TFRecord）：
+- `observation/state`: 関節位置（float32）
+- `observation/image`: JPEGエンコードRGB画像（bytes）
+- `observation/depth`: デプス配列（bytes、float32）
+- `observation/timestamp`: UNIXタイムスタンプ（float32）
+- `action`: ターゲット関節位置（float32）
 
-## VLA Training Workflow
+## VLAトレーニングワークフロー
 
-1. **Data Collection**: Use `crane_x7_log` to collect demonstration episodes
-   - Run robot with logger: `docker compose -f ros2/docker-compose.yml --profile real up`
-   - Episodes saved automatically to `/workspace/data/tfrecord_logs`
-   - Configure episode length, save format (NPZ/TFRecord) via launch parameters
+1. **データ収集**：`crane_x7_log`を使用してデモンストレーションエピソードを収集
+   - ロガー付きでロボットを実行：`docker compose -f ros2/docker-compose.yml --profile real up`
+   - エピソードは自動的に`/workspace/data/tfrecord_logs`に保存されます
+   - 起動パラメータでエピソード長、保存形式（NPZ/TFRecord）を設定
 
-2. **Data Format Conversion** (if using NPZ):
+2. **データ形式変換**（NPZを使用する場合）：
    ```bash
    python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
    ```
 
-3. **Fine-Tuning OpenVLA**:
-   - Located in `vla/openvla/` directory
-   - Use collected TFRecord data to fine-tune pretrained OpenVLA models
-   - Supports LoRA and full fine-tuning via HuggingFace PEFT
-   - See `vla/openvla/README.md` for detailed fine-tuning instructions
+3. **OpenVLAのファインチューニング**：
+   - `vla/openvla/`ディレクトリに配置
+   - 収集したTFRecordデータを使用して事前訓練済みOpenVLAモデルをファインチューニング
+   - HuggingFace PEFT経由でLoRAおよび完全ファインチューニングをサポート
+   - 詳細なファインチューニング手順については`vla/openvla/README.md`を参照
 
-4. **Deployment**:
-   - Deploy fine-tuned model via REST API (`vla-scripts/deploy.py`)
-   - Integrate with ROS 2 control stack for closed-loop manipulation
+4. **デプロイメント**：
+   - REST API（`vla-scripts/deploy.py`）経由でファインチューニング済みモデルをデプロイ
+   - クローズドループマニピュレーション用にROS 2制御スタックと統合
 
-## Licensing Notes
+## ライセンスに関する注記
 
-### This Repository (Original Code)
+### このリポジトリ（オリジナルコード）
 
-- **Project root and original code**: MIT License (Copyright 2025 nop)
-- **crane_x7_log**: MIT License
-- **crane_x7_vla**: MIT License
-- **crane_x7_teleop**: MIT License
-- **VLA fine-tuning scripts**: MIT License
+- **プロジェクトルートおよびオリジナルコード**：MITライセンス（Copyright 2025 nop）
+- **crane_x7_log**：MITライセンス
+- **crane_x7_vla**：MITライセンス
+- **crane_x7_teleop**：MITライセンス
+- **VLAファインチューニングスクリプト**：MITライセンス
 
-### External/Third-Party Packages (Git Submodules)
+### 外部/サードパーティパッケージ（Gitサブモジュール）
 
-- **crane_x7_ros** (RT Corporation): Apache License 2.0
-- **crane_x7_description** (RT Corporation): RT Corporation non-commercial license
-  - Research and internal use only
-  - Commercial use requires prior permission from RT Corporation
-- **OpenVLA**: MIT License (code)
-  - Pretrained models may have additional restrictions (e.g., Llama-2 license)
+- **crane_x7_ros**（RT Corporation）：Apache License 2.0
+- **crane_x7_description**（RT Corporation）：RT Corporation非商用ライセンス
+  - 研究および内部使用のみ
+  - 商用利用にはRT Corporationの事前許可が必要
+- **OpenVLA**：MITライセンス（コード）
+  - 事前訓練済みモデルには追加の制限がある場合があります（例：Llama-2ライセンス）
 
-**Important**: The RT Corporation packages (`crane_x7_ros`, `crane_x7_description`) have different licenses from this repository's original code. Please review their respective LICENSE files before use.
+**重要**：RT Corporationパッケージ（`crane_x7_ros`、`crane_x7_description`）は、このリポジトリのオリジナルコードとは異なるライセンスを持っています。使用前に各LICENSEファイルを確認してください。
 
-## References
+## 参考資料
 
-- RT Corporation CRANE-X7 resources:
+- RT Corporation CRANE-X7リソース：
   - https://github.com/rt-net/crane_x7
   - https://github.com/rt-net/crane_x7_ros
   - https://github.com/rt-net/crane_x7_description
-- OpenVLA project: https://openvla.github.io/
-- Open X-Embodiment: https://robotics-transformer-x.github.io/
+- OpenVLAプロジェクト：https://openvla.github.io/
+- Open X-Embodiment：https://robotics-transformer-x.github.io/
