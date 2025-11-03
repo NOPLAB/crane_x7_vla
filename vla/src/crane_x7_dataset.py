@@ -28,11 +28,14 @@ class CraneX7Dataset(Dataset):
             episode_data.tfrecord
         ...
 
-    Each TFRecord contains:
-        - observation/state: Joint positions (8-DOF: 7 arm joints + 1 gripper)
-        - observation/image: RGB image (optional)
-        - observation/timestamp: Timestamp
+    Each TFRecord contains (RLDS format):
+        - observation/proprio: Joint positions (8-DOF: 7 arm joints + 1 gripper)
+        - observation/image_primary: RGB image (optional)
+        - observation/depth_primary: Depth image (optional)
+        - observation/timestep: Integer timestep
         - action: Next state (8-DOF: 7 arm joints + 1 gripper)
+        - dataset_name: Dataset identifier
+        - task/language_instruction: Language instruction
     """
 
     def __init__(
@@ -97,39 +100,52 @@ class CraneX7Dataset(Dataset):
                 self.samples.append((tfrecord_path, step_idx))
 
     def _parse_tfrecord_step(self, example_bytes: bytes) -> Dict:
-        """Parse a single TFRecord example."""
+        """Parse a single TFRecord example in RLDS format."""
         import tensorflow as tf
 
         feature_description = {
-            'observation/state': tf.io.FixedLenFeature([8], tf.float32),
+            'observation/proprio': tf.io.FixedLenFeature([8], tf.float32),
             'action': tf.io.FixedLenFeature([8], tf.float32),
-            'observation/timestamp': tf.io.FixedLenFeature([1], tf.float32),
+            'observation/timestep': tf.io.FixedLenFeature([1], tf.int64),
+            'dataset_name': tf.io.FixedLenFeature([], tf.string),
+            'task/language_instruction': tf.io.FixedLenFeature([], tf.string),
         }
 
         if self.use_image:
             feature_description.update({
-                'observation/image': tf.io.FixedLenFeature([], tf.string),
-                'observation/image/height': tf.io.FixedLenFeature([1], tf.int64),
-                'observation/image/width': tf.io.FixedLenFeature([1], tf.int64),
-                'observation/image/channels': tf.io.FixedLenFeature([1], tf.int64),
+                'observation/image_primary': tf.io.FixedLenFeature([], tf.string),
+            })
+            # Optional depth
+            feature_description.update({
+                'observation/depth_primary': tf.io.FixedLenFeature([], tf.string, default_value=''),
             })
 
         example = tf.io.parse_single_example(example_bytes, feature_description)
 
         parsed = {
-            'state': example['observation/state'].numpy(),
+            'state': example['observation/proprio'].numpy(),
             'action': example['action'].numpy(),
-            'timestamp': example['observation/timestamp'].numpy()[0],
+            'timestep': example['observation/timestep'].numpy()[0],
+            'language_instruction': example['task/language_instruction'].numpy().decode('utf-8'),
         }
 
         if self.use_image:
             # Decode JPEG image
             import cv2
-            img_bytes = example['observation/image'].numpy()
+            img_bytes = example['observation/image_primary'].numpy()
             img_array = np.frombuffer(img_bytes, dtype=np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
             parsed['image'] = img
+
+            # Decode depth if present
+            depth_bytes = example['observation/depth_primary'].numpy()
+            if len(depth_bytes) > 0:
+                depth = np.frombuffer(depth_bytes, dtype=np.float32)
+                # Reshape depth if needed (assuming same dimensions as RGB image)
+                if img is not None:
+                    depth = depth.reshape(img.shape[:2])
+                parsed['depth'] = depth
 
         return parsed
 
@@ -157,9 +173,11 @@ class CraneX7Dataset(Dataset):
         Returns:
             Dictionary containing:
                 - image: RGB image tensor [C, H, W] (if use_image=True)
+                - depth: Depth tensor [H, W] (if present)
                 - state: Joint state tensor [8]
                 - action: Action tensor [8]
-                - instruction: Task instruction string
+                - instruction: Task instruction string from RLDS data
+                - timestep: Integer timestep
         """
         tfrecord_path, step_idx = self.samples[idx]
         step_data = self._load_step(tfrecord_path, step_idx)
@@ -167,7 +185,8 @@ class CraneX7Dataset(Dataset):
         sample = {
             'state': torch.from_numpy(step_data['state']).float(),
             'action': torch.from_numpy(step_data['action']).float(),
-            'instruction': self.instruction,
+            'instruction': step_data.get('language_instruction', self.instruction),
+            'timestep': step_data['timestep'],
         }
 
         if self.use_image and 'image' in step_data:
@@ -178,6 +197,11 @@ class CraneX7Dataset(Dataset):
             # Convert to [C, H, W] and normalize to [0, 1]
             img_tensor = torch.from_numpy(img_array).permute(2, 0, 1).float() / 255.0
             sample['image'] = img_tensor
+
+        if 'depth' in step_data:
+            # Convert depth to tensor
+            depth_tensor = torch.from_numpy(step_data['depth']).float()
+            sample['depth'] = depth_tensor
 
         return sample
 
@@ -244,6 +268,9 @@ if __name__ == '__main__':
         print("\nFirst sample:")
         print(f"  State shape: {sample['state'].shape}")
         print(f"  Action shape: {sample['action'].shape}")
+        print(f"  Timestep: {sample['timestep']}")
+        print(f"  Instruction: {sample['instruction']}")
         if 'image' in sample:
             print(f"  Image shape: {sample['image'].shape}")
-        print(f"  Instruction: {sample['instruction']}")
+        if 'depth' in sample:
+            print(f"  Depth shape: {sample['depth'].shape}")
