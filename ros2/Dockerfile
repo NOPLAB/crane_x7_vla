@@ -5,9 +5,8 @@ FROM osrf/ros:humble-desktop-full AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Add Intel RealSense repository
+# Add Intel RealSense repository and install all system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    apt-transport-https \
     ca-certificates \
     curl \
     gnupg \
@@ -15,11 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null \
     && echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list \
     && apt-get update \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install system dependencies in single layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xserver-xorg \
+    && apt-get install -y --no-install-recommends \
     ros-humble-moveit \
     ros-humble-realsense2-camera \
     ros-humble-realsense2-description \
@@ -64,15 +59,15 @@ ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG USERNAME=ros2
 
-RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
-    useradd -l -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USERNAME} && \
-    usermod -aG sudo ${USERNAME} && \
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# Set ownership of workspace
-RUN mkdir -p /workspace/ros2 && chown -R ${USER_ID}:${GROUP_ID} /workspace
+RUN groupadd -g ${GROUP_ID} ${USERNAME} || true \
+    && useradd -l -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USERNAME} \
+    && usermod -aG sudo ${USERNAME} \
+    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && chown -R ${USER_ID}:${GROUP_ID} /workspace
 
 USER ${USERNAME}
+
+CMD ["/bin/bash"]
 
 FROM base AS dev
 
@@ -95,58 +90,3 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER ${USERNAME}
 
 CMD ["/bin/bash"]
-
-# ============================================================================
-# VLA Fine-tuning Stage
-# ============================================================================
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 AS vla
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-
-# Install Python and system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3-pip \
-    git \
-    wget \
-    curl \
-    build-essential \
-    ninja-build \
-    && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
-
-# Install PyTorch with CUDA 12.4 support
-RUN pip3 install --no-cache-dir \
-    torch==2.3.1 \
-    torchvision==0.18.1 \
-    torchaudio==2.3.1 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# Install VLA fine-tuning requirements
-COPY vla/requirements.txt /tmp/vla_requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/vla_requirements.txt
-
-# Install Flash Attention 2 (OPTIONAL - for faster training)
-# This can take 5-10 minutes to compile and requires compatible GPU
-# If installation fails, training will fall back to standard attention mechanism
-RUN pip3 install --no-cache-dir packaging ninja && \
-    (pip3 install --no-cache-dir flash-attn==2.5.5 --no-build-isolation && \
-     echo "Flash Attention 2 installed successfully") || \
-    (echo "WARNING: Flash Attention 2 installation failed - training will use standard attention" && \
-     echo "This is expected on non-NVIDIA GPUs or incompatible CUDA versions")
-
-# Set up workspace
-WORKDIR /workspace
-
-# Copy VLA fine-tuning scripts
-COPY vla/ /workspace/vla/
-
-# Set Python path
-ENV PYTHONPATH=/workspace:$PYTHONPATH
-
-# Default command
-CMD ["/bin/bash"]
-
