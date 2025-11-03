@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 cmake_minimum_required(VERSION 3.8)
 project(crane_x7_teleop)
 

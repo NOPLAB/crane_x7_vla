@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """Read and display TFRecord episode data."""
 
 import tensorflow as tf

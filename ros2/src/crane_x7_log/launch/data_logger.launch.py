@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Copyright 2025
-# Licensed under the MIT License
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
 
 import os
 from ament_index_python.packages import get_package_share_directory

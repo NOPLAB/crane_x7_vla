@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Copyright 2025
-# Licensed under the MIT License
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
 
 """Voice notification module using text-to-speech for data logger."""
 

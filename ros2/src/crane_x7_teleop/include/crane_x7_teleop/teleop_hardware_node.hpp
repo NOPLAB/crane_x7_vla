@@ -1,5 +1,5 @@
-// Copyright 2025
-// Licensed under the MIT License
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2025 nop
 
 #ifndef CRANE_X7_TELEOP__TELEOP_HARDWARE_NODE_HPP_
 #define CRANE_X7_TELEOP__TELEOP_HARDWARE_NODE_HPP_

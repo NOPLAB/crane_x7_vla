@@ -1,5 +1,5 @@
-// Copyright 2025
-// Licensed under the MIT License
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2025 nop
 
 #include "crane_x7_teleop/teleop_hardware_node.hpp"
 

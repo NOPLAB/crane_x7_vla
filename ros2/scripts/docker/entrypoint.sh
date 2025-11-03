@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 
 SCRIPT_DIR=$(cd $(dirname $0); pwd)
 WORKSPACE_DIR=$SCRIPT_DIR/../..

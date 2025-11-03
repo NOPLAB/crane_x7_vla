@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Copyright 2025
-# Licensed under the MIT License
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
 
 """ROS 2 node for logging CRANE-X7 data in NPZ or TFRecord format for VLA fine-tuning."""
 

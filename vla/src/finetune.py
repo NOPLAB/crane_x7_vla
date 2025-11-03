@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """
 Fine-tune OpenVLA on CRANE-X7 robot demonstration data.
 
