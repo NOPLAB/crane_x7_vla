@@ -13,3 +13,6 @@
 [submodule "vla/src/openpi"]
 	path = vla/src/openpi
 	url = https://github.com/Physical-Intelligence/openpi
+[submodule "ref"]
+	path = ref
+	url = https://github.com/tyofushun5/adrobo-CRANE-X7
