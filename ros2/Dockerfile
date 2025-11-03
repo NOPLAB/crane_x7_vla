@@ -40,23 +40,24 @@ RUN pip3 install --no-cache-dir \
     tensorflow==2.15.1 \
     "numpy<2"
 
+# Create workspace directory structure
+WORKDIR /workspace/ros2
+
 # Install ROS dependencies with caching optimization
 # Copy only package.xml files first for better layer caching
-ENV ROS2_DEPENDENCIES_DIR=/tmp/ros2_dependencies
-
-# Copy all package.xml files while preserving directory structure
-# This uses a shell script to find and copy package.xml files automatically
-COPY ros2/src ${ROS2_DEPENDENCIES_DIR}/src
-RUN find ${ROS2_DEPENDENCIES_DIR}/src -type f ! -name "package.xml" -delete && \
-    find ${ROS2_DEPENDENCIES_DIR}/src -type d -empty -delete
+COPY ros2/src /tmp/ros2_dependencies/src
+RUN find /tmp/ros2_dependencies/src -type f ! -name "package.xml" -delete && \
+    find /tmp/ros2_dependencies/src -type d -empty -delete
 
 # Install dependencies based on package.xml files
 RUN apt-get update && \
-    rosdep install -r -y -i --from-paths ${ROS2_DEPENDENCIES_DIR} && \
-    rm -rf ${ROS2_DEPENDENCIES_DIR} && \
+    rosdep install -r -y -i --from-paths /tmp/ros2_dependencies && \
+    rm -rf /tmp/ros2_dependencies && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace/ros2
+# Copy source code to workspace
+# Note: In development mode, this will be overridden by volume mount
+COPY ros2/src ./src
 
 # Create a user that matches host user (UID/GID will be passed at build time)
 ARG USER_ID=1000
