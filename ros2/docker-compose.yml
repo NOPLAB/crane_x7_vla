@@ -12,6 +12,7 @@ services:
       - teleop-logger
       - teleop-viewer
       - gemini
+      - gemini-sim
     env_file: .env
     build:
       context: ..
@@ -277,6 +278,38 @@ services:
       ros2_builder:
         condition: service_completed_successfully
     command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_gemini gemini_with_robot.launch.py
+
+  crane_x7_gemini_sim:
+    profiles:
+      - gemini-sim
+    env_file: .env
+    build:
+      context: ..
+      dockerfile: ros2/Dockerfile
+      target: base
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
+      - type: bind
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
+      - type: bind
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
+    devices:
+      - "/dev/snd:/dev/snd"
+    group_add:
+      - audio
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      ros2_builder:
+        condition: service_completed_successfully
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_gemini gemini_pick_and_place_sim.launch.py
 
 networks:
   default:

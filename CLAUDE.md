@@ -21,6 +21,10 @@
      - OXE互換形式でロボットマニピュレーションエピソードを収集
      - NPZおよびTFRecord両方の出力形式をサポート
      - 関節状態、RGB画像、オプションのデプス情報をキャプチャ
+   - `crane_x7_gemini/`: Google Gemini Robotics-ER API統合パッケージ
+     - ビジョンベースの物体検出と認識
+     - 自然言語指示からの軌道プランニング
+     - 実機とシミュレーションの両方をサポート
 
 2. **OpenVLA** (`vla/openvla/`)
    - ロボットマニピュレーション用Vision-Language-Actionモデル
@@ -39,6 +43,8 @@
 - **real**: 物理的なCRANE-X7にUSB経由で接続（`/dev/ttyUSB0`）
 - **real-viewer**: カメラビューア付き実機（RealSense D435ストリームを表示）
 - **sim**: ハードウェアなしでGazeboシミュレーションを実行
+- **gemini**: 実機ロボットでGemini Robotics-ER APIを使用した物体検出とマニピュレーション
+- **gemini-sim**: GazeboシミュレーションでGemini APIを使用したピックアンドプレースタスク
 
 ## よく使うコマンド
 
@@ -130,6 +136,17 @@ docker compose -f ros2/docker-compose.yml --profile teleop-logger up
 # カメラビューア付きフォロワー（フォロワー側カメラ表示）
 docker compose -f ros2/docker-compose.yml --profile teleop-viewer up
 ```
+
+Gemini統合で実行：
+```bash
+# 実機ロボットでGeminiノードとロボット制御を起動
+docker compose -f ros2/docker-compose.yml --profile gemini up
+
+# GazeboシミュレーションでGeminiノードとピックアンドプレースタスクを起動
+docker compose -f ros2/docker-compose.yml --profile gemini-sim up
+```
+
+注意: Geminiプロファイルを使用する前に、`.env`ファイルに`GEMINI_API_KEY`を設定してください。
 
 ### ROS 2起動コマンド
 
