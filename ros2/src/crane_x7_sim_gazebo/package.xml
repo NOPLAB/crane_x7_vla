@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>crane_x7_sim_gazebo</name>
+  <version>1.0.0</version>
+  <description>Custom Gazebo simulation environments for CRANE-X7</description>
+  <maintainer email="nop@example.com">nop</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <depend>controller_manager</depend>
+  <depend>gripper_controllers</depend>
+  <depend>ros2_controllers</depend>
+  <depend>ros_gz</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>crane_x7_description</depend>
+  <depend>crane_x7_moveit_config</depend>
+  <depend>crane_x7_control</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

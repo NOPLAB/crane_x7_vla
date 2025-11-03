@@ -19,11 +19,11 @@ def generate_launch_description():
     """Launch Gazebo simulation with data logger."""
 
     # Get package directories
-    crane_x7_gazebo_dir = get_package_share_directory('crane_x7_gazebo')
+    crane_x7_sim_gazebo_dir = get_package_share_directory('crane_x7_sim_gazebo')
     crane_x7_log_dir = get_package_share_directory('crane_x7_log')
 
     # Paths
-    gazebo_launch = os.path.join(crane_x7_gazebo_dir, 'launch', 'crane_x7_with_table.launch.py')
+    gazebo_launch = os.path.join(crane_x7_sim_gazebo_dir, 'launch', 'crane_x7_with_table.launch.py')
     logger_config = os.path.join(crane_x7_log_dir, 'config', 'logger_config.yaml')
 
     # Launch arguments

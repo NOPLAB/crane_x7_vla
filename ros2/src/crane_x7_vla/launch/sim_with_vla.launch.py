@@ -27,10 +27,10 @@ def generate_launch_description():
     )
 
     # Include CRANE-X7 Gazebo launch
-    crane_x7_gazebo = IncludeLaunchDescription(
+    crane_x7_sim_gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('crane_x7_gazebo'),
+                FindPackageShare('crane_x7_sim_gazebo'),
                 'launch',
                 'crane_x7_with_table.launch.py'
             ])
@@ -55,6 +55,6 @@ def generate_launch_description():
     return LaunchDescription([
         declare_model_path,
         declare_task_instruction,
-        crane_x7_gazebo,
+        crane_x7_sim_gazebo,
         vla_control,
     ])

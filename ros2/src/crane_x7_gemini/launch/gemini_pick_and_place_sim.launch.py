@@ -80,15 +80,18 @@ def generate_launch_description():
         description='Pick and place example type: [pick_and_place, pick_and_place_tf]'
     )
 
-    # Include CRANE-X7 Gazebo simulation
+    # Include CRANE-X7 Gazebo simulation (pick and place environment)
     gazebo_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('crane_x7_gazebo'),
+                FindPackageShare('crane_x7_sim_gazebo'),
                 'launch',
-                'crane_x7_with_table.launch.py'
+                'pick_and_place.launch.py'
             ])
-        ])
+        ]),
+        launch_arguments={
+            'use_d435': 'true',  # Use RealSense camera for Gemini vision
+        }.items()
     )
 
     # Gemini object detection node
