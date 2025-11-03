@@ -11,6 +11,7 @@ services:
       - teleop-follower-viewer
       - teleop-logger
       - teleop-viewer
+      - gemini
     env_file: .env
     build:
       context: ..
@@ -57,42 +58,6 @@ services:
       ros2_builder:
         condition: service_completed_successfully
     command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger.launch.py
-
-  crane_x7_ros2_real_viewer:
-    profiles:
-      - real-viewer
-    env_file: .env
-    build:
-      context: ..
-      dockerfile: ros2/Dockerfile
-      target: base
-    volumes:
-      - type: bind
-        source: ".."
-        target: "/workspace"
-      - type: bind
-        source: "/tmp/.X11-unix"
-        target: "/tmp/.X11-unix"
-      - type: bind
-        source: "/run/user/1000/pulse"
-        target: "/run/user/1000/pulse"
-    devices:
-      - "$USB_DEVICE:/dev/ttyUSB0"
-      - "/dev/snd:/dev/snd"
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-    depends_on:
-      ros2_builder:
-        condition: service_completed_successfully
-    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_log real_with_logger_and_viewer.launch.py use_d435:=true
 
   crane_x7_ros2_sim:
     profiles:
@@ -276,34 +241,42 @@ services:
     stop_signal: SIGINT
     command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_teleop teleop_follower_with_viewer.launch.py use_d435:=true
 
-  vla_finetune:
+  crane_x7_gemini:
     profiles:
-      - vla
+      - gemini
+    env_file: .env
     build:
       context: ..
       dockerfile: ros2/Dockerfile
-      target: vla
+      target: base
     volumes:
       - type: bind
-        source: "../vla"
-        target: "/workspace/vla"
+        source: ".."
+        target: "/workspace"
       - type: bind
-        source: "../data"
-        target: "/workspace/data"
+        source: "/tmp/.X11-unix"
+        target: "/tmp/.X11-unix"
       - type: bind
-        source: "../outputs"
-        target: "/workspace/outputs"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    shm_size: '16gb'
-    ipc: host
-    working_dir: /workspace
-    command: /bin/bash
+        source: "/run/user/1000/pulse"
+        target: "/run/user/1000/pulse"
+    devices:
+      - "$USB_DEVICE:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
+    privileged: true  # Required for RealSense camera USB access
+    group_add:
+      - dialout
+      - audio
+      - "984"  # video group GID on Arch Linux
+      - "985"  # uucp group GID on Arch Linux
+    environment:
+      - CUDA_VISIBLE_DEVICES=""
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      ros2_builder:
+        condition: service_completed_successfully
+    command: /workspace/ros2/scripts/docker/run-entrypoint.sh ros2 launch crane_x7_gemini gemini_with_robot.launch.py
 
 networks:
   default:

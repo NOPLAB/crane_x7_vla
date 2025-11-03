@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
+# Gemini Robotics-ER configuration for CRANE-X7
+
+# Gemini API configuration
+gemini_node:
+  ros__parameters:
+    # API settings
+    api_key: ""  # Set via environment variable GEMINI_API_KEY or launch parameter
+    model_id: "gemini-robotics-er-1.5-preview"
+
+    # ROS topics
+    image_topic: "/camera/color/image_raw"
+    output_topic: "/gemini/detections"
+
+    # Model parameters
+    temperature: 0.5  # 0.0 (deterministic) to 1.0 (creative)
+    thinking_budget: 0  # 0 = minimal reasoning, higher = more reasoning
+    max_objects: 10  # Maximum objects to detect
