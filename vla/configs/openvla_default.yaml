@@ -1,0 +1,74 @@
+# OpenVLA Training Configuration for CRANE-X7
+# This is a sample configuration file for training OpenVLA on CRANE-X7 robot data
+
+backend: openvla
+output_dir: ./outputs/openvla
+experiment_name: crane_x7_openvla
+seed: 42
+resume_from_checkpoint: null
+
+data:
+  data_root: ./data/tfrecord_logs
+  format: tfrecord
+  train_split: 0.9
+  val_split: 0.1
+  shuffle: true
+  num_workers: 4
+  prefetch_factor: 2
+
+  # Camera configuration
+  cameras:
+    - name: primary
+      topic: /camera/color/image_raw
+      enabled: true
+      width: 640
+      height: 480
+      calibration_file: null
+
+training:
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  warmup_steps: 1000
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  mixed_precision: bf16
+  gradient_checkpointing: false
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10
+
+backend_config:
+  # Model settings
+  model_id: openvla/openvla-7b
+
+  # LoRA settings
+  use_lora: true
+  lora_rank: 32
+  lora_alpha: 16
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+  # Action tokenization
+  action_tokenization_bins: 256
+  action_range:
+    - -1.0
+    - 1.0
+
+  # Model architecture
+  max_sequence_length: 512
+  image_size:
+    - 224
+    - 224
+
+  # Optimization
+  use_flash_attention: false
+  compile_model: false

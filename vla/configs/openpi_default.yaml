@@ -1,0 +1,96 @@
+# OpenPI Training Configuration for CRANE-X7
+# This is a sample configuration file for training OpenPI on CRANE-X7 robot data
+
+backend: openpi
+output_dir: ./outputs/openpi
+experiment_name: crane_x7_openpi
+seed: 42
+resume_from_checkpoint: null
+
+data:
+  data_root: ./data/tfrecord_logs
+  format: tfrecord
+  train_split: 0.9
+  val_split: 0.1
+  shuffle: true
+  num_workers: 4
+  prefetch_factor: 2
+
+  # Multi-camera configuration
+  # OpenPI expects 3 camera views: base, left_wrist, right_wrist
+  # Missing cameras will be zero-padded automatically
+  cameras:
+    - name: primary
+      topic: /camera/color/image_raw
+      enabled: true
+      width: 640
+      height: 480
+      calibration_file: null
+
+    # Optional: Add wrist cameras if available
+    # - name: wrist_left
+    #   topic: /camera_wrist_left/color/image_raw
+    #   enabled: false
+    #   width: 640
+    #   height: 480
+    #
+    # - name: wrist_right
+    #   topic: /camera_wrist_right/color/image_raw
+    #   enabled: false
+    #   width: 640
+    #   height: 480
+
+training:
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  warmup_steps: 1000
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  mixed_precision: bf16
+  gradient_checkpointing: false
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10
+
+backend_config:
+  # Model settings
+  model_type: pi0_fast  # or 'pi0', 'pi0.5'
+  pretrained_model_path: null
+
+  # Action/State dimensions
+  # CRANE-X7 has 8 DOF, but OpenPI expects 32-dim actions
+  # Automatic padding from 8 to 32 will be applied
+  action_dim: 32
+  state_dim: 32
+  action_horizon: 50  # Number of future actions to predict
+
+  # Image settings
+  image_size:
+    - 224
+    - 224
+  num_cameras: 3
+  camera_names:
+    - base_0_rgb
+    - left_wrist_0_rgb
+    - right_wrist_0_rgb
+  use_depth: false
+
+  # Normalization
+  normalize_actions: true
+  normalization_mode: quantile  # or 'zscore'
+  quantile_low: 0.01
+  quantile_high: 0.99
+
+  # LoRA settings
+  use_lora: true
+  lora_rank: 32
+  lora_alpha: 16
+  lora_dropout: 0.1
+
+  # Language settings
+  max_token_len: 128
+
+  # Action chunking
+  chunk_interpolation: linear  # or 'repeat'
