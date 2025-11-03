@@ -10,3 +10,6 @@
 	path = vla/src/openvla
 	url = https://github.com/NOPLAB/openvla
 	branch = main
+[submodule "vla/src/openpi"]
+	path = vla/src/openpi
+	url = https://github.com/Physical-Intelligence/openpi
