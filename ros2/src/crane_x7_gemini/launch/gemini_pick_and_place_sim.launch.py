@@ -19,7 +19,6 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
@@ -95,6 +94,8 @@ def generate_launch_description():
     )
 
     # Gemini object detection node
+    # Note: API key must be provided via GEMINI_API_KEY environment variable
+    # or api_key launch argument. The node will fail if API key is empty.
     gemini_node = Node(
         package='crane_x7_gemini',
         executable='gemini_node',
@@ -108,11 +109,7 @@ def generate_launch_description():
             'temperature': LaunchConfiguration('temperature'),
             'thinking_budget': LaunchConfiguration('thinking_budget'),
             'max_objects': LaunchConfiguration('max_objects'),
-        }],
-        condition=IfCondition(
-            # Only launch if API key is provided
-            LaunchConfiguration('api_key')
-        )
+        }]
     )
 
     # Pick and place example node (optional auto-start)

@@ -86,6 +86,7 @@ services:
       - CUDA_VISIBLE_DEVICES=""
       - TF_CPP_MIN_LOG_LEVEL=2
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - SIMULATION_MODE=true
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
@@ -306,6 +307,7 @@ services:
       - TF_CPP_MIN_LOG_LEVEL=2
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SIMULATION_MODE=true
     depends_on:
       ros2_builder:
         condition: service_completed_successfully
