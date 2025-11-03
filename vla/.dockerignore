@@ -1,7 +1,11 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 # Git
 .git
 .gitignore
 .gitmodules
+.github
 
 # Python
 __pycache__
@@ -13,11 +17,13 @@ __pycache__
 dist/
 build/
 .eggs/
+*.egg
 
 # Virtual environments
 venv/
 env/
 ENV/
+.venv
 
 # IDE
 .vscode/
@@ -25,13 +31,20 @@ ENV/
 *.swp
 *.swo
 *~
+.DS_Store
 
 # Data and checkpoints (mount these as volumes)
 data/
 checkpoints/
 logs/
+outputs/
+wandb/
 *.tfrecord
 *.npz
+*.h5
+*.pt
+*.pth
+*.ckpt
 
 # Jupyter
 .ipynb_checkpoints/
@@ -40,8 +53,31 @@ logs/
 # Cache
 .cache/
 *.cache/
-src/openvla/.cache/
+__pypackages__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Docker
+.env
+.env.local
+*.dockerfile
+
+# Documentation
+docs/_build/
+*.md
 
 # OS
 .DS_Store
 Thumbs.db
+*.log
+
+# Large model files
+*.bin
+*.safetensors
+models/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

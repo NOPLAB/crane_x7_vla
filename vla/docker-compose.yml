@@ -1,78 +1,84 @@
-version: '3.8'
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+#
+# Docker Compose configuration for CRANE-X7 VLA training
 
 services:
+  # Base training service
   vla-train:
+    profiles:
+      - train
+    env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: vla/Dockerfile
       target: base
       args:
-        CUDA_VERSION: 12.1.0
-        PYTHON_VERSION: 3.10
+        CUDA_VERSION: ${CUDA_VERSION:-12.1.0}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: ${USERNAME:-vla}
     image: crane_x7_vla:latest
     container_name: crane_x7_vla_train
-    runtime: nvidia
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - WANDB_API_KEY=${WANDB_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
-    volumes:
-      # Mount training scripts and code
-      - ./src/finetune.py:/workspace/finetune.py
-      - ./src/finetune_config.py:/workspace/finetune_config.py
-      - ./src/crane_x7_dataset.py:/workspace/crane_x7_dataset.py
-      # Mount data directory
-      - ${DATA_DIR:-../data}:/workspace/data
-      # Mount checkpoints directory
-      - ${CHECKPOINT_DIR:-./checkpoints}:/workspace/checkpoints
-      # Mount logs directory
-      - ${LOG_DIR:-./logs}:/workspace/logs
-      # Mount HuggingFace cache
-      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
-    working_dir: /workspace
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TF_CPP_MIN_LOG_LEVEL=${TF_CPP_MIN_LOG_LEVEL:-2}
+    working_dir: /workspace/vla
     stdin_open: true
     tty: true
-    shm_size: 16gb
+    shm_size: ${SHM_SIZE:-16gb}
+    ipc: host
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: ${GPU_COUNT:-all}
               capabilities: [gpu]
+    command: /bin/bash
 
+  # Development service with additional tools
   vla-dev:
+    profiles:
+      - dev
+    env_file: .env
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: vla/Dockerfile
       target: dev
       args:
-        CUDA_VERSION: 12.1.0
-        PYTHON_VERSION: 3.10
+        CUDA_VERSION: ${CUDA_VERSION:-12.1.0}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: ${USERNAME:-vla}
     image: crane_x7_vla:dev
     container_name: crane_x7_vla_dev
-    runtime: nvidia
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - WANDB_API_KEY=${WANDB_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
-    volumes:
-      # Mount entire vla directory for development
-      - .:/workspace
-      # Mount data directory
-      - ${DATA_DIR:-../data}:/workspace/data
-      # Mount checkpoints directory
-      - ${CHECKPOINT_DIR:-./checkpoints}:/workspace/checkpoints
-      # Mount logs directory
-      - ${LOG_DIR:-./logs}:/workspace/logs
-      # Mount HuggingFace cache
-      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
-    working_dir: /workspace
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TF_CPP_MIN_LOG_LEVEL=${TF_CPP_MIN_LOG_LEVEL:-2}
+    working_dir: /workspace/vla
     stdin_open: true
     tty: true
-    shm_size: 16gb
+    shm_size: ${SHM_SIZE:-16gb}
+    ipc: host
     ports:
       - "${JUPYTER_PORT:-8888}:8888"
       - "${TENSORBOARD_PORT:-6006}:6006"
@@ -81,7 +87,96 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: ${GPU_COUNT:-all}
               capabilities: [gpu]
+    command: /bin/bash
+
+  # OpenVLA fine-tuning service
+  vla-finetune-openvla:
     profiles:
-      - dev
+      - openvla
+      - finetune
+    env_file: .env
+    build:
+      context: ..
+      dockerfile: vla/Dockerfile
+      target: base
+      args:
+        CUDA_VERSION: ${CUDA_VERSION:-12.1.0}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: ${USERNAME:-vla}
+    image: crane_x7_vla:latest
+    container_name: crane_x7_vla_finetune_openvla
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TF_CPP_MIN_LOG_LEVEL=${TF_CPP_MIN_LOG_LEVEL:-2}
+    working_dir: /workspace/vla
+    stdin_open: true
+    tty: true
+    shm_size: ${SHM_SIZE:-16gb}
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-all}
+              capabilities: [gpu]
+    command: python3 examples/train_openvla.py
+
+  # OpenPI fine-tuning service
+  vla-finetune-openpi:
+    profiles:
+      - openpi
+      - finetune
+    env_file: .env
+    build:
+      context: ..
+      dockerfile: vla/Dockerfile
+      target: base
+      args:
+        CUDA_VERSION: ${CUDA_VERSION:-12.1.0}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: ${USERNAME:-vla}
+    image: crane_x7_vla:latest
+    container_name: crane_x7_vla_finetune_openpi
+    volumes:
+      - type: bind
+        source: ".."
+        target: "/workspace"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TF_CPP_MIN_LOG_LEVEL=${TF_CPP_MIN_LOG_LEVEL:-2}
+    working_dir: /workspace/vla
+    stdin_open: true
+    tty: true
+    shm_size: ${SHM_SIZE:-16gb}
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-all}
+              capabilities: [gpu]
+    command: python3 examples/train_from_config.py configs/openpi_default.yaml
+
+networks:
+  default:
+    name: crane_x7
