@@ -7,6 +7,6 @@
 	url = https://github.com/rt-net/crane_x7_description.git
 	branch = humble
 [submodule "openvla"]
-	path = vla/openvla
+	path = vla/src/openvla
 	url = https://github.com/NOPLAB/openvla
 	branch = main

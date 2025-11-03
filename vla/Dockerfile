@@ -45,12 +45,12 @@ COPY requirements.txt /workspace/requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Install OpenVLA package
-COPY openvla /workspace/openvla
+COPY src/openvla /workspace/openvla
 RUN cd /workspace/openvla && \
     pip3 install -e .
 
 # Copy fine-tuning scripts
-COPY finetune.py finetune_config.py crane_x7_dataset.py /workspace/
+COPY src/finetune.py src/finetune_config.py src/crane_x7_dataset.py /workspace/
 
 # Create directories for data and checkpoints
 RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/logs

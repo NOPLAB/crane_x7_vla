@@ -40,7 +40,7 @@ logs/
 # Cache
 .cache/
 *.cache/
-openvla/.cache/
+src/openvla/.cache/
 
 # OS
 .DS_Store

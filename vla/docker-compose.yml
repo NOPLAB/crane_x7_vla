@@ -19,9 +19,9 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       # Mount training scripts and code
-      - ./finetune.py:/workspace/finetune.py
-      - ./finetune_config.py:/workspace/finetune_config.py
-      - ./crane_x7_dataset.py:/workspace/crane_x7_dataset.py
+      - ./src/finetune.py:/workspace/finetune.py
+      - ./src/finetune_config.py:/workspace/finetune_config.py
+      - ./src/crane_x7_dataset.py:/workspace/crane_x7_dataset.py
       # Mount data directory
       - ${DATA_DIR:-../data}:/workspace/data
       # Mount checkpoints directory
