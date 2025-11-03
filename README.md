@@ -378,3 +378,11 @@ python vla/openvla/vla-scripts/deploy.py
 
 - [Open X-Embodimentプロジェクト](https://robotics-transformer-x.github.io/)
 
+---
+
+## 著作権
+
+Copyright (c) 2025 nop
+
+このREADME.md、およびこのリポジトリのオリジナルコード（crane_x7_log、crane_x7_vla、crane_x7_teleop、VLAファインチューニングスクリプト等）はMITライセンスの下で提供されています。詳細は上記のライセンスセクションを参照してください。
+
