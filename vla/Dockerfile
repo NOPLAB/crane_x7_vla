@@ -6,7 +6,7 @@
 # Includes OpenVLA, OpenPI, and crane_x7_vla packages
 
 ARG CUDA_VERSION=12.1.0
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 
 # ============================================================================
 # Base Stage: CUDA + Python + VLA Dependencies
