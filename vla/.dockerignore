@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
+#
+# Ultra-optimized .dockerignore for minimal image size
 
-# Git
+# Git (large history files)
 .git
 .gitignore
 .gitmodules
 .github
+.gitattributes
 
 # Python
 __pycache__
@@ -18,6 +21,7 @@ dist/
 build/
 .eggs/
 *.egg
+*.whl
 
 # Virtual environments
 venv/
@@ -62,22 +66,52 @@ __pypackages__/
 .env
 .env.local
 *.dockerfile
+Dockerfile.*
 
-# Documentation
-docs/_build/
+# Documentation (these can be large)
+docs/
 *.md
+*.rst
+*.txt.bak
+LICENSE
+NOTICE
+CHANGELOG*
+README*
 
 # OS
 .DS_Store
 Thumbs.db
 *.log
 
-# Large model files
+# Large model files (download at runtime)
 *.bin
 *.safetensors
 models/
+pretrained/
 
 # Temporary files
 tmp/
 temp/
 *.tmp
+
+# Test files (not needed in production)
+tests/
+test/
+*_test.py
+test_*.py
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Makefile
+
+# Additional size optimizations
+src/**/examples/
+src/**/docs/
+src/**/tests/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
