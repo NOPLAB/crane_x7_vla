@@ -17,10 +17,7 @@ sys.path.insert(0, str(vla_src_path))
 
 from crane_x7_vla.backends.base import VLABackend
 from crane_x7_vla.config.openvla_config import OpenVLAConfig
-
-# Import existing OpenVLA training code
-from finetune import CraneX7Trainer
-from finetune_config import CraneX7FinetuneConfig
+from crane_x7_vla.backends.finetune_wrapper import CraneX7Trainer, CraneX7FinetuneConfig
 from transformers import AutoModelForVision2Seq, AutoProcessor
 
 
