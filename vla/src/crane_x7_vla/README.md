@@ -183,15 +183,15 @@ results = trainer.train()
 
 ## Backend Comparison
 
-| Feature | OpenVLA | OpenPI |
-|---------|---------|--------|
-| **Action Prediction** | Single-step | Action chunks (50 steps) |
-| **Action Dimension** | 8 (native) | 32 (padded from 8) |
-| **Data Format** | TFRecord (direct) | LeRobot (converted) |
-| **Cameras** | Single camera | Multi-camera (3 views) |
-| **Base Model** | Prismatic VLM | PaliGemma + Gemma |
-| **Training** | LoRA via PEFT | LoRA or full fine-tuning |
-| **Current Status** | ✅ Fully implemented | ⚠️ Partially implemented |
+| Feature               | OpenVLA             | OpenPI                   |
+| --------------------- | ------------------- | ------------------------ |
+| **Action Prediction** | Single-step         | Action chunks (50 steps) |
+| **Action Dimension**  | 8 (native)          | 32 (padded from 8)       |
+| **Data Format**       | TFRecord (direct)   | LeRobot (converted)      |
+| **Cameras**           | Single camera       | Multi-camera (3 views)   |
+| **Base Model**        | Prismatic VLM       | PaliGemma + Gemma        |
+| **Training**          | LoRA via PEFT       | LoRA or full fine-tuning |
+| **Current Status**    | ✅ Fully implemented | ⚠️ Partially implemented  |
 
 ## Data Format
 
