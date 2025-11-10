@@ -25,6 +25,16 @@
      - ビジョンベースの物体検出と認識
      - 自然言語指示からの軌道プランニング
      - 実機とシミュレーションの両方をサポート
+   - `crane_x7_teleop/`: テレオペレーションパッケージ
+     - トルクOFFモードで手動教示を実現
+     - リーダー/フォロワーアーキテクチャで模倣学習をサポート
+     - データロガーと統合してデモンストレーションを記録
+   - `crane_x7_vla/`: VLA推論パッケージ
+     - ファインチューニング済みVLAモデルのROS 2統合
+     - リアルタイム制御用の推論ノード
+   - `crane_x7_sim_gazebo/`: Gazeboシミュレーション環境
+     - テーブルとオブジェクト付きシミュレーション環境
+     - 実機と同じインターフェースでテスト可能
 
 2. **OpenVLA** (`vla/openvla/`)
    - ロボットマニピュレーション用Vision-Language-Actionモデル
@@ -33,16 +43,30 @@
    - Open X-Embodimentデータセットミックスで訓練
 
 3. **Docker環境**
-   - `base`（本番環境）と`dev`（開発環境）ターゲットを持つマルチステージDockerfile
-   - ROS Humbleベースイメージ（Ubuntu 22.04）
-   - GUIアプリケーション（RViz、Gazebo）用X11フォワーディング
+   - **ROS 2 Docker** (`ros2/Dockerfile`)
+     - `base`: ROS 2 Humble + CRANE-X7パッケージ（本番環境）
+     - `dev`: 開発ツール追加版（推奨）
+     - Ubuntu 22.04ベース、X11フォワーディング対応
+   - **VLA Docker** (`vla/Dockerfile`)
+     - `base`: CUDA 12.1 + Python 3.11 + OpenVLA + OpenPI + crane_x7_vla
+     - `dev`: Jupyter、TensorBoard等の開発ツール追加版
+     - マルチGPU対応、LoRAファインチューニング最適化済み
 
 ### 開発モード
 
 リポジトリはdocker-composeプロファイルで制御される複数の実行モードをサポートしています：
-- **real**: 物理的なCRANE-X7にUSB経由で接続（`/dev/ttyUSB0`）
+- **real**: 物理的なCRANE-X7にUSB経由で接続（`/dev/ttyUSB0`）、データロガー付き
 - **real-viewer**: カメラビューア付き実機（RealSense D435ストリームを表示）
-- **sim**: ハードウェアなしでGazeboシミュレーションを実行
+- **sim**: ハードウェアなしでGazeboシミュレーションを実行、データロガー付き
+- **teleop-leader**: リーダーロボットでトルクOFFモード（手動教示）
+- **teleop-leader-logger**: リーダーロボット + データロガー（記録あり）
+- **teleop-leader-viewer**: リーダーロボット + データロガー + カメラビューア
+- **teleop-follower**: フォロワーロボット（リーダーの動きを模倣、2台必要）
+- **teleop-follower-viewer**: フォロワーロボット + カメラビューア
+- **teleop-follower-logger**: フォロワーロボット + データロガー（記録あり）
+- **teleop**: リーダー + フォロワーを同時起動（2台必要）
+- **teleop-logger**: リーダー + フォロワー + データロガー（2台必要）
+- **teleop-viewer**: リーダー + フォロワー + カメラビューア（フォロワー側）
 - **gemini**: 実機ロボットでGemini Robotics-ER APIを使用した物体検出とマニピュレーション
 - **gemini-sim**: GazeboシミュレーションでGemini APIを使用したピックアンドプレースタスク
 
@@ -81,15 +105,19 @@ source install/setup.bash
 ### Docker Compose（クイックスタート）
 
 `ros2/`ディレクトリ内の`.env.template`から`.env`を作成し、以下を設定：
-- `USB_DEVICE`: USBデバイスパス（デフォルト：`/dev/ttyUSB0`）
+- `USB_DEVICE`: リーダーロボットのUSBデバイスパス（デフォルト：`/dev/ttyUSB0`）
 - `USB_DEVICE_FOLLOWER`: フォロワーロボット用USBデバイスパス（デフォルト：`/dev/ttyUSB1`）
 - `DISPLAY`: X11ディスプレイ（デフォルト：`:0`）
+- `ROS_DOMAIN_ID`: ROS 2 Domain ID（複数ロボット使用時は同じ値を設定、デフォルト：`42`）
+- `GEMINI_API_KEY`: Google Gemini APIキー（geminiプロファイル使用時に必要）
+- `CLEAN_BUILD`: ビルド前にクリーンするか（`true`/`false`、デフォルト：`false`）
+- `USER_ID`, `GROUP_ID`, `USERNAME`: ホストユーザーとの権限整合のため（デフォルト：1000/1000/ros2user）
 
 ```bash
 # テンプレートから.envファイルを作成
 cd ros2
 cp .env.template .env
-# 必要に応じて.envを編集
+# 必要に応じて.envを編集（特にGEMINI_API_KEYなど）
 ```
 
 実機ロボットで実行：
@@ -157,7 +185,7 @@ ros2 launch crane_x7_examples demo.launch.py port_name:=/dev/ttyUSB0
 
 Gazeboシミュレーションを起動：
 ```bash
-ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py
+ros2 launch crane_x7_sim_gazebo crane_x7_with_table.launch.py
 ```
 
 サンプルプログラムを実行（別のターミナルで）：
@@ -225,7 +253,7 @@ python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
 **シミュレーション**：
 - Docker Compose：`crane_x7_log/demo_with_logger.launch.py`を実行
   - データロガー付きGazeboシミュレーションを含む
-- 手動：`ros2 launch crane_x7_gazebo crane_x7_with_table.launch.py`
+- 手動：`ros2 launch crane_x7_sim_gazebo crane_x7_with_table.launch.py`
   - ロボットモデルとMoveIt2付きでGazeboを起動
 
 ### USBデバイスアクセス
@@ -280,25 +308,220 @@ episode_0000_YYYYMMDD_HHMMSS/
 
 ## VLAトレーニングワークフロー
 
-1. **データ収集**：`crane_x7_log`を使用してデモンストレーションエピソードを収集
-   - ロガー付きでロボットを実行：`docker compose -f ros2/docker-compose.yml --profile real up`
-   - エピソードは自動的に`/workspace/data/tfrecord_logs`に保存されます
-   - 起動パラメータでエピソード長、保存形式（NPZ/TFRecord）を設定
+### 重要：OpenVLAとOpenPIの依存関係分離
 
-2. **データ形式変換**（NPZを使用する場合）：
-   ```bash
-   python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
-   ```
+OpenVLAとOpenPIは互いに競合する依存関係を持つため、**別々のDockerイメージとrequirementsファイル**を使用します：
 
-3. **OpenVLAのファインチューニング**：
-   - `vla/openvla/`ディレクトリに配置
-   - 収集したTFRecordデータを使用して事前訓練済みOpenVLAモデルをファインチューニング
-   - HuggingFace PEFT経由でLoRAおよび完全ファインチューニングをサポート
-   - 詳細なファインチューニング手順については`vla/openvla/README.md`を参照
+| バックエンド | Dockerfile | Requirements | PyTorch | Transformers | 主な特徴 |
+|------------|-----------|--------------|---------|--------------|---------|
+| **OpenVLA** | `vla/Dockerfile.openvla` | `vla/requirements-openvla.txt` | 2.2.0 | 4.40.1 | Prismatic VLM、単一ステップアクション |
+| **OpenPI** | `vla/Dockerfile.openpi` | `vla/requirements-openpi.txt` | 2.7.1 | 4.53.2 | JAX/Flax、アクションチャンク、Python 3.11+ |
 
-4. **デプロイメント**：
-   - REST API（`vla-scripts/deploy.py`）経由でファインチューニング済みモデルをデプロイ
-   - クローズドループマニピュレーション用にROS 2制御スタックと統合
+### 1. データ収集
+
+`crane_x7_log`を使用してデモンストレーションエピソードを収集：
+
+```bash
+# テレオペレーション（手動教示）でデータ収集
+docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
+
+# エピソードは自動的に data/tfrecord_logs に保存されます
+# 起動パラメータでエピソード長、保存形式（NPZ/TFRecord）を設定可能
+
+# 言語インストラクションをパブリッシュ
+ros2 topic pub /task/language_instruction std_msgs/String "data: 'タスクの説明'"
+```
+
+### 2. OpenVLAのファインチューニング
+
+**環境構築**：
+```bash
+# OpenVLA用Dockerイメージをビルド
+docker compose -f ros2/docker-compose.yml build vla_openvla
+
+# インタラクティブコンテナを起動
+docker compose -f ros2/docker-compose.yml run --rm vla_openvla
+```
+
+**コンテナ内でトレーニング**：
+```bash
+# シングルGPU
+cd /workspace/vla
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openvla \
+  --batch-size 16 \
+  --learning-rate 5e-4 \
+  --num-epochs 100
+
+# マルチGPU（例：2台）
+torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openvla \
+  --batch-size 8 \
+  --learning-rate 5e-4 \
+  --num-epochs 100
+```
+
+チェックポイントは`/workspace/outputs/crane_x7_openvla/`に保存されます。
+
+### 3. OpenPIのファインチューニング
+
+**環境構築**：
+```bash
+# OpenPI用Dockerイメージをビルド
+docker compose -f ros2/docker-compose.yml build vla_openpi
+
+# インタラクティブコンテナを起動
+docker compose -f ros2/docker-compose.yml run --rm vla_openpi
+```
+
+**コンテナ内でトレーニング**：
+```bash
+# OpenPIトレーニング（JAXベース）
+cd /workspace/vla
+python -m crane_x7_vla.training.cli train \
+  --backend openpi \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openpi \
+  --batch-size 32 \
+  --learning-rate 3e-4 \
+  --num-epochs 100
+```
+
+チェックポイントは`/workspace/outputs/crane_x7_openpi/`に保存されます。
+
+### 4. データセット検証
+
+**OpenVLA**：
+```bash
+docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
+  python3 /workspace/vla/test_crane_x7_loader.py
+```
+
+**OpenPI**：
+```bash
+docker compose -f ros2/docker-compose.yml run --rm vla_openpi \
+  python3 /workspace/vla/test_crane_x7_loader.py
+```
+
+### 5. デプロイメント
+
+- REST API（`vla/src/openvla/vla-scripts/deploy.py`）経由でファインチューニング済みモデルをデプロイ
+- クローズドループマニピュレーション用にROS 2制御スタックと統合
+
+### 環境変数設定
+
+`ros2/.env`ファイルで以下を設定：
+```bash
+# Hugging Face token (モデルダウンロード用)
+HF_TOKEN=your_huggingface_token
+
+# Weights & Biases API key (ロギング用、オプション)
+WANDB_API_KEY=your_wandb_api_key
+
+# GPU設定
+CUDA_VISIBLE_DEVICES=0  # 使用するGPU ID
+```
+
+## デバッグとトラブルシューティング
+
+### ROS 2デバッグコマンド
+
+実行中のノードとトピックを確認：
+```bash
+ros2 node list
+ros2 topic list
+ros2 topic echo /joint_states
+ros2 topic hz /camera/color/image_raw
+```
+
+サービスとアクションの確認：
+```bash
+ros2 service list
+ros2 action list
+```
+
+TFツリーの確認：
+```bash
+ros2 run tf2_tools view_frames
+ros2 run tf2_ros tf2_echo base_link end_effector_link
+```
+
+ログレベルの変更：
+```bash
+ros2 run rqt_console rqt_console
+ros2 run rqt_logger_level rqt_logger_level
+```
+
+### よくある問題と解決方法
+
+**問題**: USBデバイスが見つからない（`/dev/ttyUSB0` がない）
+- 解決策1: `ls -l /dev/ttyUSB*` でデバイスを確認し、`.env`の`USB_DEVICE`を更新
+- 解決策2: ユーザーを`dialout`グループに追加：`sudo usermod -aG dialout $USER`（再ログイン必要）
+
+**問題**: X11ディスプレイエラー（GazeboやRVizが起動しない）
+- 解決策1: `xhost +local:` を実行してX11アクセスを許可
+- 解決策2: `DISPLAY`環境変数を確認：`echo $DISPLAY`
+- 解決策3: WSLの場合、WSLgが起動しているか確認
+
+**問題**: colconビルドが失敗する
+- 解決策1: ビルドディレクトリをクリーン：`rm -rf build install log`
+- 解決策2: 依存関係を確認：`rosdep update && rosdep install --from-paths src --ignore-src -r -y`
+
+**問題**: データロガーが画像を記録しない
+- 解決策1: RealSenseカメラが接続されているか確認：`rs-enumerate-devices`
+- 解決策2: カメラトピックが配信されているか確認：`ros2 topic list | grep camera`
+- 解決策3: 起動時に`use_d435:=true`を指定
+
+**問題**: Gemini APIが動作しない
+- 解決策1: `.env`で`GEMINI_API_KEY`が設定されているか確認
+- 解決策2: APIキーの権限を確認（Gemini APIコンソール）
+- 解決策3: ネットワーク接続を確認
+
+**問題**: VLAファインチューニングでGPUメモリ不足
+- 解決策1: `batch_size`を減らす（例：8 → 4）
+- 解決策2: `lora_rank`を減らす（例：32 → 16）
+- 解決策3: `gradient_checkpointing`を有効化
+- 解決策4: マルチGPUを使用
+
+**問題**: tokenizers/transformersバージョンエラー（`tokenizers>=0.21,<0.22 is required`など）
+- 原因: OpenVLAとOpenPIで必要なバージョンが異なる
+- 解決策: 適切なDockerイメージを使用
+  - OpenVLA: `docker compose -f ros2/docker-compose.yml build vla_openvla`
+  - OpenPI: `docker compose -f ros2/docker-compose.yml build vla_openpi`
+- 重要: 両方を同じ環境にインストールしない
+
+**問題**: OpenVLAとOpenPIの依存関係が競合する
+- 原因: PyTorch、transformers、tokenizersのバージョンが異なる
+- 解決策: 分離されたDockerfileを使用（`Dockerfile.openvla`と`Dockerfile.openpi`）
+- 注意: 同じ環境で両方を使用することはできません
+
+**問題**: JAX/Flaxエラー（OpenPI使用時）
+- 解決策1: OpenPI用Dockerイメージを使用していることを確認
+- 解決策2: CUDA 12がインストールされているか確認
+- 解決策3: 環境変数を確認：`XLA_PYTHON_CLIENT_PREALLOCATE=false`、`JAX_PLATFORMS=cuda`
+
+**問題**: テレオペレーションでロボットが動かない
+- 解決策1: トルクがOFFになっているか確認（手で動かせるか試す）
+- 解決策2: `/joint_states`が配信されているか確認
+- 解決策3: 複数ロボット使用時、`ROS_DOMAIN_ID`が一致しているか確認
+
+### データフロー確認
+
+データロギング中のトピック確認：
+```bash
+# エピソードデータが記録されているか確認
+ls -lh data/tfrecord_logs/
+
+# データセット統計を確認
+cat data/tfrecord_logs/dataset_statistics.json
+
+# TFRecordファイルの内容を確認
+python3 ros2/scripts/read_tfrecord.py data/tfrecord_logs/episode_0000_*/episode_data.tfrecord
+```
 
 ## ライセンスに関する注記
 
