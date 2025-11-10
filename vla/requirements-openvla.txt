@@ -31,7 +31,7 @@ Pillow>=10.0.0
 einops
 protobuf
 rich
-draccus==0.8.0
+draccus==0.11.5
 json-numpy
 jsonlines
 
