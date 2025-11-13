@@ -65,7 +65,7 @@ RUN pip3 install --no-cache-dir \
     "numpy>=1.22.4,<2.0.0" \
     "Pillow>=11.0.0" \
     imageio>=2.36.1 \
-    tensorflow-cpu==2.15.0 \
+    tensorflow==2.15.0 \
     tensorflow-datasets==4.9.9 \
     einops>=0.8.0 \
     "fsspec[gcs]>=2024.6.0" \
@@ -190,7 +190,9 @@ ENV CUDA_LAUNCH_BLOCKING=0 \
     TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0" \
     PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512" \
     JAX_PLATFORMS="cuda" \
-    JAX_TRACEBACK_FILTERING=off
+    JAX_TRACEBACK_FILTERING=off \
+    TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
+    TF_CPP_MIN_LOG_LEVEL=2
 
 # Create non-root user matching host UID/GID
 ARG USER_ID=1000
