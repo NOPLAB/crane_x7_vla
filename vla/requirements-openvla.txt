@@ -21,7 +21,6 @@ accelerate>=0.25.0
 bitsandbytes>=0.43.0
 
 # Data processing
-# Note: Using tensorflow instead of tensorflow-cpu to avoid missing modules
 tensorflow==2.15.0
 tensorflow-datasets==4.9.3
 opencv-python-headless>=4.8.0
