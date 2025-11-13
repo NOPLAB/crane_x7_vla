@@ -23,7 +23,7 @@ bitsandbytes>=0.43.0
 # Data processing
 # Note: Using tensorflow instead of tensorflow-cpu to avoid missing modules
 tensorflow==2.15.0
-tensorflow-datasets==4.9.3
+tensorflow-datasets==4.9.9
 opencv-python-headless>=4.8.0
 numpy>=1.24.0,<2.0.0
 Pillow>=10.0.0
