@@ -38,8 +38,9 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 WORKDIR /build
 
-# Copy OpenPI requirements
-COPY vla/requirements-openpi.txt /build/requirements-openpi.txt
+# Copy OpenPI requirements and source code
+COPY requirements-openpi.txt /build/requirements-openpi.txt
+COPY src/ /build/src/
 
 # Install PyTorch 2.7.1 with CUDA 12.1
 RUN pip3 install --no-cache-dir \
@@ -51,36 +52,8 @@ RUN pip3 install --no-cache-dir \
     "jax[cuda12]==0.5.3" \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Install OpenPI dependencies (excluding the package itself for now)
-RUN pip3 install --no-cache-dir \
-    flax==0.10.2 \
-    jaxtyping==0.2.36 \
-    equinox>=0.11.8 \
-    orbax-checkpoint==0.11.13 \
-    transformers==4.53.2 \
-    sentencepiece>=0.2.0 \
-    augmax>=0.3.4 \
-    dm-tree>=0.1.8 \
-    opencv-python>=4.10.0.84 \
-    "numpy>=1.22.4,<2.0.0" \
-    "Pillow>=11.0.0" \
-    imageio>=2.36.1 \
-    tensorflow==2.15.0 \
-    tensorflow-datasets==4.9.9 \
-    einops>=0.8.0 \
-    "fsspec[gcs]>=2024.6.0" \
-    ml_collections==1.0.0 \
-    numpydantic>=1.6.6 \
-    flatbuffers>=24.3.25 \
-    "filelock>=3.16.1" \
-    beartype==0.19.0 \
-    "treescope>=0.1.7" \
-    "rich>=14.0.0" \
-    "polars>=1.30.0" \
-    "tyro>=0.9.5" \
-    "typing-extensions>=4.12.2" \
-    "wandb>=0.19.1" \
-    tqdm-loggable>=0.2 && \
+# Install OpenPI dependencies from requirements file
+RUN pip3 install --no-cache-dir -r /build/requirements-openpi.txt && \
     # Clean up
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
@@ -88,37 +61,6 @@ RUN pip3 install --no-cache-dir \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyo" -delete && \
     rm -rf /root/.cache /tmp/* /var/tmp/*
-
-# Copy source code
-COPY vla/src/openpi /build/src/openpi
-COPY vla/src/crane_x7_vla /build/src/crane_x7_vla
-COPY vla/configs /build/configs
-COPY vla/examples /build/examples
-
-# Install OpenPI client first
-RUN if [ -d /build/src/openpi/packages/openpi-client ]; then \
-    pip3 install --no-cache-dir -e /build/src/openpi/packages/openpi-client ; \
-    fi
-
-# Install OpenPI (with workspace configuration removed to avoid conflicts)
-RUN if [ -d /build/src/openpi ]; then \
-    sed -i -e '/openpi-client/d' \
-           -e '/\[tool.uv.workspace\]/,/members = /d' \
-           /build/src/openpi/pyproject.toml && \
-    # Install lerobot separately to avoid git dependency issues
-    pip3 install --no-cache-dir \
-        git+https://github.com/huggingface/lerobot@0cf864870cf29f4738d3ade893e6fd13fbd7cdb5 && \
-    pip3 install --no-cache-dir --ignore-installed blinker -e /build/src/openpi ; \
-    fi
-
-# Install CRANE-X7 VLA integration
-RUN if [ -d /build/src/crane_x7_vla ]; then \
-    pip3 install --no-cache-dir -e /build/src/crane_x7_vla ; \
-    fi && \
-    # Final cleanup
-    find /build -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /build -name "*.pyc" -delete && \
-    find /build -name "*.pyo" -delete
 
 # ============================================================================
 # Runtime Stage: Minimal runtime environment
@@ -177,22 +119,22 @@ RUN find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "tes
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyo" -delete
 
-# Copy source code
-COPY --from=builder /build/src ./src
-COPY --from=builder /build/configs ./configs
-COPY --from=builder /build/examples ./examples
-
 # Create directories for data, checkpoints, and logs
-RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/logs
+RUN mkdir -p /workspace/vla /workspace/data /workspace/checkpoints /workspace/logs
 
-# GPU optimization settings for JAX
+# Copy application source code
+COPY --chown=root:root src/ /workspace/vla/src/
+COPY --chown=root:root configs/ /workspace/vla/configs/
+
+# GPU optimization settings for JAX and PYTHONPATH for embedded source code
 ENV CUDA_LAUNCH_BLOCKING=0 \
     TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0" \
     PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512" \
     JAX_PLATFORMS="cuda" \
     JAX_TRACEBACK_FILTERING=off \
     TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
-    TF_CPP_MIN_LOG_LEVEL=2
+    TF_CPP_MIN_LOG_LEVEL=2 \
+    PYTHONPATH=/workspace/vla/src/openpi:/workspace/vla/src/crane_x7_vla:/workspace/vla/src
 
 # Create non-root user matching host UID/GID
 ARG USER_ID=1000

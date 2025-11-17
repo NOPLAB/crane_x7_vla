@@ -38,8 +38,9 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 WORKDIR /build
 
-# Copy OpenVLA requirements
-COPY vla/requirements-openvla.txt /build/requirements-openvla.txt
+# Copy OpenVLA requirements and source code
+COPY requirements-openvla.txt /build/requirements-openvla.txt
+COPY src/ /build/src/
 
 # Install PyTorch with CUDA 12.1
 RUN pip3 install --no-cache-dir \
@@ -48,27 +49,13 @@ RUN pip3 install --no-cache-dir \
 
 # Install OpenVLA dependencies
 RUN pip3 install --no-cache-dir -r /build/requirements-openvla.txt && \
-    # Clean up
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
+    # Clean up (preserve TensorFlow structure)
+    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyo" -delete && \
     rm -rf /root/.cache /tmp/* /var/tmp/*
-
-# Copy source code
-COPY vla/src/openvla /build/src/openvla
-COPY vla/src/crane_x7_vla /build/src/crane_x7_vla
-COPY vla/configs /build/configs
-COPY vla/examples /build/examples
-
-# Install OpenVLA in development mode
-RUN pip3 install --no-cache-dir -e /build/src/openvla && \
-    pip3 install --no-cache-dir -e /build/src/crane_x7_vla && \
-    # Cleanup
-    find /build -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /build -name "*.pyc" -delete && \
-    find /build -name "*.pyo" -delete
 
 # ============================================================================
 # Runtime Stage: Minimal runtime environment
@@ -115,29 +102,29 @@ WORKDIR /workspace/vla
 COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python${PYTHON_VERSION}/dist-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Aggressive cleanup
-RUN find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true && \
+# Aggressive cleanup (preserve TensorFlow structure completely)
+RUN find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "docs" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "examples" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyo" -delete
 
-# Copy source code
-COPY --from=builder /build/src ./src
-COPY --from=builder /build/configs ./configs
-COPY --from=builder /build/examples ./examples
-
 # Create directories for data, checkpoints, and logs
-RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/logs
+RUN mkdir -p /workspace/vla /workspace/data /workspace/checkpoints /workspace/logs
 
-# GPU optimization settings
+# Copy application source code
+COPY --chown=root:root src/ /workspace/vla/src/
+COPY --chown=root:root configs/ /workspace/vla/configs/
+
+# GPU optimization settings and PYTHONPATH for embedded source code
 ENV CUDA_LAUNCH_BLOCKING=0 \
     TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0" \
     PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512" \
     TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
-    TF_CPP_MIN_LOG_LEVEL=2
+    TF_CPP_MIN_LOG_LEVEL=2 \
+    PYTHONPATH=/workspace/vla/src/openvla:/workspace/vla/src/crane_x7_vla:/workspace/vla/src
 
 # Create non-root user matching host UID/GID
 ARG USER_ID=1000
