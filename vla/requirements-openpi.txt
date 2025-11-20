@@ -10,7 +10,7 @@ torchvision>=0.20.0
 
 # JAX stack (required by OpenPI)
 jax[cuda12]==0.5.3
-flax==0.10.2
+flax==0.12.1
 jaxtyping==0.2.36
 equinox>=0.11.8
 orbax-checkpoint==0.11.13
