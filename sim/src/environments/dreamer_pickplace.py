@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """
 Dreamer-style world model training on ManiSkill PickPlace (CRANE-X7) using the hand camera only.
 

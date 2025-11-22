@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 from pathlib import Path
 import sys
 import matplotlib.pyplot as plt

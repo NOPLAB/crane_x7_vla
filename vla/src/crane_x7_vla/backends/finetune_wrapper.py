@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """
 Wrapper around OpenVLA finetune.py to integrate with crane_x7_vla architecture.
 

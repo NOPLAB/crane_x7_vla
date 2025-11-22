@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """
 Record a rollout of the PickPlace-CRANE-X7 policy (Dreamer or random fallback).
 

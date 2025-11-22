@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 import sapien
 import numpy as np
 from mani_skill.agents.base_agent import BaseAgent, Keyframe

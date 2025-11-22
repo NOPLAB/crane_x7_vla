@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 """Setup script for crane_x7_vla package."""
 
 from setuptools import setup, find_packages
