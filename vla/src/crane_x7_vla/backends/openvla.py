@@ -79,6 +79,7 @@ class OpenVLABackend(VLABackend):
         ft_config.lora_dropout = self.vla_config.openvla.lora_dropout
         ft_config.lora_target_modules = self.vla_config.openvla.lora_target_modules
         ft_config.use_flash_attention = self.vla_config.openvla.use_flash_attention
+        ft_config.use_quantization = self.vla_config.openvla.use_quantization
 
         # Logging settings
         ft_config.output_dir = self.vla_config.output_dir

@@ -118,6 +118,21 @@ def train_command(args):
         config.training.learning_rate = args.learning_rate
     if args.num_epochs:
         config.training.num_epochs = args.num_epochs
+    if args.gradient_checkpointing:
+        config.training.gradient_checkpointing = True
+
+    # Override backend-specific settings (OpenVLA)
+    if config.backend == "openvla":
+        if args.lora_rank:
+            config.openvla.lora_rank = args.lora_rank
+            # Update backend_config as well
+            if config.backend_config is not None:
+                config.backend_config['lora_rank'] = args.lora_rank
+        if args.use_quantization:
+            config.openvla.use_quantization = True
+            # Update backend_config as well
+            if config.backend_config is not None:
+                config.backend_config['use_quantization'] = True
 
     # Save configuration
     config_save_path = Path(config.output_dir) / "config.yaml"
@@ -246,6 +261,21 @@ Examples:
         "--num-epochs",
         type=int,
         help="Number of training epochs"
+    )
+    train_parser.add_argument(
+        "--gradient-checkpointing",
+        action="store_true",
+        help="Enable gradient checkpointing to reduce memory usage"
+    )
+    train_parser.add_argument(
+        "--lora-rank",
+        type=int,
+        help="LoRA rank (for parameter-efficient fine-tuning)"
+    )
+    train_parser.add_argument(
+        "--use-quantization",
+        action="store_true",
+        help="Use quantization (4-bit/8-bit) for memory efficiency"
     )
 
     # Evaluate command

@@ -52,6 +52,9 @@ class OpenVLASpecificConfig:
     use_flash_attention: bool = False
     """Use Flash Attention 2 if available"""
 
+    use_quantization: bool = False
+    """Use quantization (e.g., 4-bit or 8-bit) for memory efficiency"""
+
     compile_model: bool = False
     """Use torch.compile() for optimization"""
 
@@ -85,6 +88,7 @@ class OpenVLAConfig(UnifiedVLAConfig):
             'max_sequence_length': self.openvla.max_sequence_length,
             'image_size': self.openvla.image_size,
             'use_flash_attention': self.openvla.use_flash_attention,
+            'use_quantization': self.openvla.use_quantization,
             'compile_model': self.openvla.compile_model,
         }
 
