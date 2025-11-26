@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(docker compose run:*)"
     ],
     "deny": [
 	"Write(crane_x7_ros)",

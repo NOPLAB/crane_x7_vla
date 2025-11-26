@@ -6,6 +6,15 @@
 
 このリポジトリには、CRANE-X7ロボットアームを制御するためのROS 2 Humbleコード、およびビジョンベースのマニピュレーションタスクのためのOpenVLA（Vision-Language-Action）統合が含まれています。このプロジェクトは実機とGazeboシミュレーションの両方をサポートしています。
 
+## 詳細ドキュメント
+
+- [README.md](README.md) - プロジェクト概要とクイックスタート
+- [docs/ROS2_DOCKER.md](docs/ROS2_DOCKER.md) - ROS 2 Docker環境の詳細ガイド
+- [docs/VLA_DOCKER.md](docs/VLA_DOCKER.md) - VLAトレーニング環境の詳細ガイド
+- [vla/README.md](vla/README.md) - VLAファインチューニング詳細
+- [sim/README.md](sim/README.md) - ManiSkillシミュレータ詳細
+- [ros2/src/crane_x7_gemini/README.md](ros2/src/crane_x7_gemini/README.md) - Gemini API統合詳細
+
 ## アーキテクチャ
 
 ### 主要コンポーネント
@@ -51,6 +60,27 @@
      - `base`: CUDA 12.1 + Python 3.11 + OpenVLA + OpenPI + crane_x7_vla
      - `dev`: Jupyter、TensorBoard等の開発ツール追加版
      - マルチGPU対応、LoRAファインチューニング最適化済み
+
+4. **ManiSkillシミュレーション** (`sim/`)
+   - ManiSkill（SAPIEN物理エンジン）ベースのCRANE-X7シミュレーション環境
+   - Dreamerスタイルのワールドモデルトレーニング対応
+   - ピックアンドプレースタスク環境
+   - ハンドカメラ統合（640x480 RGB）
+   - 8次元行動空間（アーム7関節 + グリッパー1関節）
+
+### Gazeboシミュレーション環境
+
+このプロジェクトには2つのGazeboシミュレーション環境があります：
+
+1. **crane_x7_gazebo**（`crane_x7_ros/`サブモジュール内）
+   - RT Corporation公式シミュレーション
+   - 基本的なGazebo環境
+
+2. **crane_x7_sim_gazebo**（カスタムパッケージ）
+   - VLAトレーニング用拡張環境
+   - テーブルとオブジェクト配置
+   - データ収集に最適化
+   - 起動: `ros2 launch crane_x7_sim_gazebo crane_x7_with_table.launch.py`
 
 ### 開発モード
 
@@ -232,12 +262,80 @@ NPZエピソードをTFRecord形式に変換：
 python3 -m crane_x7_log.tfrecord_writer episode_data.npz episode_data.tfrecord
 ```
 
+### VLA推論とデプロイメント
+
+ファインチューニング済みモデルをロボット制御に統合：
+
+実機でVLA推論を実行：
+```bash
+ros2 launch crane_x7_vla real_with_vla.launch.py \
+  model_path:=/workspace/outputs/crane_x7_openvla/checkpoint-5000 \
+  port_name:=/dev/ttyUSB0
+```
+
+シミュレーションでVLA推論を実行：
+```bash
+ros2 launch crane_x7_vla sim_with_vla.launch.py \
+  model_path:=/workspace/outputs/crane_x7_openvla/checkpoint-5000
+```
+
+VLA制御のみを起動（ロボットが既に起動している場合）：
+```bash
+ros2 launch crane_x7_vla vla_control.launch.py \
+  model_path:=/workspace/outputs/crane_x7_openvla/checkpoint-5000
+```
+
+### ManiSkillシミュレーション
+
+ManiSkillベースのシミュレーション環境を使用：
+```bash
+# 関節動作テスト
+python sim/src/scripts/joint_test.py
+
+# MJCFモデルテスト
+python sim/src/scripts/mjcf_test.py
+
+# トレーニング
+python sim/src/scripts/train.py
+```
+
 ### ROS 2ビルドシステム
 
 ワークスペースはcolconビルドシステムを使用します：
 - `colcon build --symlink-install`: シンボリックリンク付きですべてのパッケージをビルド（開発時推奨）
 - `colcon build --packages-select <package_name>`: 特定のパッケージをビルド
 - `source install/setup.bash`: ビルド後にワークスペースをソース
+
+### テスト実行
+
+ROS 2パッケージのテストを実行：
+```bash
+# コンテナ内で
+cd /workspace/ros2
+
+# すべてのカスタムパッケージをテスト
+colcon test --packages-select crane_x7_log crane_x7_vla crane_x7_gemini crane_x7_teleop
+colcon test-result --verbose
+
+# 特定のパッケージをテスト
+colcon test --packages-select crane_x7_log
+colcon test-result --all
+```
+
+VLAデータセットの検証：
+```bash
+# OpenVLAコンテナ内で
+python3 /workspace/vla/test_crane_x7_loader.py
+```
+
+### プロジェクトナビゲーション
+
+主要ディレクトリ：
+- `ros2/src/` - ROS 2パッケージソース
+- `vla/src/crane_x7_vla/` - VLAトレーニングCLI実装
+- `sim/src/` - ManiSkillシミュレータ実装
+- `data/tfrecord_logs/` - 収集されたエピソードデータ
+- `outputs/` - トレーニング済みモデルとチェックポイント
 
 ## 主要なアーキテクチャの詳細
 
@@ -424,103 +522,6 @@ WANDB_API_KEY=your_wandb_api_key
 
 # GPU設定
 CUDA_VISIBLE_DEVICES=0  # 使用するGPU ID
-```
-
-## デバッグとトラブルシューティング
-
-### ROS 2デバッグコマンド
-
-実行中のノードとトピックを確認：
-```bash
-ros2 node list
-ros2 topic list
-ros2 topic echo /joint_states
-ros2 topic hz /camera/color/image_raw
-```
-
-サービスとアクションの確認：
-```bash
-ros2 service list
-ros2 action list
-```
-
-TFツリーの確認：
-```bash
-ros2 run tf2_tools view_frames
-ros2 run tf2_ros tf2_echo base_link end_effector_link
-```
-
-ログレベルの変更：
-```bash
-ros2 run rqt_console rqt_console
-ros2 run rqt_logger_level rqt_logger_level
-```
-
-### よくある問題と解決方法
-
-**問題**: USBデバイスが見つからない（`/dev/ttyUSB0` がない）
-- 解決策1: `ls -l /dev/ttyUSB*` でデバイスを確認し、`.env`の`USB_DEVICE`を更新
-- 解決策2: ユーザーを`dialout`グループに追加：`sudo usermod -aG dialout $USER`（再ログイン必要）
-
-**問題**: X11ディスプレイエラー（GazeboやRVizが起動しない）
-- 解決策1: `xhost +local:` を実行してX11アクセスを許可
-- 解決策2: `DISPLAY`環境変数を確認：`echo $DISPLAY`
-- 解決策3: WSLの場合、WSLgが起動しているか確認
-
-**問題**: colconビルドが失敗する
-- 解決策1: ビルドディレクトリをクリーン：`rm -rf build install log`
-- 解決策2: 依存関係を確認：`rosdep update && rosdep install --from-paths src --ignore-src -r -y`
-
-**問題**: データロガーが画像を記録しない
-- 解決策1: RealSenseカメラが接続されているか確認：`rs-enumerate-devices`
-- 解決策2: カメラトピックが配信されているか確認：`ros2 topic list | grep camera`
-- 解決策3: 起動時に`use_d435:=true`を指定
-
-**問題**: Gemini APIが動作しない
-- 解決策1: `.env`で`GEMINI_API_KEY`が設定されているか確認
-- 解決策2: APIキーの権限を確認（Gemini APIコンソール）
-- 解決策3: ネットワーク接続を確認
-
-**問題**: VLAファインチューニングでGPUメモリ不足
-- 解決策1: `batch_size`を減らす（例：8 → 4）
-- 解決策2: `lora_rank`を減らす（例：32 → 16）
-- 解決策3: `gradient_checkpointing`を有効化
-- 解決策4: マルチGPUを使用
-
-**問題**: tokenizers/transformersバージョンエラー（`tokenizers>=0.21,<0.22 is required`など）
-- 原因: OpenVLAとOpenPIで必要なバージョンが異なる
-- 解決策: 適切なDockerイメージを使用
-  - OpenVLA: `docker compose -f ros2/docker-compose.yml build vla_openvla`
-  - OpenPI: `docker compose -f ros2/docker-compose.yml build vla_openpi`
-- 重要: 両方を同じ環境にインストールしない
-
-**問題**: OpenVLAとOpenPIの依存関係が競合する
-- 原因: PyTorch、transformers、tokenizersのバージョンが異なる
-- 解決策: 分離されたDockerfileを使用（`Dockerfile.openvla`と`Dockerfile.openpi`）
-- 注意: 同じ環境で両方を使用することはできません
-
-**問題**: JAX/Flaxエラー（OpenPI使用時）
-- 解決策1: OpenPI用Dockerイメージを使用していることを確認
-- 解決策2: CUDA 12がインストールされているか確認
-- 解決策3: 環境変数を確認：`XLA_PYTHON_CLIENT_PREALLOCATE=false`、`JAX_PLATFORMS=cuda`
-
-**問題**: テレオペレーションでロボットが動かない
-- 解決策1: トルクがOFFになっているか確認（手で動かせるか試す）
-- 解決策2: `/joint_states`が配信されているか確認
-- 解決策3: 複数ロボット使用時、`ROS_DOMAIN_ID`が一致しているか確認
-
-### データフロー確認
-
-データロギング中のトピック確認：
-```bash
-# エピソードデータが記録されているか確認
-ls -lh data/tfrecord_logs/
-
-# データセット統計を確認
-cat data/tfrecord_logs/dataset_statistics.json
-
-# TFRecordファイルの内容を確認
-python3 ros2/scripts/read_tfrecord.py data/tfrecord_logs/episode_0000_*/episode_data.tfrecord
 ```
 
 ## ライセンスに関する注記
