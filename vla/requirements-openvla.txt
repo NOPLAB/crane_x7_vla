@@ -9,16 +9,16 @@ torch==2.2.0
 torchvision==0.17.0
 torchaudio==2.2.0
 
-# Transformers stack (OpenVLA-compatible versions)
-transformers==4.40.1
-tokenizers==0.19.1
+# Transformers stack (updated for quantization compatibility)
+transformers>=4.46.0
+tokenizers>=0.20.0
 timm==0.9.10
 sentencepiece==0.1.99
 
 # Training and fine-tuning
-peft==0.11.1
-accelerate>=0.25.0
-bitsandbytes>=0.43.0
+peft>=0.13.0
+accelerate>=1.0.0
+bitsandbytes>=0.44.0
 
 # Data processing
 tensorflow==2.15.0
@@ -36,10 +36,10 @@ rich
 draccus==0.8.0
 json-numpy
 jsonlines
+PyYAML>=6.0
 
 # Monitoring
 wandb>=0.16.0
 tqdm>=4.66.0
 
-# CRANE-X7 VLA integration
--e ./src/crane_x7_vla
+# Note: crane_x7_vla is included via PYTHONPATH in Dockerfile

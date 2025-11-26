@@ -1,21 +1,21 @@
+# syntax=docker/dockerfile:1
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
 # OpenVLA-specific Dockerfile for CRANE-X7
-# Optimized for OpenVLA v0.0.3 with torch 2.2.0
+# Optimized for OpenVLA with torch 2.5.1 and CUDA 12.9
 
-ARG CUDA_VERSION=12.1.0
+ARG CUDA_VERSION=12.9.1
 ARG PYTHON_VERSION=3.10
 
 # ============================================================================
 # Builder Stage: Install build dependencies and Python packages
 # ============================================================================
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS builder
 
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install build dependencies
@@ -33,34 +33,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1
 
-# Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip setuptools wheel
 
 WORKDIR /build
 
-# Copy OpenVLA requirements and source code
+# Copy only requirements first (for better layer caching)
 COPY requirements-openvla.txt /build/requirements-openvla.txt
-COPY src/ /build/src/
 
-# Install PyTorch with CUDA 12.1
-RUN pip3 install --no-cache-dir \
-    torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 \
-    --index-url https://download.pytorch.org/whl/cu121
+# Install PyTorch with CUDA 12.4 (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
+    torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cu124
 
-# Install OpenVLA dependencies
-RUN pip3 install --no-cache-dir -r /build/requirements-openvla.txt && \
+# Install OpenVLA dependencies (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r /build/requirements-openvla.txt && \
     # Clean up (preserve TensorFlow structure)
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyo" -delete && \
-    rm -rf /root/.cache /tmp/* /var/tmp/*
+    rm -rf /tmp/* /var/tmp/*
 
 # ============================================================================
 # Runtime Stage: Minimal runtime environment
 # ============================================================================
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -147,17 +149,20 @@ FROM base AS dev
 
 USER root
 
-# Install development tools
+# Install development tools (apt)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux htop nano \
-    && pip3 install --no-cache-dir \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development Python packages (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
     jupyter \
     tensorboard \
     ipywidgets \
     matplotlib \
-    seaborn \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    seaborn
 
 USER ${USERNAME}
 

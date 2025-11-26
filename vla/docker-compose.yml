@@ -39,6 +39,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_MODE=${WANDB_MODE:-disabled}
       - HF_TOKEN=${HF_TOKEN:-}
       - HF_HOME=/home/${USERNAME:-vla}/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
@@ -92,6 +93,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_MODE=${WANDB_MODE:-disabled}
       - HF_TOKEN=${HF_TOKEN:-}
       - HF_HOME=/home/${USERNAME:-vla}/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}

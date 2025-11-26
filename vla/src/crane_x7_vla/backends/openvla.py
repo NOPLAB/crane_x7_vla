@@ -174,12 +174,22 @@ class CraneX7Trainer:
         # Load OpenVLA Processor and Model using HF AutoClasses
         print(f"Loading OpenVLA model from {self.config.vla_path}...")
         processor = AutoProcessor.from_pretrained(self.config.vla_path, trust_remote_code=True)
+
+        # Load model with appropriate settings for quantization
+        model_kwargs = {
+            "torch_dtype": torch.bfloat16,
+            "quantization_config": quantization_config,
+            "trust_remote_code": True,
+            "low_cpu_mem_usage": True,
+            "attn_implementation": "eager",  # Avoid SDPA compatibility issues with OpenVLA
+        }
+        if self.config.use_quantization:
+            # For quantized models, use device_map="auto" to let BitsAndBytes handle placement
+            model_kwargs["device_map"] = "auto"
+
         vla = AutoModelForVision2Seq.from_pretrained(
             self.config.vla_path,
-            torch_dtype=torch.bfloat16,
-            quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
+            **model_kwargs,
         )
 
         # Device Placement =>> note that BitsAndBytes automatically handles for quantized training
@@ -391,7 +401,8 @@ class CraneX7Trainer:
                     # Merge LoRA weights into model backbone for faster inference
                     if self.config.use_lora:
                         base_vla = AutoModelForVision2Seq.from_pretrained(
-                            self.config.vla_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+                            self.config.vla_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True,
+                            attn_implementation="eager"  # Avoid SDPA compatibility issues with OpenVLA
                         )
                         merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir)
                         merged_vla = merged_vla.merge_and_unload()
@@ -648,6 +659,7 @@ class OpenVLABackend(VLABackend):
             "trust_remote_code": True,
             "torch_dtype": torch.bfloat16 if self.vla_config.training.mixed_precision == "bf16" else torch.float32,
             "low_cpu_mem_usage": True,
+            "attn_implementation": "eager",  # Avoid SDPA compatibility issues with OpenVLA
         }
 
         if self.vla_config.openvla.use_flash_attention:

@@ -1,21 +1,21 @@
+# syntax=docker/dockerfile:1
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
 # OpenPI-specific Dockerfile for CRANE-X7
-# Optimized for Physical Intelligence OpenPI v0.1.0 with torch 2.7.1 and JAX
+# Optimized for Physical Intelligence OpenPI with torch 2.7.1, JAX, and CUDA 12.9
 
-ARG CUDA_VERSION=12.1.0
+ARG CUDA_VERSION=12.9.1
 ARG PYTHON_VERSION=3.11
 
 # ============================================================================
 # Builder Stage: Install build dependencies and Python packages
 # ============================================================================
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS builder
 
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install build dependencies
@@ -33,39 +33,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1
 
-# Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip setuptools wheel
 
 WORKDIR /build
 
-# Copy OpenPI requirements and source code
+# Copy only requirements first (for better layer caching)
 COPY requirements-openpi.txt /build/requirements-openpi.txt
-COPY src/ /build/src/
 
-# Install PyTorch 2.7.1 with CUDA 12.1
-RUN pip3 install --no-cache-dir \
+# Install PyTorch 2.7.1 with CUDA 12.4 (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
     torch==2.7.1 torchvision \
-    --index-url https://download.pytorch.org/whl/cu121
+    --index-url https://download.pytorch.org/whl/cu124
 
-# Install JAX with CUDA 12 support
-RUN pip3 install --no-cache-dir \
+# Install JAX with CUDA 12 support (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
     "jax[cuda12]==0.5.3" \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Install OpenPI dependencies from requirements file
-RUN pip3 install --no-cache-dir -r /build/requirements-openpi.txt && \
+# Install OpenPI dependencies from requirements file (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r /build/requirements-openpi.txt && \
     # Clean up
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyc" -delete && \
     find /usr/local/lib/python${PYTHON_VERSION}/site-packages -name "*.pyo" -delete && \
-    rm -rf /root/.cache /tmp/* /var/tmp/*
+    rm -rf /tmp/* /var/tmp/*
 
 # ============================================================================
 # Runtime Stage: Minimal runtime environment
 # ============================================================================
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -157,17 +160,20 @@ FROM base AS dev
 
 USER root
 
-# Install development tools
+# Install development tools (apt)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux htop nano \
-    && pip3 install --no-cache-dir \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development Python packages (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
     jupyter \
     tensorboard \
     ipywidgets \
     matplotlib \
-    seaborn \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    seaborn
 
 USER ${USERNAME}
 
