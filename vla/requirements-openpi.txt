@@ -35,7 +35,7 @@ tensorflow-datasets==4.9.9
 # Utilities
 einops>=0.8.0
 fsspec[gcs]>=2024.6.0
-ml_collections==1.0.0
+ml_collections==1.1.0
 numpydantic>=1.6.6
 flatbuffers>=24.3.25
 filelock>=3.16.1
