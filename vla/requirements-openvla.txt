@@ -4,14 +4,12 @@
 # OpenVLA-specific requirements for CRANE-X7
 # Based on OpenVLA v0.0.3 dependencies
 
-# Core PyTorch (specific versions required by OpenVLA)
-torch==2.2.0
-torchvision==0.17.0
-torchaudio==2.2.0
+# Core PyTorch is installed separately in Dockerfile with specific CUDA version
+# torch, torchvision, torchaudio are not listed here to avoid conflicts
 
-# Transformers stack (updated for quantization compatibility)
-transformers>=4.46.0
-tokenizers>=0.20.0
+# Transformers stack (pinned to tested versions)
+transformers==4.57.3
+tokenizers==0.22.1
 timm==0.9.10
 sentencepiece==0.1.99
 
