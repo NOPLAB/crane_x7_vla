@@ -56,6 +56,9 @@ class DataConfig:
     shuffle: bool = True
     """Whether to shuffle the dataset"""
 
+    shuffle_buffer_size: int = 1000
+    """Shuffle buffer size for dataset loading"""
+
     num_workers: int = 4
     """Number of data loading workers"""
 
@@ -79,6 +82,9 @@ class TrainingConfig:
 
     num_epochs: int = 100
     """Number of training epochs"""
+
+    max_steps: int = 200_000
+    """Maximum number of training steps"""
 
     learning_rate: float = 5e-4
     """Learning rate"""
@@ -141,6 +147,13 @@ class UnifiedVLAConfig:
     resume_from_checkpoint: Optional[Union[str, Path]] = None
     """Path to checkpoint to resume from"""
 
+    # Logging settings
+    wandb_project: str = "crane-x7-vla"
+    """Weights & Biases project name"""
+
+    wandb_entity: Optional[str] = None
+    """Weights & Biases entity (username or team)"""
+
     # Backend-specific configs (will be populated by subclasses)
     backend_config: Optional[Dict] = None
     """Backend-specific configuration dictionary"""
@@ -195,12 +208,15 @@ class UnifiedVLAConfig:
             'experiment_name': self.experiment_name,
             'seed': self.seed,
             'resume_from_checkpoint': str(self.resume_from_checkpoint) if self.resume_from_checkpoint else None,
+            'wandb_project': self.wandb_project,
+            'wandb_entity': self.wandb_entity,
             'data': {
                 'data_root': str(self.data.data_root),
                 'format': self.data.format,
                 'train_split': self.data.train_split,
                 'val_split': self.data.val_split,
                 'shuffle': self.data.shuffle,
+                'shuffle_buffer_size': self.data.shuffle_buffer_size,
                 'num_workers': self.data.num_workers,
                 'prefetch_factor': self.data.prefetch_factor,
                 'cameras': [
@@ -218,6 +234,7 @@ class UnifiedVLAConfig:
             'training': {
                 'batch_size': self.training.batch_size,
                 'num_epochs': self.training.num_epochs,
+                'max_steps': self.training.max_steps,
                 'learning_rate': self.training.learning_rate,
                 'weight_decay': self.training.weight_decay,
                 'warmup_steps': self.training.warmup_steps,
