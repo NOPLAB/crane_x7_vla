@@ -167,6 +167,7 @@ class CraneX7Trainer:
             quantization_config=quantization_config,
             low_cpu_mem_usage=True,
             trust_remote_code=True,
+            attn_implementation="eager",  # Avoid SDPA compatibility issues
         )
 
         # Device Placement =>> note that BitsAndBytes automatically handles for quantized training
@@ -187,8 +188,13 @@ class CraneX7Trainer:
             vla = get_peft_model(vla, lora_config)
             vla.print_trainable_parameters()
 
-        # Wrap VLA in PyTorch DDP Wrapper for Multi-GPU Training
-        vla = DDP(vla, device_ids=[device_id], find_unused_parameters=True, gradient_as_bucket_view=True)
+        # Wrap VLA in PyTorch DDP Wrapper for Multi-GPU Training (only if distributed)
+        is_distributed = distributed_state.num_processes > 1
+        if is_distributed:
+            vla = DDP(vla, device_ids=[device_id], find_unused_parameters=True, gradient_as_bucket_view=True)
+
+        # Get unwrapped model for accessing config/internals
+        unwrapped_vla = vla.module if is_distributed else vla
 
         # Create Optimizer =>> note that we default to a simple constant learning rate!
         trainable_params = [param for param in vla.parameters() if param.requires_grad]
@@ -208,7 +214,7 @@ class CraneX7Trainer:
             self.cfg.data_root_dir,
             self.cfg.dataset_name,
             batch_transform,
-            resize_resolution=tuple(vla.module.config.image_sizes),
+            resize_resolution=tuple(unwrapped_vla.config.image_sizes),
             shuffle_buffer_size=self.cfg.shuffle_buffer_size,
             image_aug=self.cfg.image_aug,
         )
@@ -259,7 +265,7 @@ class CraneX7Trainer:
                 normalized_loss.backward()
 
                 # Compute Accuracy and L1 Loss for Logging
-                action_logits = output.logits[:, vla.module.vision_backbone.featurizer.patch_embed.num_patches : -1]
+                action_logits = output.logits[:, unwrapped_vla.vision_backbone.featurizer.patch_embed.num_patches : -1]
                 action_preds = action_logits.argmax(dim=2)
                 action_gt = batch["labels"][:, 1:].to(action_preds.device)
                 mask = action_gt > action_tokenizer.action_token_begin_idx
@@ -319,16 +325,21 @@ class CraneX7Trainer:
 
                         # Save Processor & Weights
                         processor.save_pretrained(run_dir)
-                        vla.module.save_pretrained(save_dir)
+                        unwrapped_vla.save_pretrained(save_dir)
 
                     # Wait for processor and adapter weights to be saved by main process
-                    dist.barrier()
+                    if is_distributed:
+                        dist.barrier()
 
                     # Merge LoRA weights into model backbone for faster inference
                     #   =>> Note that merging is slow and can be done post-hoc to speed up training
                     if self.cfg.use_lora:
                         base_vla = AutoModelForVision2Seq.from_pretrained(
-                            self.cfg.vla_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+                            self.cfg.vla_path,
+                            torch_dtype=torch.bfloat16,
+                            low_cpu_mem_usage=True,
+                            trust_remote_code=True,
+                            attn_implementation="eager",
                         )
                         merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir)
                         merged_vla = merged_vla.merge_and_unload()
@@ -353,7 +364,8 @@ class CraneX7Trainer:
                                 print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {checkpoint_dir}")
 
                     # Block on Main Process Checkpointing
-                    dist.barrier()
+                    if is_distributed:
+                        dist.barrier()
 
                 # Stop training when max_steps is reached
                 if gradient_step_idx == self.cfg.max_steps:
