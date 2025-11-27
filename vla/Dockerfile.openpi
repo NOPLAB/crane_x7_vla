@@ -169,15 +169,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install development Python packages (using BuildKit cache mount)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install \
-    jupyter \
-    tensorboard \
-    ipywidgets \
-    matplotlib \
-    seaborn
+    tensorboard
 
 USER ${USERNAME}
 
-# Expose ports for Jupyter and TensorBoard
-EXPOSE 8888 6006
+EXPOSE 6006
 
 CMD ["/bin/bash"]

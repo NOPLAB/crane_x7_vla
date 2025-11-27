@@ -8,12 +8,14 @@ This dataset loader is specifically designed for CRANE-X7 robot data,
 which uses 7-axis joint angles + gripper (8 dimensions total).
 The dataset follows OpenVLA's RLDS format and uses joint angle actions directly,
 similar to other datasets in the Open X-Embodiment mixture (e.g., Berkeley Cable Routing).
+
+This implementation is aligned with the original OpenVLA finetune.py implementation.
 """
 
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import numpy as np
 import tensorflow as tf
@@ -31,6 +33,23 @@ from prismatic.vla.action_tokenizer import ActionTokenizer
 IGNORE_INDEX = -100
 
 
+# Image augmentation configuration (matches OpenVLA finetune.py)
+DEFAULT_IMAGE_AUG_KWARGS = {
+    "random_resized_crop": {"scale": [0.9, 0.9], "ratio": [1.0, 1.0]},
+    "random_brightness": [0.2],
+    "random_contrast": [0.8, 1.2],
+    "random_saturation": [0.8, 1.2],
+    "random_hue": [0.05],
+    "augment_order": [
+        "random_resized_crop",
+        "random_brightness",
+        "random_contrast",
+        "random_saturation",
+        "random_hue",
+    ],
+}
+
+
 @dataclass
 class CraneX7DatasetConfig:
     """Configuration for CRANE-X7 dataset."""
@@ -45,7 +64,7 @@ class CraneX7DatasetConfig:
     """State dimension (7 joint angles + 1 gripper)"""
 
     normalize_actions: bool = True
-    """Whether to normalize actions to [-1, 1]"""
+    """Whether to normalize actions to [-1, 1] using BOUNDS_Q99 (matches OpenVLA)"""
 
     normalize_states: bool = True
     """Whether to normalize states"""
@@ -62,166 +81,65 @@ class CraneX7DatasetConfig:
     normalization_stats_path: Optional[Path] = None
     """Path to normalization statistics JSON file (optional)"""
 
+    image_aug: bool = True
+    """Whether to apply image augmentation (matches OpenVLA finetune.py default)"""
 
+    image_aug_kwargs: Optional[Dict[str, Any]] = None
+    """Image augmentation kwargs (uses DEFAULT_IMAGE_AUG_KWARGS if None)"""
+
+
+@dataclass
 class CraneX7BatchTransform:
     """
     Batch transform for CRANE-X7 data.
 
-    Converts CRANE-X7 TFRecord format to OpenVLA expected format,
-    using joint angles directly instead of end-effector positions.
+    This implementation matches the original OpenVLA RLDSBatchTransform exactly.
+    Converts RLDS batch format to OpenVLA expected format.
     """
+    action_tokenizer: ActionTokenizer
+    base_tokenizer: PreTrainedTokenizerBase
+    image_transform: ImageTransform
+    prompt_builder_fn: Type[PromptBuilder]
+    predict_stop_token: bool = True
 
-    def __init__(
-        self,
-        action_tokenizer: ActionTokenizer,
-        base_tokenizer: PreTrainedTokenizerBase,
-        image_transform: ImageTransform,
-        prompt_builder_fn: type[PromptBuilder],
-        config: CraneX7DatasetConfig,
-        normalization_stats: Optional[Dict[str, np.ndarray]] = None,
-        predict_stop_token: bool = True,
-    ):
-        """
-        Initialize batch transform.
+    def __call__(self, rlds_batch: Dict[str, Any]) -> Dict[str, Any]:
+        """Converts a RLDS batch to the format expected by the OpenVLA collator/models."""
+        dataset_name, action = rlds_batch["dataset_name"], rlds_batch["action"][0]
+        img = Image.fromarray(rlds_batch["observation"]["image_primary"][0])
+        lang = rlds_batch["task"]["language_instruction"].decode().lower()
 
-        Args:
-            action_tokenizer: Action tokenizer for OpenVLA
-            base_tokenizer: Base language tokenizer
-            image_transform: Image preprocessing transform
-            prompt_builder_fn: Prompt builder class
-            config: Dataset configuration
-            normalization_stats: Normalization statistics (mean, std, min, max)
-            predict_stop_token: Whether to predict stop token
-        """
-        self.action_tokenizer = action_tokenizer
-        self.base_tokenizer = base_tokenizer
-        self.image_transform = image_transform
-        self.prompt_builder_fn = prompt_builder_fn
-        self.config = config
-        self.normalization_stats = normalization_stats or {}
-        self.predict_stop_token = predict_stop_token
-
-    def normalize_action(self, action: np.ndarray) -> np.ndarray:
-        """
-        Normalize action to [-1, 1] range.
-
-        Uses quantile-based normalization (q01, q99) for robustness.
-        """
-        if not self.config.normalize_actions or self.normalization_stats is None:
-            return action
-
-        if "action" not in self.normalization_stats:
-            return action
-
-        stats = self.normalization_stats["action"]
-
-        # Use quantile bounds for normalization (more robust to outliers)
-        if "q01" in stats and "q99" in stats:
-            q_low = stats["q01"]
-            q_high = stats["q99"]
-            # Normalize to [-1, 1]
-            action_normalized = 2.0 * (action - q_low) / (q_high - q_low + 1e-8) - 1.0
-            # Clip to [-1, 1] range
-            action_normalized = np.clip(action_normalized, -1.0, 1.0)
-            return action_normalized
-        elif "min" in stats and "max" in stats:
-            # Fall back to min-max normalization
-            action_min = stats["min"]
-            action_max = stats["max"]
-            action_normalized = 2.0 * (action - action_min) / (action_max - action_min + 1e-8) - 1.0
-            action_normalized = np.clip(action_normalized, -1.0, 1.0)
-            return action_normalized
-        else:
-            return action
-
-    def __call__(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert CRANE-X7 batch to OpenVLA format.
-
-        Args:
-            batch: Batch from CRANE-X7 TFRecord
-                - action: [8] joint angles + gripper
-                - observation/proprio: [8] joint angles + gripper
-                - observation/image_primary: JPEG bytes
-                - task/language_instruction: string
-                - dataset_name: string
-
-        Returns:
-            OpenVLA-formatted batch with:
-                - pixel_values: image tensor
-                - input_ids: tokenized prompt
-                - labels: tokenized actions
-                - dataset_name: dataset identifier
-        """
-        # Extract data from batch
-        action = batch["action"]
-        image_bytes = batch["observation"]["image_primary"]
-        lang_bytes = batch["task"]["language_instruction"]
-        dataset_name = batch.get("dataset_name", b"crane_x7")
-
-        # Decode language instruction
-        if isinstance(lang_bytes, bytes):
-            lang = lang_bytes.decode("utf-8").lower().strip()
-        else:
-            lang = str(lang_bytes).lower().strip()
-
-        if not lang:
-            lang = self.config.default_instruction
-
-        # Decode dataset name
-        if isinstance(dataset_name, bytes):
-            dataset_name = dataset_name.decode("utf-8")
-
-        # Decode and preprocess image
-        if isinstance(image_bytes, bytes):
-            image = Image.open(io.BytesIO(image_bytes))
-        else:
-            # Assume it's already a numpy array
-            image = Image.fromarray(image_bytes.astype(np.uint8))
-
-        # Normalize action
-        action_normalized = self.normalize_action(action)
-
-        # Construct prompt (OpenVLA format)
+        # Construct Chat-based Prompt =>> Input is default query + language instruction, output are the action tokens
         prompt_builder = self.prompt_builder_fn("openvla")
         conversation = [
             {"from": "human", "value": f"What action should the robot take to {lang}?"},
-            {"from": "gpt", "value": self.action_tokenizer(action_normalized)},
+            {"from": "gpt", "value": self.action_tokenizer(action)},
         ]
         for turn in conversation:
             prompt_builder.add_turn(turn["from"], turn["value"])
 
-        # Tokenize
-        input_ids = self.base_tokenizer(
-            prompt_builder.get_prompt(),
-            add_special_tokens=True
-        ).input_ids
+        # Tokenize (w/ `base_tokenizer`)
+        input_ids = self.base_tokenizer(prompt_builder.get_prompt(), add_special_tokens=True).input_ids
         labels = list(input_ids)
 
-        # Tensorize
-        input_ids = torch.tensor(input_ids)
-        labels = torch.tensor(labels)
-        pixel_values = self.image_transform(image)
+        # Tensorize =>> Run Image Transform to get `pixel_values` =>> Return
+        #   =>> IMPORTANT :: IF WE'RE USING HF LLM.forward(..., labels=labels), SHIFTING HAPPENS _INSIDE_ MODEL!
+        input_ids, labels = torch.tensor(input_ids), torch.tensor(labels)
+        pixel_values = self.image_transform(img)
 
-        # [CRITICAL] Only compute loss for action tokens
-        labels[:-(len(action_normalized) + 1)] = IGNORE_INDEX
+        # [CRITICAL] We do not want to take the loss for anything but the predicted action tokens!
+        labels[: -(len(action) + 1)] = IGNORE_INDEX
         if not self.predict_stop_token:
             labels[-1] = IGNORE_INDEX
 
-        return dict(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            labels=labels,
-            dataset_name=dataset_name,
-        )
+        return dict(pixel_values=pixel_values, input_ids=input_ids, labels=labels, dataset_name=dataset_name)
 
 
 class CraneX7Dataset(IterableDataset):
     """
     PyTorch IterableDataset for CRANE-X7 robot data.
 
-    Loads TFRecord files containing joint angle trajectories and converts
-    them to the format expected by OpenVLA training pipeline.
+    This implementation matches the original OpenVLA RLDSDataset,
+    including BOUNDS_Q99 normalization and image augmentation.
     """
 
     # TFRecord feature description for CRANE-X7 format
@@ -236,68 +154,142 @@ class CraneX7Dataset(IterableDataset):
 
     def __init__(
         self,
-        config: CraneX7DatasetConfig,
+        data_root_dir: Path,
+        data_mix: str,
         batch_transform: CraneX7BatchTransform,
+        resize_resolution: Tuple[int, int],
+        shuffle_buffer_size: int = 256_000,
         train: bool = True,
-        shuffle_buffer_size: int = 1000,
-    ):
+        image_aug: bool = False,
+    ) -> None:
         """
-        Initialize CRANE-X7 dataset.
+        Lightweight wrapper around TFRecord pipeline for use with PyTorch/OpenVLA Data Loaders.
+
+        This constructor signature matches the original OpenVLA RLDSDataset.
 
         Args:
-            config: Dataset configuration
-            batch_transform: Batch transformation function
+            data_root_dir: Root directory containing TFRecord episode files
+            data_mix: Dataset name (for CRANE-X7, this is typically "crane_x7")
+            batch_transform: CraneX7BatchTransform instance
+            resize_resolution: Target image resolution (height, width)
+            shuffle_buffer_size: Buffer size for shuffling (default: 256_000 to match OpenVLA)
             train: Whether this is training set
-            shuffle_buffer_size: Buffer size for shuffling
+            image_aug: Whether to apply image augmentation (matches OpenVLA finetune.py)
         """
         super().__init__()
-        self.config = config
+        self.data_root_dir = Path(data_root_dir)
+        self.data_mix = data_mix
         self.batch_transform = batch_transform
-        self.train = train
+        self.resize_resolution = resize_resolution
         self.shuffle_buffer_size = shuffle_buffer_size
+        self.train = train
+        self.image_aug = image_aug
 
         # Find TFRecord files
         self.tfrecord_files = self._find_tfrecord_files()
-        print(f"Found {len(self.tfrecord_files)} TFRecord files in {self.config.data_root}")
+        print(f"Found {len(self.tfrecord_files)} TFRecord files in {self.data_root_dir}")
 
-        # Load normalization statistics if not provided
-        if batch_transform.normalization_stats is None:
-            stats_path = self.config.normalization_stats_path
-            if stats_path is None:
-                # Try to find dataset_statistics.json in data root
-                stats_path = self.config.data_root / "dataset_statistics.json"
+        # Compute or load dataset statistics (matches OpenVLA behavior)
+        self.dataset_statistics = self._get_dataset_statistics()
 
-            if stats_path and stats_path.exists():
-                import json
-                with open(stats_path, "r") as f:
-                    stats = json.load(f)
-                    # Convert to numpy arrays
-                    for key in stats:
-                        if isinstance(stats[key], dict):
-                            for subkey in stats[key]:
-                                if isinstance(stats[key][subkey], list):
-                                    stats[key][subkey] = np.array(stats[key][subkey])
-                    batch_transform.normalization_stats = stats
-                    print(f"Loaded normalization statistics from {stats_path}")
+        # Store dataset length (stats are nested: {dataset_name: {num_transitions: int}})
+        stats = self.dataset_statistics.get(self.data_mix, {})
+        self.dataset_length = stats.get("num_transitions", 0)
 
-        # Create TensorFlow dataset
+        # Create TensorFlow dataset with normalization and augmentation
         self.dataset = self._create_tf_dataset()
 
     def _find_tfrecord_files(self) -> List[Path]:
         """Find all TFRecord files in the data directory."""
-        data_root = Path(self.config.data_root)
-
         # Look for episode directories containing tfrecord files
-        tfrecord_files = list(data_root.glob("episode_*/episode_data.tfrecord"))
+        tfrecord_files = list(self.data_root_dir.glob("episode_*/episode_data.tfrecord"))
 
         # Also try to find tfrecord files directly
         if not tfrecord_files:
-            tfrecord_files = list(data_root.glob("**/*.tfrecord"))
+            tfrecord_files = list(self.data_root_dir.glob("**/*.tfrecord"))
 
         # Filter out .bak files
         tfrecord_files = [f for f in tfrecord_files if not f.name.endswith(".bak")]
 
         return sorted(tfrecord_files)
+
+    def _get_dataset_statistics(self) -> Dict[str, Any]:
+        """
+        Compute or load dataset statistics for normalization.
+
+        This matches the OpenVLA behavior of computing q01/q99 for BOUNDS_Q99 normalization.
+        Returns statistics in the format expected by save_dataset_statistics:
+        {dataset_name: {action: {...}, proprio: {...}, num_transitions: int, num_trajectories: int}}
+        """
+        import json
+
+        # Try to load existing statistics
+        stats_path = self.data_root_dir / "dataset_statistics.json"
+        if stats_path.exists():
+            with open(stats_path, "r") as f:
+                full_stats = json.load(f)
+                # Handle nested format (dataset_name -> action -> stats)
+                if self.data_mix in full_stats:
+                    print(f"Loaded dataset statistics from {stats_path}")
+                    return full_stats  # Return full nested format for save_dataset_statistics
+                elif "crane_x7" in full_stats:
+                    print(f"Loaded dataset statistics from {stats_path}")
+                    return full_stats  # Return full nested format
+                else:
+                    # Old format - wrap in dataset name
+                    print(f"Loaded dataset statistics from {stats_path} (converting to nested format)")
+                    return {self.data_mix: full_stats}
+
+        # Compute statistics if not found
+        print("Computing dataset statistics (this may take a moment)...")
+        actions = []
+        proprios = []
+        num_transitions = 0
+
+        for tfrecord_file in self.tfrecord_files:
+            dataset = tf.data.TFRecordDataset(str(tfrecord_file))
+            for raw_record in dataset:
+                example = tf.io.parse_single_example(raw_record, {
+                    "action": tf.io.FixedLenFeature([8], tf.float32),
+                    "observation/proprio": tf.io.FixedLenFeature([8], tf.float32),
+                })
+                actions.append(example["action"].numpy())
+                proprios.append(example["observation/proprio"].numpy())
+                num_transitions += 1
+
+        actions = np.array(actions)
+        proprios = np.array(proprios)
+
+        stats = {
+            "action": {
+                "mean": actions.mean(0).tolist(),
+                "std": actions.std(0).tolist(),
+                "max": actions.max(0).tolist(),
+                "min": actions.min(0).tolist(),
+                "q01": np.quantile(actions, 0.01, axis=0).tolist(),
+                "q99": np.quantile(actions, 0.99, axis=0).tolist(),
+            },
+            "proprio": {
+                "mean": proprios.mean(0).tolist(),
+                "std": proprios.std(0).tolist(),
+                "max": proprios.max(0).tolist(),
+                "min": proprios.min(0).tolist(),
+                "q01": np.quantile(proprios, 0.01, axis=0).tolist(),
+                "q99": np.quantile(proprios, 0.99, axis=0).tolist(),
+            },
+            "num_transitions": num_transitions,
+            "num_trajectories": len(self.tfrecord_files),
+        }
+
+        # Wrap in dataset name (format expected by save_dataset_statistics)
+        full_stats = {self.data_mix: stats}
+
+        # Save statistics for future use
+        with open(stats_path, "w") as f:
+            json.dump(full_stats, f, indent=2)
+        print(f"Saved dataset statistics to {stats_path}")
+
+        return full_stats
 
     def _parse_example(self, example_proto):
         """Parse a single TFRecord example."""
@@ -313,34 +305,103 @@ class CraneX7Dataset(IterableDataset):
             parsed = tf.io.parse_single_example(example_proto, minimal_description)
 
             # Add defaults for missing keys
-            if "task/language_instruction" not in parsed:
-                parsed["task/language_instruction"] = tf.constant(
-                    self.config.default_instruction.encode("utf-8")
-                )
-            if "dataset_name" not in parsed:
-                parsed["dataset_name"] = tf.constant(b"crane_x7")
-            if "observation/timestep" not in parsed:
-                parsed["observation/timestep"] = tf.constant([0], dtype=tf.int64)
+            parsed["task/language_instruction"] = tf.constant(b"manipulate the object")
+            parsed["dataset_name"] = tf.constant(b"crane_x7")
+            parsed["observation/timestep"] = tf.constant([0], dtype=tf.int64)
 
         return parsed
 
-    def _restructure(self, example):
-        """Restructure example to match expected format."""
+    def _normalize_action(self, action: tf.Tensor) -> tf.Tensor:
+        """
+        Normalize action using BOUNDS_Q99 (matches OpenVLA).
+
+        Maps [q01, q99] -> [-1, 1] and clips to [-1, 1].
+        """
+        # Get stats for this dataset (dataset_statistics is nested: {dataset_name: {action: {...}}})
+        stats = self.dataset_statistics[self.data_mix]
+
+        q01 = tf.constant(stats["action"]["q01"], dtype=tf.float32)
+        q99 = tf.constant(stats["action"]["q99"], dtype=tf.float32)
+
+        # Normalize to [-1, 1]
+        normalized = 2.0 * (action - q01) / (q99 - q01 + 1e-8) - 1.0
+
+        # Clip to [-1, 1]
+        normalized = tf.clip_by_value(normalized, -1.0, 1.0)
+
+        # Map unused dimensions (where min == max) to 0
+        action_min = tf.constant(stats["action"]["min"], dtype=tf.float32)
+        action_max = tf.constant(stats["action"]["max"], dtype=tf.float32)
+        zeros_mask = tf.equal(action_min, action_max)
+        normalized = tf.where(zeros_mask, 0.0, normalized)
+
+        return normalized
+
+    def _decode_and_resize_image(self, image_bytes: tf.Tensor) -> tf.Tensor:
+        """Decode JPEG image and resize to target resolution."""
+        image = tf.io.decode_jpeg(image_bytes, channels=3)
+        image = tf.image.resize(image, self.resize_resolution)
+        image = tf.cast(image, tf.uint8)
+        return image
+
+    def _apply_image_augmentation(self, image: tf.Tensor) -> tf.Tensor:
+        """
+        Apply image augmentation (matches OpenVLA finetune.py).
+
+        Augmentations:
+        - Random resized crop (scale=[0.9, 0.9], ratio=[1.0, 1.0])
+        - Random brightness (max_delta=0.2)
+        - Random contrast (lower=0.8, upper=1.2)
+        - Random saturation (lower=0.8, upper=1.2)
+        - Random hue (max_delta=0.05)
+        """
+        # Convert to float for augmentation
+        image = tf.cast(image, tf.float32) / 255.0
+
+        # Random resized crop (scale=0.9 means crop 90% of image)
+        crop_size = tf.cast(tf.cast(tf.shape(image)[:2], tf.float32) * 0.9, tf.int32)
+        image = tf.image.random_crop(image, [crop_size[0], crop_size[1], 3])
+        image = tf.image.resize(image, self.resize_resolution)
+
+        # Color augmentations
+        image = tf.image.random_brightness(image, max_delta=0.2)
+        image = tf.image.random_contrast(image, lower=0.8, upper=1.2)
+        image = tf.image.random_saturation(image, lower=0.8, upper=1.2)
+        image = tf.image.random_hue(image, max_delta=0.05)
+
+        # Clip values and convert back to uint8
+        image = tf.clip_by_value(image, 0.0, 1.0)
+        image = tf.cast(image * 255.0, tf.uint8)
+
+        return image
+
+    def _process_example(self, example):
+        """Process a single example: decode image, normalize action, apply augmentation."""
+        # Decode and resize image
+        image = self._decode_and_resize_image(example["observation/image_primary"])
+
+        # Apply image augmentation if enabled
+        if self.image_aug:
+            image = self._apply_image_augmentation(image)
+
+        # Normalize action using BOUNDS_Q99
+        action = self._normalize_action(example["action"])
+
+        # Restructure to RLDS batch format (with window_size=1, so add batch dim)
         return {
             "observation": {
-                "image_primary": example["observation/image_primary"],
-                "proprio": example["observation/proprio"],
-                "timestep": example["observation/timestep"][0],
+                "image_primary": tf.expand_dims(image, 0),  # [1, H, W, 3]
+                "proprio": tf.expand_dims(example["observation/proprio"], 0),  # [1, 8]
             },
             "task": {
                 "language_instruction": example["task/language_instruction"],
             },
-            "action": example["action"],
+            "action": tf.expand_dims(action, 0),  # [1, 8]
             "dataset_name": example["dataset_name"],
         }
 
     def _create_tf_dataset(self) -> tf.data.Dataset:
-        """Create TensorFlow dataset pipeline."""
+        """Create TensorFlow dataset pipeline with normalization and augmentation."""
         # Create dataset from TFRecord files
         dataset = tf.data.TFRecordDataset(
             [str(f) for f in self.tfrecord_files],
@@ -350,16 +411,16 @@ class CraneX7Dataset(IterableDataset):
         # Parse examples
         dataset = dataset.map(
             self._parse_example,
-            num_parallel_calls=tf.data.AUTOTUNE,
+            num_parallel_calls=16,  # Match OpenVLA: num_parallel_calls=16
         )
 
-        # Restructure to expected format
+        # Process: decode image, normalize action, apply augmentation
         dataset = dataset.map(
-            self._restructure,
-            num_parallel_calls=tf.data.AUTOTUNE,
+            self._process_example,
+            num_parallel_calls=16,
         )
 
-        # Shuffle if training
+        # Shuffle if training (with large buffer to match OpenVLA)
         if self.train:
             dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
 
@@ -372,17 +433,13 @@ class CraneX7Dataset(IterableDataset):
 
         return dataset
 
-    def __iter__(self):
-        """Iterate over dataset."""
-        for example in self.dataset.as_numpy_iterator():
-            yield self.batch_transform(example)
+    def __iter__(self) -> Dict[str, Any]:
+        for rlds_batch in self.dataset.as_numpy_iterator():
+            yield self.batch_transform(rlds_batch)
 
     def __len__(self) -> int:
-        """Get approximate dataset length."""
-        # This is approximate - count total steps across all files
-        if not hasattr(self, "_dataset_length"):
-            self._dataset_length = 0
-            for tfrecord_file in self.tfrecord_files:
-                dataset = tf.data.TFRecordDataset(str(tfrecord_file))
-                self._dataset_length += sum(1 for _ in dataset)
-        return self._dataset_length
+        return self.dataset_length
+
+    # === Explicitly Unused ===
+    def __getitem__(self, idx: int) -> None:
+        raise NotImplementedError("IterableDataset does not implement map-style __getitem__; see __iter__ instead!")

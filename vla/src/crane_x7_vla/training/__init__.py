@@ -3,4 +3,6 @@
 
 """Training scripts and utilities."""
 
-__all__ = []
+from crane_x7_vla.training.trainer import VLATrainer
+
+__all__ = ["VLATrainer"]
