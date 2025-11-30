@@ -8,10 +8,10 @@
 
 ### サポートされているバックエンド
 
-| バックエンド | Dockerfile | Requirements | PyTorch | Transformers | 主な特徴 |
-|------------|-----------|--------------|---------|--------------|---------|
-| **OpenVLA** | `Dockerfile.openvla` | `requirements-openvla.txt` | 2.2.0 | 4.40.1 | Prismatic VLM、単一ステップアクション |
-| **OpenPI** | `Dockerfile.openpi` | `requirements-openpi.txt` | 2.7.1 | 4.53.2 | JAX/Flax、アクションチャンク、Python 3.11+ |
+| バックエンド | Dockerfile | Requirements | Python | PyTorch | Transformers | 主な特徴 |
+|------------|-----------|--------------|--------|---------|--------------|---------|
+| **OpenVLA** | `Dockerfile.openvla` | `requirements-openvla.txt` | 3.10 | 2.5.1 | 4.57.3 | Prismatic VLM、単一ステップアクション |
+| **OpenPI** | `Dockerfile.openpi` | `requirements-openpi.txt` | 3.11 | 2.7.1 | 4.53.2 | JAX/Flax、アクションチャンク |
 
 **重要**: OpenVLAとOpenPIは互いに競合する依存関係を持つため、**別々のDockerイメージとrequirementsファイル**を使用します。同じ環境で両方をインストールすることはできません。
 
@@ -19,11 +19,15 @@
 
 ```
 vla/
-├── Dockerfile.openvla          # OpenVLA専用Dockerイメージ
-├── Dockerfile.openpi           # OpenPI専用Dockerイメージ
+├── Dockerfile.openvla          # OpenVLA専用Dockerイメージ (CUDA 12.9, Python 3.10)
+├── Dockerfile.openpi           # OpenPI専用Dockerイメージ (CUDA 12.9, Python 3.11)
 ├── requirements-openvla.txt    # OpenVLA依存関係
 ├── requirements-openpi.txt     # OpenPI依存関係
-├── docker-compose.yml          # Docker Compose設定（非推奨、ros2/docker-compose.ymlを使用）
+├── docker-compose.yml          # Docker Compose設定
+├── .env.template               # 環境変数テンプレート
+├── configs/                    # 設定ファイル
+│   ├── openvla_default.yaml   # OpenVLAデフォルト設定
+│   └── openpi_default.yaml    # OpenPIデフォルト設定
 ├── src/
 │   ├── crane_x7_vla/          # 統一されたトレーニングCLI
 │   │   ├── training/
@@ -31,10 +35,14 @@ vla/
 │   │   │   ├── config.py      # 設定データクラス
 │   │   │   └── trainer.py     # トレーニングロジック
 │   │   ├── backends/          # バックエンド固有の実装
-│   │   │   ├── openvla_wrapper.py
-│   │   │   └── openpi_wrapper.py
-│   │   └── ...
-│   └── openvla/               # OpenVLAサブモジュール
+│   │   │   ├── openvla.py     # OpenVLAバックエンド
+│   │   │   ├── openpi.py      # OpenPIバックエンド
+│   │   │   └── base.py        # 基底クラス
+│   │   ├── config/            # 設定モジュール
+│   │   ├── data/              # データローダー
+│   │   └── transforms/        # データ変換
+│   ├── openvla/               # OpenVLAサブモジュール
+│   └── openpi/                # OpenPIサブモジュール
 ├── test_crane_x7_loader.py    # データセット検証スクリプト
 └── README.md                  # このファイル
 ```
@@ -47,10 +55,10 @@ vla/
 
 #### 環境変数設定
 
-まず、`ros2/.env.template`から`.env`ファイルを作成し、必要な環境変数を設定します:
+まず、`.env.template`から`.env`ファイルを作成し、必要な環境変数を設定します:
 
 ```bash
-cd ros2
+cd vla
 cp .env.template .env
 ```
 
@@ -70,21 +78,25 @@ CUDA_VISIBLE_DEVICES=0  # 使用するGPU ID（カンマ区切りで複数指定
 #### OpenVLA環境構築
 
 ```bash
+cd vla
+
 # OpenVLA用Dockerイメージをビルド
-docker compose -f ros2/docker-compose.yml build vla_openvla
+docker compose --profile openvla build
 
 # インタラクティブコンテナを起動
-docker compose -f ros2/docker-compose.yml run --rm vla_openvla
+docker compose --profile openvla run --rm vla-finetune-openvla bash
 ```
 
 #### OpenPI環境構築
 
 ```bash
+cd vla
+
 # OpenPI用Dockerイメージをビルド
-docker compose -f ros2/docker-compose.yml build vla_openpi
+docker compose --profile openpi build
 
 # インタラクティブコンテナを起動
-docker compose -f ros2/docker-compose.yml run --rm vla_openpi
+docker compose --profile openpi run --rm vla-finetune-openpi bash
 ```
 
 ### オプション2: ローカルインストール（非推奨）
@@ -161,12 +173,14 @@ data/tfrecord_logs/
 データセットが正しく読み込めることを確認:
 
 ```bash
+cd vla
+
 # OpenVLAコンテナ内で
-docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
+docker compose --profile openvla run --rm vla-finetune-openvla \
   python3 /workspace/vla/test_crane_x7_loader.py
 
 # OpenPIコンテナ内で
-docker compose -f ros2/docker-compose.yml run --rm vla_openpi \
+docker compose --profile openpi run --rm vla-finetune-openpi \
   python3 /workspace/vla/test_crane_x7_loader.py
 ```
 
@@ -177,7 +191,8 @@ docker compose -f ros2/docker-compose.yml run --rm vla_openpi \
 **シングルGPU**:
 
 ```bash
-docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla \
   python -m crane_x7_vla.training.cli train \
     --backend openvla \
     --data-root /workspace/data/tfrecord_logs \
@@ -190,7 +205,8 @@ docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
 **マルチGPU（例: 2台）**:
 
 ```bash
-docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla \
   torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train \
     --backend openvla \
     --data-root /workspace/data/tfrecord_logs \
@@ -207,7 +223,8 @@ docker compose -f ros2/docker-compose.yml run --rm vla_openvla \
 **シングルGPU**:
 
 ```bash
-docker compose -f ros2/docker-compose.yml run --rm vla_openpi \
+cd vla
+docker compose --profile openpi run --rm vla-finetune-openpi \
   python -m crane_x7_vla.training.cli train \
     --backend openpi \
     --data-root /workspace/data/tfrecord_logs \
@@ -387,8 +404,8 @@ ERROR: tokenizers>=0.21,<0.22 is required but...
 **原因**: OpenVLAとOpenPIで必要なバージョンが異なります。
 
 **解決策**: 適切なDockerイメージを使用してください:
-- OpenVLA: `docker compose -f ros2/docker-compose.yml build vla_openvla`
-- OpenPI: `docker compose -f ros2/docker-compose.yml build vla_openpi`
+- OpenVLA: `docker compose --profile openvla build`
+- OpenPI: `docker compose --profile openpi build`
 
 **重要**: 両方を同じ環境にインストールしないでください。
 

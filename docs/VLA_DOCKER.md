@@ -1,20 +1,17 @@
 # VLAトレーニング用Docker環境
 
-このガイドでは、CRANE-X7データセットでOpenVLAモデルをトレーニングするためのDocker環境のセットアップと使用方法を説明します。
+このガイドでは、CRANE-X7データセットでVLAモデル（OpenVLAおよびOpenPI）をトレーニングするためのDocker環境のセットアップと使用方法を説明します。
 
 ## 概要
 
-このプロジェクトでは、VLAトレーニング用に2つのDockerセットアップ方法を提供しています：
+このプロジェクトでは、2つのVLAバックエンドをサポートしています：
 
-- **方法A（推奨）**: プロジェクトルートの統合docker-composeを使用
-  - ROS2とVLAを同じ環境で管理
-  - データ収集からトレーニングまでのワークフローが統一
-  - `ros2/docker-compose.yml`の`vla`プロファイルを使用
+| バックエンド | Dockerfile | Python | PyTorch | Transformers | 主な特徴 |
+|------------|-----------|--------|---------|--------------|---------|
+| **OpenVLA** | `Dockerfile.openvla` | 3.10 | 2.5.1 | 4.57.3 | Prismatic VLM、単一ステップアクション、LoRA対応 |
+| **OpenPI** | `Dockerfile.openpi` | 3.11 | 2.7.1 | 4.53.2 | JAX/Flax、アクションチャンク対応 |
 
-- **方法B**: vla/ディレクトリの独立したセットアップを使用
-  - VLAトレーニングのみに特化
-  - 独立した環境設定が可能
-  - `vla/docker-compose.yml`を使用
+**重要**: OpenVLAとOpenPIは互いに競合する依存関係を持つため、**別々のDockerイメージ**を使用します。
 
 ## 前提条件
 
@@ -30,10 +27,10 @@
 - RAM: 64GB以上のシステムRAM
 - ストレージ: 100GB以上の空き容量（データセットとチェックポイント用）
 
-**マルチGPUスケーリング：**
-- 1x A100 (40GB): バッチサイズ ~8-12（LoRA使用時）
-- 2x A100 (40GB): バッチサイズ ~16-24（LoRA使用時）
-- 4x A100 (40GB): バッチサイズ ~32-48（LoRA使用時）
+**マルチGPUスケーリング（OpenVLA + LoRA）：**
+- 1x A100 (40GB): バッチサイズ ~8-12
+- 2x A100 (40GB): バッチサイズ ~16-24
+- 4x A100 (40GB): バッチサイズ ~32-48
 
 ### ソフトウェア要件
 
@@ -45,220 +42,152 @@
 ### GPUアクセスの確認
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu22.04 nvidia-smi
 ```
 
-## 方法A: プロジェクトルートのdocker-composeを使用（推奨）
+## クイックスタート
 
-この方法は、ROS2とVLAを統合環境で管理する場合に推奨されます。
-
-### 1. 初期セットアップ
-
-環境変数の設定は不要です。docker-compose.ymlがデフォルト値を使用します。
-
-### 2. Dockerイメージのビルド
-
-```bash
-# プロジェクトルートから実行
-docker compose -f ros2/docker-compose.yml build vla_finetune
-```
-
-これにより、以下を含むDockerイメージが作成されます：
-- CUDA 12.4
-- CUDA対応のPyTorch 2.2.0
-- OpenVLAの依存関係
-- Flash Attention 2（ビルドが成功した場合）
-
-### 3. トレーニングの実行
-
-#### インタラクティブセッション
-
-```bash
-# インタラクティブコンテナを起動
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune
-
-# コンテナ内でデータセット読み込みをテスト
-python3 vla/crane_x7_dataset.py data/tfrecord_logs
-
-# ファインチューニングを実行
-cd vla
-python3 finetune.py
-```
-
-#### ヘルパースクリプトの使用
-
-```bash
-# データセット読み込みのテスト
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh test-dataset
-
-# シングルGPUトレーニング
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh train
-
-# マルチGPUトレーニング（2 GPU）
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh train-multi-gpu 2
-```
-
-#### カスタムトレーニングパラメータ
-
-```bash
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune bash -c "
-  cd vla && python3 finetune.py \
-    --batch_size 16 \
-    --learning_rate 1e-4 \
-    --num_epochs 20 \
-    --lora_rank 64 \
-    --use_wandb \
-    --wandb_project my-crane-x7
-"
-```
-
-### 4. コンテナ内のディレクトリ構造
-
-```
-/workspace/
-├── vla/                    # ファインチューニングスクリプト（マウント）
-│   ├── finetune.py
-│   ├── crane_x7_dataset.py
-│   ├── finetune_config.py
-│   └── README.md
-├── data/                   # トレーニングデータ（マウント）
-│   └── tfrecord_logs/
-│       ├── episode_0000_*/
-│       ├── episode_0001_*/
-│       └── ...
-└── outputs/                # チェックポイントとログ（マウント）
-    └── crane_x7_finetune/
-```
-
-## 方法B: vla/ディレクトリの独立したセットアップを使用
-
-VLAトレーニングのみを独立して実行する場合に使用します。
-
-### 1. 初期セットアップ
-
-環境変数テンプレートをコピーし、APIキーを設定：
+### 1. 環境設定
 
 ```bash
 cd vla
 cp .env.template .env
-# お好みのエディタで .env を編集
-nano .env  # または vim .env
+# .envを編集して設定を変更
 ```
 
 必須の設定：
-- `WANDB_API_KEY`: Weights & Biases APIキー（オプション、実験トラッキング用）
 - `HF_TOKEN`: HuggingFaceトークン（必須、事前学習済みモデルのダウンロードに必要）
-- `DATA_DIR`: TFRecordデータセットへのパス（デフォルト: `../data/tfrecord_logs`）
+- `WANDB_API_KEY`: Weights & Biases APIキー（オプション、実験トラッキング用）
+- `CUDA_VISIBLE_DEVICES`: 使用するGPU ID（デフォルト: `0`）
 
 ### 2. Dockerイメージのビルド
 
 ```bash
 cd vla
-./scripts/build.sh          # トレーニング用イメージ
-# または
-./scripts/build.sh dev      # 開発用イメージ（Jupyter、デバッグツール含む）
+
+# OpenVLA用
+docker compose --profile openvla build
+
+# OpenPI用
+docker compose --profile openpi build
 ```
 
 ### 3. トレーニングの実行
 
-#### インタラクティブセッション
+#### OpenVLA
 
 ```bash
-# インタラクティブコンテナの起動
-./scripts/run.sh
-
-# コンテナ内でトレーニングを実行
-./scripts/train.sh
-
-# またはカスタムパラメータで直接実行
-python3 finetune.py \
-    --model_name openvla/openvla-7b \
-    --dataset_name crane_x7 \
-    --data_dir /workspace/data \
-    --output_dir /workspace/checkpoints \
-    --batch_size 8 \
-    --num_epochs 10 \
-    --learning_rate 2e-5
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla \
+  python -m crane_x7_vla.training.cli train \
+    --backend openvla \
+    --data-root /workspace/data/tfrecord_logs \
+    --experiment-name crane_x7_openvla \
+    --batch-size 16 \
+    --learning-rate 5e-4 \
+    --num-epochs 100
 ```
 
-#### ワンコマンドでトレーニング
+#### OpenPI
 
 ```bash
-docker compose run --rm vla-train python3 finetune.py \
-    --model_name openvla/openvla-7b \
-    --dataset_name crane_x7 \
-    --data_dir /workspace/data \
-    --output_dir /workspace/checkpoints
+cd vla
+docker compose --profile openpi run --rm vla-finetune-openpi \
+  python -m crane_x7_vla.training.cli train \
+    --backend openpi \
+    --data-root /workspace/data/tfrecord_logs \
+    --experiment-name crane_x7_openpi \
+    --batch-size 32 \
+    --learning-rate 3e-4 \
+    --num-epochs 100
 ```
 
-### 4. 開発モード
+## Docker環境の詳細
 
-JupyterとTensorBoardを使用したインタラクティブ開発：
+### Dockerイメージ構成
+
+両方のDockerfileは以下の構成を採用しています：
+
+- **ベースイメージ**: `nvidia/cuda:12.9.1-cudnn-devel-ubuntu22.04`
+- **マルチステージビルド**: builder → base → dev
+- **非rootユーザー**: ホストUID/GIDと一致
+
+### コンテナ内のディレクトリ構造
+
+```
+/workspace/
+├── vla/
+│   ├── src/                    # ソースコード
+│   │   ├── crane_x7_vla/      # トレーニングCLI
+│   │   ├── openvla/           # OpenVLAサブモジュール
+│   │   └── openpi/            # OpenPIサブモジュール
+│   └── configs/               # 設定ファイル
+├── data/                      # トレーニングデータ（マウント）
+│   └── tfrecord_logs/
+└── outputs/                   # チェックポイントとログ（マウント）
+```
+
+### ボリュームマウント
+
+Docker Composeは以下のボリュームをマウントします：
+
+| ホスト | コンテナ | 説明 |
+|-------|---------|------|
+| `../data` | `/workspace/data` | トレーニングデータ |
+| `../outputs` | `/workspace/outputs` | チェックポイント出力 |
+| `./src` | `/workspace/vla/src` | ソースコード（開発用） |
+| `~/.cache/huggingface` | `/home/vla/.cache/huggingface` | モデルキャッシュ |
+
+## インタラクティブセッション
+
+### コンテナへの接続
 
 ```bash
-# 開発用コンテナを起動
-./scripts/run.sh dev
+# OpenVLAコンテナをインタラクティブに起動
+docker compose --profile openvla run --rm vla-finetune-openvla bash
 
-# コンテナにアクセス
-docker exec -it crane_x7_vla_dev bash
+# コンテナ内でデータセット読み込みをテスト
+python3 /workspace/vla/test_crane_x7_loader.py
 
-# Jupyter Labを起動（コンテナ内）
-jupyter lab --ip=0.0.0.0 --allow-root --no-browser
-
-# またはTensorBoardを起動（コンテナ内）
-tensorboard --logdir=/workspace/logs --host=0.0.0.0
-```
-
-アクセスポイント：
-- Jupyter Lab: http://localhost:8888
-- TensorBoard: http://localhost:6006
-
-## GPU設定
-
-### GPU数の指定
-
-docker-compose.ymlは利用可能な全GPUを使用するように設定されています：
-
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: all          # 全GPUを使用
-          capabilities: [gpu]
-```
-
-特定のGPUを使用するには、`count`を変更：
-- `count: 1` - 1つのGPUを使用
-- `count: 2` - 2つのGPUを使用
-- `count: all` - 利用可能な全GPUを使用
-
-または`CUDA_VISIBLE_DEVICES`環境変数を使用：
-
-```bash
-docker compose --profile vla run --rm \
-  -e CUDA_VISIBLE_DEVICES=0,1 \
-  vla_finetune
+# ファインチューニングを実行
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --data-root /workspace/data/tfrecord_logs
 ```
 
 ### マルチGPUトレーニング
 
 ```bash
-# 方法A（プロジェクトルート）
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune bash -c "
-  cd vla && torchrun --standalone --nnodes 1 --nproc-per-node 2 finetune.py \
-    --batch_size 8 \
-    --learning_rate 5e-4
-"
+docker compose --profile openvla run --rm vla-finetune-openvla \
+  torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train \
+    --backend openvla \
+    --data-root /workspace/data/tfrecord_logs \
+    --batch-size 8 \
+    --learning-rate 5e-4
+```
 
-# 方法B（vla/ディレクトリ）
-docker compose run --rm vla-train python3 finetune.py \
-    --model_name openvla/openvla-7b \
-    --multi_gpu
+## GPU設定
+
+### GPU数の指定
+
+docker-compose.ymlは利用可能な全GPUを使用するように設定されています。
+
+特定のGPUを使用するには、`.env`ファイルを編集：
+
+```bash
+# 特定のGPUを指定
+CUDA_VISIBLE_DEVICES=0,1
+
+# GPU数を指定
+GPU_COUNT=2
+```
+
+または環境変数で直接指定：
+
+```bash
+docker compose --profile openvla run --rm \
+  -e CUDA_VISIBLE_DEVICES=0,1 \
+  vla-finetune-openvla
 ```
 
 ## トレーニングの監視
@@ -266,25 +195,28 @@ docker compose run --rm vla-train python3 finetune.py \
 ### Weights & Biasesの使用
 
 ```bash
-# W&Bにログイン（初回セットアップのみ）
-docker compose --profile vla run --rm vla_finetune bash -c "
-  pip3 install wandb && wandb login
-"
+# .envファイルでAPIキーを設定
+WANDB_API_KEY=your_api_key
+WANDB_MODE=online
 
 # W&Bロギングを有効にしてトレーニングを実行
-docker compose --profile vla run --rm vla_finetune bash -c "
-  cd vla && python3 finetune.py \
-    --use_wandb \
-    --wandb_project crane-x7-openvla \
-    --wandb_entity YOUR_USERNAME
-"
+docker compose --profile openvla run --rm vla-finetune-openvla \
+  python -m crane_x7_vla.training.cli train \
+    --backend openvla \
+    --data-root /workspace/data/tfrecord_logs \
+    --use-wandb \
+    --wandb-project crane-x7-openvla \
+    --wandb-entity YOUR_USERNAME
 ```
 
 ### TensorBoard
 
 ```bash
+# devステージのイメージをビルド
+docker compose --profile openvla build --target dev
+
 # コンテナ内でTensorBoardを起動
-tensorboard --logdir=/workspace/logs --host=0.0.0.0
+tensorboard --logdir=/workspace/outputs --host=0.0.0.0
 
 # http://localhost:6006 でアクセス
 ```
@@ -296,15 +228,7 @@ tensorboard --logdir=/workspace/logs --host=0.0.0.0
 watch -n 1 nvidia-smi
 
 # またはホストから
-docker exec crane_x7_vla_train watch -n 1 nvidia-smi
-```
-
-### ログの表示
-
-```bash
-# ログをファイルに保存
-docker compose --profile vla run --rm vla_finetune \
-  /workspace/scripts/docker/vla_finetune.sh train 2>&1 | tee training.log
+docker exec crane_x7_vla_finetune_openvla nvidia-smi
 ```
 
 ## トラブルシューティング
@@ -313,7 +237,7 @@ docker compose --profile vla run --rm vla_finetune \
 
 ```bash
 # NVIDIAランタイムを確認
-docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu22.04 nvidia-smi
 
 # Dockerデーモン設定を確認（/etc/docker/daemon.json）
 {
@@ -332,57 +256,55 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 **解決策1: バッチサイズを減らす**
 
 ```bash
-# finetune_config.pyまたはCLIで設定
-python3 finetune.py --batch_size 4
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --batch-size 4
 ```
 
-**解決策2: 勾配チェックポインティングを有効化**
-
-```python
-# finetune_config.py
-gradient_checkpointing: bool = True
-```
-
-**解決策3: LoRAランクを減らす**
+**解決策2: 勾配蓄積を使用**
 
 ```bash
-python3 finetune.py --lora_rank 16
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --batch-size 4 \
+  --grad-accumulation-steps 4
 ```
 
-**解決策4: 共有メモリを増やす**
-
-docker-compose.ymlで共有メモリを調整：
-
-```yaml
-shm_size: '32gb'  # デフォルトは16gb
-```
-
-### Flash Attentionのビルド失敗
-
-Flash Attention 2はオプションです。ビルドが失敗してもコンテナは継続して動作します。トレーニングは少し遅くなりますが、機能は問題ありません。
-
-コンテナ内で手動インストールする場合：
+**解決策3: 勾配チェックポインティングを有効化**
 
 ```bash
-docker compose --profile vla run --rm vla_finetune bash
-# コンテナ内で：
-pip3 install packaging ninja
-pip3 install flash-attn==2.5.5 --no-build-isolation
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --gradient-checkpointing
 ```
 
-### CUDAバージョンの不一致
-
-DockerfileはCUDA 12.4を使用しています。ホストに異なるCUDAバージョンがある場合は、Dockerfileのベースイメージを変更してください：
-
-```dockerfile
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 AS vla  # CUDAバージョンを変更
-```
-
-その後、再ビルド：
+**解決策4: LoRAランクを減らす（OpenVLA）**
 
 ```bash
-docker compose build vla_finetune --no-cache
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --lora-rank 16
 ```
+
+**解決策5: 共有メモリを増やす**
+
+`.env`ファイルで共有メモリを調整：
+
+```bash
+SHM_SIZE=32gb
+```
+
+### 依存関係の競合
+
+OpenVLAとOpenPIは異なるバージョンの依存関係を使用します：
+
+| パッケージ | OpenVLA | OpenPI |
+|-----------|---------|--------|
+| transformers | 4.57.3 | 4.53.2 |
+| torch | 2.5.1 | 2.7.1 |
+| JAX | なし | 0.5.3 |
+
+**解決策**: 適切なDockerイメージを使用し、両方を同じ環境にインストールしないでください。
 
 ### HuggingFace認証失敗
 
@@ -395,43 +317,81 @@ huggingface-cli login
 
 ### パーミッションの問題
 
-マウントされたボリュームでパーミッションエラーが発生した場合：
+マウントされたボリュームでパーミッションエラーが発生した場合、`.env`ファイルでUID/GIDを設定：
 
 ```bash
-# 現在のユーザーとしてコンテナを実行
-docker compose --profile vla run --rm --user $(id -u):$(id -g) vla_finetune
-
-# またはdocker-compose.ymlに追加
-user: "${UID}:${GID}"
+USER_ID=1000
+GROUP_ID=1000
 ```
 
-## 開発ワークフロー
+## CLI引数リファレンス
 
-推奨される開発フローは以下の通りです：
+### 必須引数
 
-### 1. データ収集
+| 引数 | 説明 |
+|------|------|
+| `--backend {openvla,openpi}` | 使用するVLAバックエンド |
 
-ROS2コンテナを使用してデモンストレーションデータを収集：
+### データ設定
 
-```bash
-docker compose -f ros2/docker-compose.yml --profile real up  # または --profile sim
-```
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--data-root PATH` | TFRecordデータディレクトリ | `/workspace/data/tfrecord_logs` |
+| `--instruction TEXT` | タスク指示 | `"Pick and place the object"` |
+| `--image-size WxH` | 画像サイズ | `224x224` |
 
-### 2. ファインチューニング
+### トレーニング設定
 
-VLAコンテナに切り替えてトレーニング：
+| 引数 | 説明 | OpenVLAデフォルト | OpenPIデフォルト |
+|------|------|------------------|-----------------|
+| `--batch-size INT` | バッチサイズ | 16 | 32 |
+| `--num-epochs INT` | エポック数 | 100 | 100 |
+| `--learning-rate FLOAT` | 学習率 | 5e-4 | 3e-4 |
+| `--grad-accumulation-steps INT` | 勾配蓄積 | 1 | 1 |
+| `--warmup-ratio FLOAT` | ウォームアップ比率 | 0.1 | 0.1 |
+| `--gradient-checkpointing` | メモリ効率化 | - | - |
 
-```bash
-docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune
-```
+### LoRA設定（OpenVLAのみ）
 
-### 3. 推論とデプロイ
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--use-lora` | LoRAを有効化 | True |
+| `--lora-rank INT` | LoRAランク | 32 |
+| `--lora-alpha INT` | LoRAアルファ | 64 |
+| `--lora-dropout FLOAT` | LoRAドロップアウト | 0.1 |
 
-ファインチューニングされたモデルをロボット制御に統合：
+### 出力設定
 
-```bash
-# （実装はデプロイ設定に依存）
-```
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--experiment-name NAME` | 実験名 | `crane_x7_{backend}` |
+| `--output-dir PATH` | 出力ディレクトリ | `/workspace/outputs/{experiment_name}` |
+| `--save-steps INT` | チェックポイント間隔 | 500 |
+
+### ロギング設定
+
+| 引数 | 説明 |
+|------|------|
+| `--use-wandb` | W&Bロギングを有効化 |
+| `--wandb-project NAME` | W&Bプロジェクト名 |
+| `--wandb-entity NAME` | W&Bエンティティ名 |
+
+## 環境変数リファレンス
+
+`.env`ファイルで以下の変数を設定できます：
+
+| 変数名 | 説明 | デフォルト値 |
+|--------|------|--------------|
+| `HF_TOKEN` | HuggingFace APIトークン | （空） |
+| `WANDB_API_KEY` | Weights & Biases APIキー | （空） |
+| `WANDB_MODE` | W&Bモード | `disabled` |
+| `CUDA_VERSION` | CUDAバージョン | `12.9.1` |
+| `PYTHON_VERSION` | Pythonバージョン | `3.10` |
+| `CUDA_VISIBLE_DEVICES` | 使用するGPU | `0` |
+| `GPU_COUNT` | GPU数 | `all` |
+| `SHM_SIZE` | 共有メモリサイズ | `16gb` |
+| `USER_ID` | ユーザーID | `1000` |
+| `GROUP_ID` | グループID | `1000` |
 
 ## チェックポイントの管理
 
@@ -440,17 +400,45 @@ docker compose -f ros2/docker-compose.yml --profile vla run --rm vla_finetune
 トレーニング完了後、チェックポイントは以下に保存されます：
 
 ```
-outputs/crane_x7_finetune/
+outputs/{experiment_name}/
+├── checkpoint-500/
 ├── checkpoint-1000/
-├── checkpoint-2000/
+├── ...
 └── checkpoint-final/
 ```
 
 ### チェックポイントからの再開
 
 ```bash
-python3 finetune.py \
-    --resume_from_checkpoint /workspace/outputs/crane_x7_finetune/checkpoint-1000
+python -m crane_x7_vla.training.cli train \
+  --backend openvla \
+  --resume-from-checkpoint /workspace/outputs/crane_x7_openvla/checkpoint-1000
+```
+
+## 開発ワークフロー
+
+推奨される開発フローは以下の通りです：
+
+### 1. データ収集（ROS 2コンテナ）
+
+```bash
+cd ros2
+docker compose --profile teleop-leader-logger up
+```
+
+### 2. ファインチューニング（VLAコンテナ）
+
+```bash
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla
+```
+
+### 3. 推論とデプロイ（ROS 2コンテナ）
+
+```bash
+cd ros2
+ros2 launch crane_x7_vla vla_inference.launch.py \
+  model_path:=/workspace/outputs/crane_x7_openvla/checkpoint-final
 ```
 
 ## クリーンアップ
@@ -458,62 +446,23 @@ python3 finetune.py \
 ### コンテナとボリュームの削除
 
 ```bash
+cd vla
+
 # すべてのコンテナを停止
 docker compose down
 
 # ボリュームを削除
 docker compose down -v
 
-# イメージを削除（方法A）
-docker rmi $(docker images -q '*vla_finetune*')
-
-# イメージを削除（方法B）
-docker rmi crane_x7_vla:latest crane_x7_vla:dev
-```
-
-## 環境変数リファレンス（方法B）
-
-方法Bを使用する場合、`.env`ファイルで以下の変数を設定できます：
-
-| 変数名 | 説明 | デフォルト値 |
-|--------|------|--------------|
-| `WANDB_API_KEY` | Weights & Biases APIキー | （空） |
-| `HF_TOKEN` | HuggingFace APIトークン | （空） |
-| `DATA_DIR` | データセットディレクトリパス | `../data/tfrecord_logs` |
-| `CHECKPOINT_DIR` | モデルチェックポイントディレクトリ | `./checkpoints` |
-| `LOG_DIR` | トレーニングログディレクトリ | `./logs` |
-| `HF_CACHE` | HuggingFaceキャッシュディレクトリ | `~/.cache/huggingface` |
-| `JUPYTER_PORT` | Jupyterポート（開発モード） | `8888` |
-| `TENSORBOARD_PORT` | TensorBoardポート（開発モード） | `6006` |
-
-## トレーニングパラメータリファレンス
-
-コマンドライン引数または環境変数でトレーニングを設定：
-
-```bash
-# 環境変数経由
-export MODEL_NAME="openvla/openvla-7b"
-export DATASET_NAME="crane_x7"
-export BATCH_SIZE=8
-export NUM_EPOCHS=10
-export LEARNING_RATE=2e-5
-./scripts/train.sh
-
-# コマンドライン引数経由
-python3 finetune.py \
-    --model_name openvla/openvla-7b \
-    --dataset_name crane_x7 \
-    --batch_size 8 \
-    --num_epochs 10 \
-    --learning_rate 2e-5 \
-    --use_lora \
-    --gradient_checkpointing
+# イメージを削除
+docker rmi crane_x7_vla:openvla crane_x7_vla:openpi
 ```
 
 ## 参考資料
 
 - [OpenVLAドキュメント](https://github.com/openvla/openvla)
 - [OpenVLA公式サイト](https://openvla.github.io/)
+- [OpenPI GitHub](https://github.com/rail-berkeley/openpi)
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
 - [Docker Compose GPUサポート](https://docs.docker.com/compose/gpu-support/)
 - [PyTorch分散トレーニング](https://pytorch.org/tutorials/beginner/dist_overview.html)
