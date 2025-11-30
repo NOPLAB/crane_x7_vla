@@ -1,12 +1,16 @@
+# syntax=docker/dockerfile:1.4
 # ============================================================================
-# ROS2 Stage
+# ROS2 Stage with VLA Inference Support
 # ============================================================================
 FROM osrf/ros:humble-desktop-full AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Add Intel RealSense repository and install all system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Using BuildKit cache mounts for apt cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=ros2-apt-cache \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked,id=ros2-apt-lists \
+    apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
@@ -28,12 +32,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     espeak-ng \
     alsa-utils \
     pulseaudio-utils \
-    && rm -rf /var/lib/apt/lists/*
+    iproute2 \
+    x11-apps
 
-# Install Python dependencies with fixed versions
+# Install PyTorch (CUDA 12.4 compatible) - must match vla/Dockerfile.openvla
 RUN pip3 install --no-cache-dir \
-    tensorflow==2.15.1 \
-    "numpy<2"
+    torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
+# Install Python dependencies (unified requirements file)
+COPY ros2/requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt
+
+# Copy OpenVLA/prismatic source code for model loading (before ROS source for caching)
+COPY vla/src/openvla /workspace/vla/src/openvla
+
+# Set PYTHONPATH to include VLA code
+ENV PYTHONPATH="/workspace/vla/src/openvla:${PYTHONPATH}"
 
 # Create workspace directory structure
 WORKDIR /workspace/ros2
@@ -44,15 +59,26 @@ COPY ros2/src /tmp/ros2_dependencies/src
 RUN find /tmp/ros2_dependencies/src -type f ! -name "package.xml" -delete && \
     find /tmp/ros2_dependencies/src -type d -empty -delete
 
-# Install dependencies based on package.xml files
-RUN apt-get update && \
-    rosdep install -r -y -i --from-paths /tmp/ros2_dependencies && \
-    rm -rf /tmp/ros2_dependencies && \
-    rm -rf /var/lib/apt/lists/*
+# Install dependencies based on package.xml files (optimized: single apt call)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=ros2-apt-cache \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked,id=ros2-apt-lists \
+    apt-get update && \
+    deps=$(rosdep install -r -y --simulate --from-paths /tmp/ros2_dependencies 2>/dev/null \
+        | grep -oP '(?<=apt-get install -y ).*' \
+        | tr ' ' '\n' | sort -u | tr '\n' ' ') && \
+    if [ -n "$deps" ]; then apt-get install -y $deps; fi && \
+    rm -rf /tmp/ros2_dependencies
 
 # Copy source code to workspace
-# Note: In development mode, this will be overridden by volume mount
 COPY ros2/src ./src
+
+# Build ROS 2 packages
+RUN . /opt/ros/humble/setup.sh && \
+    colcon build --symlink-install
+
+# Copy entrypoint script
+COPY ros2/scripts/docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Create a user that matches host user (UID/GID will be passed at build time)
 ARG USER_ID=1000
@@ -67,26 +93,5 @@ RUN groupadd -g ${GROUP_ID} ${USERNAME} || true \
 
 USER ${USERNAME}
 
-CMD ["/bin/bash"]
-
-FROM base AS dev
-
-# Need to re-declare ARGs from base stage for use in dev stage
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-ARG USERNAME=ros2
-
-# Switch back to root to install additional packages
-USER root
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    vim \
-    tmux \
-    iproute2 \
-    x11-apps \
-    && rm -rf /var/lib/apt/lists/*
-
-# Switch back to the non-root user
-USER ${USERNAME}
-
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

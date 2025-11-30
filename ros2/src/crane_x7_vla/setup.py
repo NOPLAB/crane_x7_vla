@@ -21,7 +21,7 @@ setup(
     install_requires=[
         'setuptools',
         'numpy',
-        'opencv-python',
+        'opencv-python-headless',
         'torch',
         'transformers',
         'Pillow',

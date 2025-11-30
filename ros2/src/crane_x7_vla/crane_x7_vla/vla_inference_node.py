@@ -4,6 +4,7 @@
 
 """ROS 2 node for VLA model inference."""
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ from std_msgs.msg import Float32MultiArray, String
 from cv_bridge import CvBridge
 import torch
 from PIL import Image as PILImage
-from transformers import AutoModelForVision2Seq, AutoProcessor
+from transformers import AutoModelForVision2Seq, AutoProcessor, AutoConfig
 
 # Add VLA directory to path
 VLA_PATH = Path(__file__).parent.parent.parent.parent.parent.parent / "vla"
@@ -95,11 +96,7 @@ class VLAInferenceNode(Node):
             10
         )
 
-        # Setup service for updating task instruction
-        from std_srvs.srv import SetBool
-        from example_interfaces.srv import SetString
-
-        # Create custom service callback for updating instruction
+        # Subscribe to instruction updates
         self.update_instruction_sub = self.create_subscription(
             String,
             '/vla/update_instruction',
@@ -119,17 +116,45 @@ class VLAInferenceNode(Node):
     def _load_model(self) -> None:
         """Load VLA model and processor."""
         if not self.model_path:
-            self.get_logger().error('Model path not specified!')
+            self.get_logger().error(
+                'Model path not specified! '
+                'Set VLA_MODEL_PATH in ros2/.env file. '
+                'Example: VLA_MODEL_PATH=/workspace/vla/outputs/<your_model_dir>'
+            )
             return
 
         model_path = Path(self.model_path)
         if not model_path.exists():
             self.get_logger().error(f'Model path does not exist: {model_path}')
+            # List available models in outputs directory
+            outputs_dir = Path('/workspace/vla/outputs')
+            if outputs_dir.exists():
+                available = [d.name for d in outputs_dir.iterdir() if d.is_dir()]
+                if available:
+                    self.get_logger().info(f'Available models in {outputs_dir}: {available}')
             return
 
         self.get_logger().info(f'Loading VLA model from {model_path}...')
 
         try:
+            # Register custom OpenVLA classes for HuggingFace Auto classes
+            # These are needed to properly load models fine-tuned from openvla-7b
+            try:
+                from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig as HFOpenVLAConfig
+                from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
+                from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
+                from transformers import AutoImageProcessor
+
+                AutoConfig.register("openvla", HFOpenVLAConfig)
+                AutoImageProcessor.register(HFOpenVLAConfig, PrismaticImageProcessor)
+                AutoProcessor.register(HFOpenVLAConfig, PrismaticProcessor)
+                AutoModelForVision2Seq.register(HFOpenVLAConfig, OpenVLAForActionPrediction)
+                self.get_logger().info('Registered OpenVLA custom classes')
+            except ImportError:
+                self.get_logger().warn(
+                    'Could not import prismatic classes - relying on trust_remote_code'
+                )
+
             # Load processor
             self.processor = AutoProcessor.from_pretrained(
                 str(model_path),
@@ -142,6 +167,7 @@ class VLAInferenceNode(Node):
                 "trust_remote_code": True,
                 "torch_dtype": torch.bfloat16,
                 "low_cpu_mem_usage": True,
+                "attn_implementation": "eager",  # Use eager attention for compatibility
             }
 
             if self.use_flash_attention:
@@ -158,14 +184,44 @@ class VLAInferenceNode(Node):
             self.model.eval()
 
             # Load normalization statistics if available
-            norm_stats_path = model_path / "dataset_statistics.json"
-            if norm_stats_path.exists():
-                import json
-                with open(norm_stats_path, 'r') as f:
-                    self.model.norm_stats = json.load(f)
-                self.get_logger().info('Loaded dataset normalization statistics')
+            # First check if model already has norm_stats from config
+            if hasattr(self.model, 'norm_stats') and self.model.norm_stats:
+                self.get_logger().info(
+                    f'Model has norm_stats from config: {list(self.model.norm_stats.keys())}'
+                )
             else:
-                self.get_logger().warn('No dataset_statistics.json found - using default normalization')
+                # Try to load from dataset_statistics.json
+                norm_stats_path = model_path / "dataset_statistics.json"
+                if norm_stats_path.exists():
+                    with open(norm_stats_path, 'r') as f:
+                        self.model.norm_stats = json.load(f)
+                    self.get_logger().info(
+                        f'Loaded dataset normalization statistics: {list(self.model.norm_stats.keys())}'
+                    )
+                else:
+                    self.get_logger().warn(
+                        'No dataset_statistics.json found - using default normalization'
+                    )
+
+            # Verify unnorm_key is available
+            if hasattr(self.model, 'norm_stats') and self.model.norm_stats:
+                if self.unnorm_key not in self.model.norm_stats:
+                    available_keys = list(self.model.norm_stats.keys())
+                    self.get_logger().warn(
+                        f'unnorm_key "{self.unnorm_key}" not in norm_stats. '
+                        f'Available keys: {available_keys}'
+                    )
+                    # Select a fallback key - prefer bridge_orig (common) or first available
+                    if 'bridge_orig' in available_keys:
+                        self.unnorm_key = 'bridge_orig'
+                    elif available_keys:
+                        self.unnorm_key = available_keys[0]
+                    self.get_logger().info(f'Using fallback unnorm_key: {self.unnorm_key}')
+
+                action_dim = len(self.model.norm_stats[self.unnorm_key]["action"]["q01"])
+                self.get_logger().info(
+                    f'Using unnorm_key: {self.unnorm_key} (action_dim={action_dim})'
+                )
 
             self.get_logger().info('VLA model loaded successfully')
 
@@ -207,25 +263,47 @@ class VLAInferenceNode(Node):
             image = image.convert("RGB")
 
             # Build prompt based on model version
-            if "openvla-v01" in self.model_base_name:
-                # OpenVLA v0.1 format
+            if "openvla-v01" in self.model_base_name or "v01" in self.model_base_name:
+                # OpenVLA v0.1 format (VicunaV15ChatPromptBuilder)
                 system_prompt = (
                     "A chat between a curious user and an artificial intelligence assistant. "
                     "The assistant gives helpful, detailed, and polite answers to the user's questions."
                 )
-                prompt = f"{system_prompt} USER: What action should the robot take to {self.task_instruction.lower()}? ASSISTANT:"
+                prompt = (
+                    f"{system_prompt} USER: What action should the robot take to "
+                    f"{self.task_instruction.lower()}? ASSISTANT:"
+                )
             else:
-                # OpenVLA format
+                # OpenVLA format (PurePromptBuilder)
                 prompt = f"In: What action should the robot take to {self.task_instruction.lower()}?\nOut:"
 
-            # Process inputs
+            # Process inputs using the Prismatic processor
+            # The processor expects (text, images) and returns input_ids, attention_mask, pixel_values
             inputs = self.processor(prompt, image)
-            inputs = {k: v.to(self.device, dtype=torch.bfloat16) if isinstance(v, torch.Tensor) else v
-                     for k, v in inputs.items()}
 
-            # Run inference
+            # Move tensors to device with appropriate dtype
+            input_ids = inputs["input_ids"]
+            attention_mask = inputs["attention_mask"]
+            pixel_values = inputs["pixel_values"]
+
+            if isinstance(input_ids, torch.Tensor):
+                input_ids = input_ids.to(self.device)
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = attention_mask.to(self.device)
+            if isinstance(pixel_values, torch.Tensor):
+                pixel_values = pixel_values.to(self.device, dtype=torch.bfloat16)
+
+            # Run inference using predict_action method
+            # predict_action expects input_ids and passes other kwargs to generate()
             with torch.no_grad():
-                action = self.model.predict_action(**inputs, unnorm_key=self.unnorm_key, do_sample=False)
+                action = self.model.predict_action(
+                    input_ids=input_ids,
+                    unnorm_key=self.unnorm_key,
+                    do_sample=False,
+                    # Pass additional inputs for multimodal forward
+                    pixel_values=pixel_values,
+                    attention_mask=attention_mask,
+                )
 
             # Convert to numpy and publish
             if isinstance(action, torch.Tensor):

@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-FileCopyrightText: 2025 nop -->
+<!--
+  Ignition Gazebo sensor plugin for Intel RealSense D435 camera.
+  Based on https://github.com/Kuwamai/crane_x7_d435
+
+  This xacro adds camera sensors to the D435 model for simulation in Ignition Gazebo.
+  The sensors publish to Ignition topics which are then bridged to ROS 2.
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- D435 Ignition Gazebo camera sensor macro -->
+  <xacro:macro name="d435_ignition_sensor" params="camera_link:=camera_link">
+
+    <!-- RGB Camera Sensor -->
+    <gazebo reference="${camera_link}">
+      <sensor name="d435_color" type="camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <topic>camera/color/image_raw</topic>
+        <camera>
+          <horizontal_fov>1.211</horizontal_fov> <!-- 69.4 degrees -->
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>RGB_INT8</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <!-- Depth Camera Sensor -->
+    <gazebo reference="${camera_link}">
+      <sensor name="d435_depth" type="depth_camera">
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>false</visualize>
+        <topic>camera/depth/image_raw</topic>
+        <camera>
+          <horizontal_fov>1.518</horizontal_fov> <!-- 87 degrees for depth -->
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>10.0</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>
