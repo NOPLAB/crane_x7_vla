@@ -13,7 +13,7 @@ vla_inference_node:
 
     # Model settings
     use_flash_attention: false  # Enable Flash Attention 2 (requires compatible GPU)
-    device: 'cpu'  # Device: 'cuda' or 'cpu'
+    device: 'cuda'  # Device: 'cuda' or 'cpu'
     # Unnormalization key for actions
     # For fine-tuned CRANE-X7 model: 'crane_x7'
     # For base OpenVLA model: 'bridge_orig' (default fallback)
