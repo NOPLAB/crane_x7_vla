@@ -333,35 +333,47 @@ class CraneX7Trainer:
 
                     # Merge LoRA weights into model backbone for faster inference
                     #   =>> Note that merging is slow and can be done post-hoc to speed up training
-                    if self.cfg.use_lora:
+                    #   =>> Only main process handles merging to avoid OOM on multi-GPU setups
+                    if self.cfg.use_lora and distributed_state.is_main_process:
+                        # Clear GPU memory before loading base model for merging
+                        import gc
+                        gc.collect()
+                        torch.cuda.empty_cache()
+
+                        # Load base model on CPU to avoid GPU OOM
                         base_vla = AutoModelForVision2Seq.from_pretrained(
                             self.cfg.vla_path,
                             torch_dtype=torch.bfloat16,
                             low_cpu_mem_usage=True,
                             trust_remote_code=True,
                             attn_implementation="eager",
+                            device_map="cpu",
                         )
-                        merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir)
+                        merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir, device_map="cpu")
                         merged_vla = merged_vla.merge_and_unload()
-                        if distributed_state.is_main_process:
-                            if self.cfg.save_latest_checkpoint_only:
-                                # Overwrite latest checkpoint
-                                merged_vla.save_pretrained(run_dir)
 
-                                print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {run_dir}")
-                            else:
-                                # Prepare to save checkpoint in new directory
-                                checkpoint_dir = Path(str(run_dir) + f"--{gradient_step_idx}_chkpt")
-                                os.makedirs(checkpoint_dir, exist_ok=True)
+                        if self.cfg.save_latest_checkpoint_only:
+                            # Overwrite latest checkpoint
+                            merged_vla.save_pretrained(run_dir)
+                            print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {run_dir}")
+                        else:
+                            # Prepare to save checkpoint in new directory
+                            checkpoint_dir = Path(str(run_dir) + f"--{gradient_step_idx}_chkpt")
+                            os.makedirs(checkpoint_dir, exist_ok=True)
 
-                                # Save dataset statistics to new directory
-                                save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
+                            # Save dataset statistics to new directory
+                            save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
 
-                                # Save processor and model weights to new directory
-                                processor.save_pretrained(checkpoint_dir)
-                                merged_vla.save_pretrained(checkpoint_dir)
+                            # Save processor and model weights to new directory
+                            processor.save_pretrained(checkpoint_dir)
+                            merged_vla.save_pretrained(checkpoint_dir)
 
-                                print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {checkpoint_dir}")
+                            print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {checkpoint_dir}")
+
+                        # Clean up merged model to free memory
+                        del base_vla, merged_vla
+                        gc.collect()
+                        torch.cuda.empty_cache()
 
                     # Block on Main Process Checkpointing
                     if is_distributed:
