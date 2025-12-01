@@ -80,6 +80,11 @@ class CraneX7FinetuneConfig:
                                                                     #   continually overwrite the latest checkpoint
                                                                     #   (If False, saves all checkpoints)
 
+    # Validation Parameters
+    val_split_ratio: float = 0.1                                    # Ratio of data to use for validation (0.0 to disable)
+    val_interval: int = 500                                         # Run validation every N gradient steps
+    val_steps: int = 50                                             # Number of validation steps per evaluation
+
     # LoRA Arguments
     use_lora: bool = True                                           # Whether to use LoRA fine-tuning
     lora_rank: int = 32                                             # Rank of LoRA weight matrix
@@ -91,6 +96,11 @@ class CraneX7FinetuneConfig:
     wandb_project: str = "openvla"                                  # Name of W&B project to log to (use default!)
     wandb_entity: str = "stanford-voltron"                          # Name of entity to log under
     run_id_note: Optional[str] = None                               # Extra note for logging, Weights & Biases
+
+    # Checkpoint Saving Parameters
+    skip_merge_on_save: bool = True                                 # Skip LoRA merge during checkpoint saving
+                                                                    #   => Avoids NCCL timeout on multi-GPU setups
+                                                                    #   => Merge can be done post-training
     # fmt: on
 
 
@@ -210,6 +220,8 @@ class CraneX7Trainer:
             image_transform=processor.image_processor.apply_transform,
             prompt_builder_fn=PurePromptBuilder if "v01" not in self.cfg.vla_path else VicunaV15ChatPromptBuilder,
         )
+
+        # Create training dataset (with optional train/val split)
         vla_dataset = CraneX7Dataset(
             self.cfg.data_root_dir,
             self.cfg.dataset_name,
@@ -217,7 +229,25 @@ class CraneX7Trainer:
             resize_resolution=tuple(unwrapped_vla.config.image_sizes),
             shuffle_buffer_size=self.cfg.shuffle_buffer_size,
             image_aug=self.cfg.image_aug,
+            val_split_ratio=self.cfg.val_split_ratio,
+            split="train",
         )
+
+        # Create validation dataset if val_split_ratio > 0
+        val_dataset = None
+        val_dataloader = None
+        if self.cfg.val_split_ratio > 0:
+            val_dataset = CraneX7Dataset(
+                self.cfg.data_root_dir,
+                self.cfg.dataset_name,
+                batch_transform,
+                resize_resolution=tuple(unwrapped_vla.config.image_sizes),
+                shuffle_buffer_size=1000,  # Small buffer for validation
+                image_aug=False,  # No augmentation for validation
+                val_split_ratio=self.cfg.val_split_ratio,
+                split="val",
+                train=False,  # Don't repeat validation data
+            )
 
         # [Important] Save Dataset Statistics =>> used to de-normalize actions for inference!
         if distributed_state.is_main_process:
@@ -234,6 +264,16 @@ class CraneX7Trainer:
             collate_fn=collator,
             num_workers=0,  # Important =>> Set to 0 if using RLDS; TFDS rolls its own parallelism!
         )
+
+        # Create validation dataloader if validation is enabled
+        if val_dataset is not None:
+            val_dataloader = DataLoader(
+                val_dataset,
+                batch_size=self.cfg.batch_size,
+                sampler=None,
+                collate_fn=collator,
+                num_workers=0,
+            )
 
         # Initialize Logging =>> W&B
         if distributed_state.is_main_process:
@@ -315,67 +355,102 @@ class CraneX7Trainer:
                     optimizer.zero_grad()
                     progress.update()
 
+                    # Run Validation at specified interval
+                    if (
+                        val_dataloader is not None
+                        and gradient_step_idx > 0
+                        and gradient_step_idx % self.cfg.val_interval == 0
+                    ):
+                        val_metrics = self._run_validation(
+                            vla=vla,
+                            val_dataloader=val_dataloader,
+                            device_id=device_id,
+                            unwrapped_vla=unwrapped_vla,
+                            action_tokenizer=action_tokenizer,
+                            distributed_state=distributed_state,
+                        )
+
+                        # Log validation metrics to W&B
+                        if distributed_state.is_main_process:
+                            wandb.log(
+                                {
+                                    "val_loss": val_metrics["val_loss"],
+                                    "val_action_accuracy": val_metrics["val_action_accuracy"],
+                                    "val_l1_loss": val_metrics["val_l1_loss"],
+                                },
+                                step=gradient_step_idx,
+                            )
+                            print(
+                                f"[Step {gradient_step_idx}] Val Loss: {val_metrics['val_loss']:.4f}, "
+                                f"Val Accuracy: {val_metrics['val_action_accuracy']:.4f}, "
+                                f"Val L1: {val_metrics['val_l1_loss']:.4f}"
+                            )
+
+                        # Return model to training mode
+                        vla.train()
+
                 # Save Model Checkpoint =>> by default, only keeps the latest checkpoint, continually overwriting it!
                 if gradient_step_idx > 0 and gradient_step_idx % self.cfg.save_steps == 0:
                     if distributed_state.is_main_process:
                         print(f"Saving Model Checkpoint for Step {gradient_step_idx}")
 
-                        # If LoRA, we first save adapter weights, then merge into full model; otherwise, default save!
-                        save_dir = adapter_dir if self.cfg.use_lora else run_dir
-
-                        # Save Processor & Weights
+                        # Save Processor
                         processor.save_pretrained(run_dir)
-                        unwrapped_vla.save_pretrained(save_dir)
 
-                    # Wait for processor and adapter weights to be saved by main process
-                    if is_distributed:
-                        dist.barrier()
+                        if self.cfg.use_lora:
+                            # Save adapter weights to a persistent directory within run_dir
+                            lora_save_dir = run_dir / "lora_adapters"
+                            os.makedirs(lora_save_dir, exist_ok=True)
+                            unwrapped_vla.save_pretrained(lora_save_dir)
+                            print(f"Saved LoRA adapters at: {lora_save_dir}")
 
-                    # Merge LoRA weights into model backbone for faster inference
-                    #   =>> Note that merging is slow and can be done post-hoc to speed up training
-                    #   =>> Only main process handles merging to avoid OOM on multi-GPU setups
-                    if self.cfg.use_lora and distributed_state.is_main_process:
-                        # Clear GPU memory before loading base model for merging
-                        import gc
-                        gc.collect()
-                        torch.cuda.empty_cache()
+                            if not self.cfg.skip_merge_on_save:
+                                # Merge LoRA weights into model backbone for faster inference
+                                # NOTE: This is slow and can cause NCCL timeout on multi-GPU setups
+                                #       Consider setting skip_merge_on_save=True and merging post-training
+                                import gc
 
-                        # Load base model on CPU to avoid GPU OOM
-                        base_vla = AutoModelForVision2Seq.from_pretrained(
-                            self.cfg.vla_path,
-                            torch_dtype=torch.bfloat16,
-                            low_cpu_mem_usage=True,
-                            trust_remote_code=True,
-                            attn_implementation="eager",
-                            device_map="cpu",
-                        )
-                        merged_vla = PeftModel.from_pretrained(base_vla, adapter_dir, device_map="cpu")
-                        merged_vla = merged_vla.merge_and_unload()
+                                print("Merging LoRA weights (this may take several minutes)...")
 
-                        if self.cfg.save_latest_checkpoint_only:
-                            # Overwrite latest checkpoint
-                            merged_vla.save_pretrained(run_dir)
-                            print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {run_dir}")
+                                # Load base model on CPU and merge with adapters
+                                base_vla = AutoModelForVision2Seq.from_pretrained(
+                                    self.cfg.vla_path,
+                                    torch_dtype=torch.bfloat16,
+                                    low_cpu_mem_usage=True,
+                                    trust_remote_code=True,
+                                    attn_implementation="eager",
+                                    device_map="cpu",
+                                )
+                                merged_vla = PeftModel.from_pretrained(base_vla, lora_save_dir, device_map="cpu")
+                                merged_vla = merged_vla.merge_and_unload()
+
+                                if self.cfg.save_latest_checkpoint_only:
+                                    # Overwrite latest checkpoint
+                                    merged_vla.save_pretrained(run_dir)
+                                    print(f"Saved merged model at: {run_dir}")
+                                else:
+                                    # Save checkpoint in new directory
+                                    checkpoint_dir = Path(str(run_dir) + f"--{gradient_step_idx}_chkpt")
+                                    os.makedirs(checkpoint_dir, exist_ok=True)
+                                    save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
+                                    processor.save_pretrained(checkpoint_dir)
+                                    merged_vla.save_pretrained(checkpoint_dir)
+                                    print(f"Saved merged model at: {checkpoint_dir}")
+
+                                # Clean up
+                                del base_vla, merged_vla
+                                gc.collect()
+                                torch.cuda.empty_cache()
+                            else:
+                                print(f"Skipping LoRA merge (skip_merge_on_save=True). Run merge_lora.py post-training.")
                         else:
-                            # Prepare to save checkpoint in new directory
-                            checkpoint_dir = Path(str(run_dir) + f"--{gradient_step_idx}_chkpt")
-                            os.makedirs(checkpoint_dir, exist_ok=True)
+                            # Full model (no LoRA) - save directly
+                            unwrapped_vla.save_pretrained(run_dir)
 
-                            # Save dataset statistics to new directory
-                            save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
+                        print(f"Checkpoint saved for Step {gradient_step_idx}")
 
-                            # Save processor and model weights to new directory
-                            processor.save_pretrained(checkpoint_dir)
-                            merged_vla.save_pretrained(checkpoint_dir)
-
-                            print(f"Saved Model Checkpoint for Step {gradient_step_idx} at: {checkpoint_dir}")
-
-                        # Clean up merged model to free memory
-                        del base_vla, merged_vla
-                        gc.collect()
-                        torch.cuda.empty_cache()
-
-                    # Block on Main Process Checkpointing
+                    # Synchronize all processes after checkpoint saving
+                    # This barrier is lightweight since only file I/O is performed (no heavy merge)
                     if is_distributed:
                         dist.barrier()
 
@@ -386,6 +461,83 @@ class CraneX7Trainer:
 
         # Update tracking variables
         self.global_step = gradient_step_idx
+
+    def _run_validation(
+        self,
+        vla,
+        val_dataloader,
+        device_id: int,
+        unwrapped_vla,
+        action_tokenizer: ActionTokenizer,
+        distributed_state,
+    ) -> Dict[str, float]:
+        """
+        Run validation loop and compute metrics.
+
+        Args:
+            vla: The VLA model
+            val_dataloader: Validation data loader
+            device_id: GPU device ID
+            unwrapped_vla: Unwrapped model for accessing internals
+            action_tokenizer: Action tokenizer instance
+            distributed_state: Distributed training state
+
+        Returns:
+            Dictionary containing validation metrics
+        """
+        vla.eval()
+
+        val_losses = []
+        val_action_accuracies = []
+        val_l1_losses = []
+
+        with torch.no_grad():
+            for val_step, batch in enumerate(val_dataloader):
+                if val_step >= self.cfg.val_steps:
+                    break
+
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    output: CausalLMOutputWithPast = vla(
+                        input_ids=batch["input_ids"].to(device_id),
+                        attention_mask=batch["attention_mask"].to(device_id),
+                        pixel_values=batch["pixel_values"].to(torch.bfloat16).to(device_id),
+                        labels=batch["labels"],
+                    )
+                    loss = output.loss
+
+                # Compute Accuracy and L1 Loss
+                action_logits = output.logits[
+                    :, unwrapped_vla.vision_backbone.featurizer.patch_embed.num_patches : -1
+                ]
+                action_preds = action_logits.argmax(dim=2)
+                action_gt = batch["labels"][:, 1:].to(action_preds.device)
+                mask = action_gt > action_tokenizer.action_token_begin_idx
+
+                # Compute Accuracy
+                correct_preds = (action_preds == action_gt) & mask
+                action_accuracy = correct_preds.sum().float() / mask.sum().float()
+
+                # Compute L1 Loss on Predicted (Continuous) Actions
+                continuous_actions_pred = torch.tensor(
+                    action_tokenizer.decode_token_ids_to_actions(action_preds[mask].cpu().numpy())
+                )
+                continuous_actions_gt = torch.tensor(
+                    action_tokenizer.decode_token_ids_to_actions(action_gt[mask].cpu().numpy())
+                )
+                action_l1_loss = torch.nn.functional.l1_loss(continuous_actions_pred, continuous_actions_gt)
+
+                val_losses.append(loss.item())
+                val_action_accuracies.append(action_accuracy.item())
+                val_l1_losses.append(action_l1_loss.item())
+
+        # Compute average metrics
+        metrics = {
+            "val_loss": sum(val_losses) / len(val_losses) if val_losses else 0.0,
+            "val_action_accuracy": sum(val_action_accuracies) / len(val_action_accuracies) if val_action_accuracies else 0.0,
+            "val_l1_loss": sum(val_l1_losses) / len(val_l1_losses) if val_l1_losses else 0.0,
+        }
+
+        return metrics
 
 
 class OpenVLABackend(VLABackend):
@@ -430,6 +582,10 @@ class OpenVLABackend(VLABackend):
             grad_accumulation_steps=self.vla_config.training.gradient_accumulation_steps,
             image_aug=self.vla_config.openvla.image_aug if hasattr(self.vla_config.openvla, 'image_aug') else True,
             shuffle_buffer_size=self.vla_config.data.shuffle_buffer_size if hasattr(self.vla_config.data, 'shuffle_buffer_size') else 100_000,
+            # Validation Parameters
+            val_split_ratio=self.vla_config.validation.val_split_ratio if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_split_ratio') else 0.1,
+            val_interval=self.vla_config.validation.val_interval if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_interval') else 500,
+            val_steps=self.vla_config.validation.val_steps if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_steps') else 50,
             # LoRA Arguments
             use_lora=self.vla_config.openvla.use_lora,
             lora_rank=self.vla_config.openvla.lora_rank,
@@ -439,6 +595,8 @@ class OpenVLABackend(VLABackend):
             wandb_project=self.vla_config.wandb_project if hasattr(self.vla_config, 'wandb_project') else "openvla",
             wandb_entity=self.vla_config.wandb_entity if hasattr(self.vla_config, 'wandb_entity') else "stanford-voltron",
             run_id_note=self.vla_config.experiment_name if hasattr(self.vla_config, 'experiment_name') else None,
+            # Checkpoint Saving Parameters
+            skip_merge_on_save=self.vla_config.openvla.skip_merge_on_save if hasattr(self.vla_config.openvla, 'skip_merge_on_save') else True,
         )
 
         return ft_config

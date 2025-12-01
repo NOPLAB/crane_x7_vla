@@ -161,6 +161,8 @@ class CraneX7Dataset(IterableDataset):
         shuffle_buffer_size: int = 256_000,
         train: bool = True,
         image_aug: bool = False,
+        val_split_ratio: float = 0.0,
+        split: str = "train",
     ) -> None:
         """
         Lightweight wrapper around TFRecord pipeline for use with PyTorch/OpenVLA Data Loaders.
@@ -175,6 +177,8 @@ class CraneX7Dataset(IterableDataset):
             shuffle_buffer_size: Buffer size for shuffling (default: 256_000 to match OpenVLA)
             train: Whether this is training set
             image_aug: Whether to apply image augmentation (matches OpenVLA finetune.py)
+            val_split_ratio: Ratio of data to use for validation (0.0 to disable split)
+            split: Dataset split to use ("train" or "val")
         """
         super().__init__()
         self.data_root_dir = Path(data_root_dir)
@@ -184,10 +188,24 @@ class CraneX7Dataset(IterableDataset):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.train = train
         self.image_aug = image_aug
+        self.val_split_ratio = val_split_ratio
+        self.split = split
 
         # Find TFRecord files
-        self.tfrecord_files = self._find_tfrecord_files()
-        print(f"Found {len(self.tfrecord_files)} TFRecord files in {self.data_root_dir}")
+        all_tfrecord_files = self._find_tfrecord_files()
+
+        # Split files into train/val if val_split_ratio > 0
+        if val_split_ratio > 0 and len(all_tfrecord_files) > 1:
+            n_val = max(1, int(len(all_tfrecord_files) * val_split_ratio))
+            # Use last N files for validation (deterministic split)
+            if split == "val":
+                self.tfrecord_files = all_tfrecord_files[-n_val:]
+            else:
+                self.tfrecord_files = all_tfrecord_files[:-n_val]
+        else:
+            self.tfrecord_files = all_tfrecord_files
+
+        print(f"Found {len(self.tfrecord_files)} TFRecord files for {split} split in {self.data_root_dir}")
 
         # Compute or load dataset statistics (matches OpenVLA behavior)
         self.dataset_statistics = self._get_dataset_statistics()

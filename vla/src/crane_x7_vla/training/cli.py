@@ -121,6 +121,12 @@ def train_command(args):
     if args.gradient_checkpointing:
         config.training.gradient_checkpointing = True
 
+    # Override validation settings
+    if args.val_interval:
+        config.validation.val_interval = args.val_interval
+    if args.val_steps:
+        config.validation.val_steps = args.val_steps
+
     # Override backend-specific settings (OpenVLA)
     if config.backend == "openvla":
         if args.lora_rank:
@@ -196,6 +202,9 @@ Examples:
 
   # Train with OpenPI
   python -m crane_x7_vla.training.cli train --backend openpi --data-root ./data --experiment-name my_experiment
+
+  # Train with custom validation interval
+  python -m crane_x7_vla.training.cli train --backend openvla --data-root ./data --val-interval 1000 --val-steps 100
 
   # Train with custom configuration file
   python -m crane_x7_vla.training.cli train --config my_config.yaml
@@ -276,6 +285,16 @@ Examples:
         "--use-quantization",
         action="store_true",
         help="Use quantization (4-bit/8-bit) for memory efficiency"
+    )
+    train_parser.add_argument(
+        "--val-interval",
+        type=int,
+        help="Run validation every N gradient steps"
+    )
+    train_parser.add_argument(
+        "--val-steps",
+        type=int,
+        help="Number of validation steps per evaluation"
     )
 
     # Evaluate command

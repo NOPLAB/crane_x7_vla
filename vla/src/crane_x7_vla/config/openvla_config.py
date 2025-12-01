@@ -58,6 +58,13 @@ class OpenVLASpecificConfig:
     compile_model: bool = False
     """Use torch.compile() for optimization"""
 
+    skip_merge_on_save: bool = True
+    """Skip LoRA merge during checkpoint saving to avoid NCCL timeout.
+    When True, only adapter weights are saved. Merge can be done post-training."""
+
+    image_aug: bool = True
+    """Whether to use image augmentation during training"""
+
 
 @dataclass
 class OpenVLAConfig(UnifiedVLAConfig):
@@ -90,6 +97,8 @@ class OpenVLAConfig(UnifiedVLAConfig):
             'use_flash_attention': self.openvla.use_flash_attention,
             'use_quantization': self.openvla.use_quantization,
             'compile_model': self.openvla.compile_model,
+            'skip_merge_on_save': self.openvla.skip_merge_on_save,
+            'image_aug': self.openvla.image_aug,
         }
 
     @property
