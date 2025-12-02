@@ -1,0 +1,32 @@
+{
+    "recommendations": [
+        // Python development
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+
+        // YAML support
+        "redhat.vscode-yaml",
+
+        // Git integration
+        "eamodio.gitlens",
+
+        // Docker support
+        "ms-azuretools.vscode-docker",
+
+        // ROS 2 development (optional)
+        "ms-iot.vscode-ros",
+
+        // Jupyter notebooks
+        "ms-toolsai.jupyter",
+
+        // Remote development
+        "ms-vscode-remote.vscode-remote-extensionpack"
+    ],
+    "unwantedRecommendations": [
+        // Deprecated or conflicting extensions
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.isort"
+    ]
+}

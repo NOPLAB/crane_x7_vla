@@ -12,26 +12,20 @@ CLI arguments are automatically generated from configuration dataclasses.
 import argparse
 import logging
 import sys
-from dataclasses import fields, is_dataclass, MISSING
+from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
-from typing import Dict, get_type_hints, get_origin, get_args, List, Optional, Union, Literal
+from typing import Literal, Union, get_args, get_origin, get_type_hints
 
-from crane_x7_vla.config.base import (
-    UnifiedVLAConfig, DataConfig, TrainingConfig, CameraConfig, OverfittingConfig
-)
-from crane_x7_vla.config.openvla_config import OpenVLAConfig, OpenVLASpecificConfig
+from crane_x7_vla.config.base import CameraConfig, DataConfig, OverfittingConfig, TrainingConfig, UnifiedVLAConfig
 from crane_x7_vla.config.openpi_config import OpenPIConfig, OpenPISpecificConfig
+from crane_x7_vla.config.openvla_config import OpenVLAConfig, OpenVLASpecificConfig
 from crane_x7_vla.training.trainer import VLATrainer
 
 
 def setup_logging(verbose: bool = False):
     """Setup logging configuration."""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 
 def _get_field_docstring(cls, field_name: str) -> str:
@@ -41,19 +35,18 @@ def _get_field_docstring(cls, field_name: str) -> str:
     Looks for a docstring immediately following the field definition.
     """
     import inspect
+
     try:
         source = inspect.getsource(cls)
-        lines = source.split('\n')
+        lines = source.split("\n")
         for i, line in enumerate(lines):
-            # Look for field definition
-            if f'{field_name}:' in line or f'{field_name} :' in line:
-                # Check next line for docstring
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    if next_line.startswith('"""') and next_line.endswith('"""'):
-                        return next_line[3:-3].strip()
-                    elif next_line.startswith("'''") and next_line.endswith("'''"):
-                        return next_line[3:-3].strip()
+            # Look for field definition and check next line for docstring
+            if (f"{field_name}:" in line or f"{field_name} :" in line) and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if (next_line.startswith('"""') and next_line.endswith('"""')) or (
+                    next_line.startswith("'''") and next_line.endswith("'''")
+                ):
+                    return next_line[3:-3].strip()
         return ""
     except Exception:
         return ""
@@ -61,7 +54,7 @@ def _get_field_docstring(cls, field_name: str) -> str:
 
 def _python_name_to_cli_name(name: str) -> str:
     """Convert Python variable name to CLI argument name (snake_case to kebab-case)."""
-    return name.replace('_', '-')
+    return name.replace("_", "-")
 
 
 def _get_base_type(type_hint) -> type:
@@ -79,7 +72,7 @@ def _get_base_type(type_hint) -> type:
         # For Literal types, return str
         return str
 
-    if origin is list or origin is List:
+    if origin is list or origin is list:
         return list
 
     if type_hint in (int, float, str, bool, Path):
@@ -101,11 +94,11 @@ def _should_skip_field(field_name: str, field_type) -> bool:
     origin = get_origin(field_type)
 
     # Skip list types (like cameras)
-    if origin is list or origin is List:
+    if origin is list or origin is list:
         return True
 
     # Skip dict types
-    if origin is dict or origin is Dict:
+    if origin is dict or origin is dict:
         return True
 
     # Skip if the type is a dataclass (nested config)
@@ -122,8 +115,8 @@ def add_dataclass_args_to_parser(
     parser: argparse.ArgumentParser,
     dataclass_cls,
     prefix: str = "",
-    exclude_fields: Optional[List[str]] = None,
-) -> Dict[str, tuple]:
+    exclude_fields: list[str] | None = None,
+) -> dict[str, tuple]:
     """
     Automatically add CLI arguments for all fields in a dataclass.
 
@@ -186,30 +179,20 @@ def add_dataclass_args_to_parser(
                 arg_name,
                 action="store_true",
                 default=None,  # None means "not specified"
-                help=help_text
+                help=help_text,
             )
         elif base_type is Path:
-            parser.add_argument(
-                arg_name,
-                type=str,
-                default=None,
-                help=help_text
-            )
+            parser.add_argument(arg_name, type=str, default=None, help=help_text)
         else:
-            parser.add_argument(
-                arg_name,
-                type=base_type,
-                default=None,
-                help=help_text
-            )
+            parser.add_argument(arg_name, type=base_type, default=None, help=help_text)
 
         # Store mapping for later use
-        arg_mapping[arg_name.lstrip('-').replace('-', '_')] = (config_path, f.name, base_type)
+        arg_mapping[arg_name.lstrip("-").replace("-", "_")] = (config_path, f.name, base_type)
 
     return arg_mapping
 
 
-def apply_cli_overrides(config, args: argparse.Namespace, arg_mapping: Dict[str, tuple]):
+def apply_cli_overrides(config, args: argparse.Namespace, arg_mapping: dict[str, tuple]):
     """
     Apply CLI argument overrides to a configuration object.
 
@@ -218,13 +201,13 @@ def apply_cli_overrides(config, args: argparse.Namespace, arg_mapping: Dict[str,
         args: Parsed CLI arguments
         arg_mapping: Mapping from arg name to (config_path, field_name, type)
     """
-    for arg_name, (config_path, field_name, field_type) in arg_mapping.items():
+    for arg_name, (config_path, _field_name, field_type) in arg_mapping.items():
         value = getattr(args, arg_name, None)
         if value is None:
             continue
 
         # Navigate to the correct config object
-        parts = config_path.split('.')
+        parts = config_path.split(".")
         obj = config
         for part in parts[:-1]:
             obj = getattr(obj, part, None)
@@ -238,12 +221,7 @@ def apply_cli_overrides(config, args: argparse.Namespace, arg_mapping: Dict[str,
             setattr(obj, parts[-1], value)
 
 
-def create_default_config(
-    backend: str,
-    data_root: Path,
-    output_dir: Path,
-    experiment_name: str
-) -> UnifiedVLAConfig:
+def create_default_config(backend: str, data_root: Path, output_dir: Path, experiment_name: str) -> UnifiedVLAConfig:
     """
     Create default configuration for the specified backend.
 
@@ -257,20 +235,10 @@ def create_default_config(
         UnifiedVLAConfig instance
     """
     # Default camera configuration
-    cameras = [
-        CameraConfig(
-            name="primary",
-            topic="/camera/color/image_raw",
-            width=640,
-            height=480
-        )
-    ]
+    cameras = [CameraConfig(name="primary", topic="/camera/color/image_raw", width=640, height=480)]
 
     # Data configuration
-    data_config = DataConfig(
-        data_root=data_root,
-        cameras=cameras
-    )
+    data_config = DataConfig(data_root=data_root, cameras=cameras)
 
     # Training configuration
     training_config = TrainingConfig(
@@ -286,7 +254,7 @@ def create_default_config(
             training=training_config,
             output_dir=output_dir,
             experiment_name=experiment_name,
-            openvla=OpenVLASpecificConfig()
+            openvla=OpenVLASpecificConfig(),
         )
     elif backend == "openpi":
         config = OpenPIConfig(
@@ -295,7 +263,7 @@ def create_default_config(
             training=training_config,
             output_dir=output_dir,
             experiment_name=experiment_name,
-            openpi=OpenPISpecificConfig()
+            openpi=OpenPISpecificConfig(),
         )
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -303,8 +271,10 @@ def create_default_config(
     return config
 
 
-def train_command(args, arg_mappings: Dict[str, Dict[str, tuple]]):
+def train_command(args, arg_mappings: dict[str, dict[str, tuple]]):
     """Execute training command."""
+    backend = args.backend
+
     # Load or create configuration
     if args.config:
         # Load from YAML and determine backend
@@ -315,15 +285,29 @@ def train_command(args, arg_mappings: Dict[str, Dict[str, tuple]]):
             config = OpenVLAConfig.from_yaml(args.config)
         elif config.backend == "openpi":
             config = OpenPIConfig.from_yaml(args.config)
+
+        # Warn if config backend doesn't match CLI subcommand
+        if config.backend != backend:
+            logging.warning(
+                f"Config file specifies backend '{config.backend}' but CLI subcommand is '{backend}'. "
+                f"Using '{backend}' as specified in CLI."
+            )
+            # Recreate with correct backend
+            config = create_default_config(
+                backend=backend,
+                data_root=config.data.data_root,
+                output_dir=config.output_dir,
+                experiment_name=config.experiment_name,
+            )
     else:
         if not args.data_root:
             raise ValueError("--data-root is required when not using --config")
 
         config = create_default_config(
-            backend=args.backend,
+            backend=backend,
             data_root=Path(args.data_root),
             output_dir=Path(args.output_dir),
-            experiment_name=args.experiment_name
+            experiment_name=args.experiment_name,
         )
 
     # Apply all CLI overrides automatically
@@ -331,12 +315,10 @@ def train_command(args, arg_mappings: Dict[str, Dict[str, tuple]]):
         apply_cli_overrides(config, args, mapping)
 
     # Handle backend-specific overrides for OpenVLA
-    if config.backend == "openvla" and hasattr(config, 'openvla'):
-        # Also update backend_config dict if it exists
-        if config.backend_config is not None:
-            for attr in ['lora_rank', 'lora_dropout', 'use_quantization', 'image_aug', 'skip_merge_on_save']:
-                if hasattr(config.openvla, attr):
-                    config.backend_config[attr] = getattr(config.openvla, attr)
+    if config.backend == "openvla" and hasattr(config, "openvla") and config.backend_config is not None:
+        for attr in ["lora_rank", "lora_dropout", "use_quantization", "image_aug", "skip_merge_on_save"]:
+            if hasattr(config.openvla, attr):
+                config.backend_config[attr] = getattr(config.openvla, attr)
 
     # Save configuration
     config_save_path = Path(config.output_dir) / "config.yaml"
@@ -363,10 +345,7 @@ def evaluate_command(args):
     trainer = VLATrainer(config)
 
     # Evaluate
-    metrics = trainer.evaluate(
-        checkpoint_path=args.checkpoint,
-        test_data_path=args.test_data
-    )
+    metrics = trainer.evaluate(checkpoint_path=args.checkpoint, test_data_path=args.test_data)
 
     logging.info(f"Evaluation metrics: {metrics}")
 
@@ -377,7 +356,7 @@ def config_command(args):
         backend=args.backend,
         data_root=Path(args.data_root) if args.data_root else Path("./data"),
         output_dir=Path(args.output_dir) if args.output_dir else Path("./outputs"),
-        experiment_name=args.experiment_name
+        experiment_name=args.experiment_name,
     )
 
     output_path = Path(args.output)
@@ -388,6 +367,40 @@ def config_command(args):
     logging.info("Edit this file to customize your training configuration.")
 
 
+def _add_common_train_args(parser: argparse.ArgumentParser) -> None:
+    """Add common training arguments to a parser."""
+    parser.add_argument(
+        "--config", type=str, help="Path to configuration file (YAML). CLI arguments override config file values."
+    )
+    parser.add_argument("--data-root", type=str, help="Path to training data directory")
+    parser.add_argument("--output-dir", type=str, default="./outputs", help="Output directory for checkpoints and logs")
+    parser.add_argument("--experiment-name", type=str, default="crane_x7_vla", help="Experiment name")
+
+
+def _add_common_config_args(parser: argparse.ArgumentParser) -> dict[str, dict[str, tuple]]:
+    """Add common configuration arguments to a parser and return arg mappings."""
+    arg_mappings = {}
+
+    # Add training config arguments with "training" prefix
+    train_group = parser.add_argument_group("Training Configuration")
+    arg_mappings["training"] = add_dataclass_args_to_parser(train_group, TrainingConfig, prefix="training")
+
+    # Add overfitting config arguments with "overfitting" prefix
+    overfit_group = parser.add_argument_group("Overfitting Detection Configuration")
+    arg_mappings["overfitting"] = add_dataclass_args_to_parser(overfit_group, OverfittingConfig, prefix="overfitting")
+
+    # Add data config arguments with "data" prefix (excluding complex types)
+    data_group = parser.add_argument_group("Data Configuration")
+    arg_mappings["data"] = add_dataclass_args_to_parser(
+        data_group,
+        DataConfig,
+        prefix="data",
+        exclude_fields=["cameras", "data_root"],  # data_root handled separately
+    )
+
+    return arg_mappings
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -396,177 +409,98 @@ def main():
         epilog="""
 Examples:
   # Train with OpenVLA using default settings
-  python -m crane_x7_vla.training.cli train --backend openvla --data-root ./data --experiment-name my_experiment
+  python -m crane_x7_vla.training.cli train openvla --data-root ./data --experiment-name my_experiment
 
   # Train with OpenPI
-  python -m crane_x7_vla.training.cli train --backend openpi --data-root ./data --experiment-name my_experiment
+  python -m crane_x7_vla.training.cli train openpi --data-root ./data --experiment-name my_experiment
 
   # Train with custom configuration file and override specific settings
-  python -m crane_x7_vla.training.cli train --config my_config.yaml --training-batch-size 32 --training-learning-rate 1e-4
+  python -m crane_x7_vla.training.cli train openvla --config my_config.yaml --training-batch-size 32
 
-  # Override OpenVLA-specific settings
-  python -m crane_x7_vla.training.cli train --config my_config.yaml --openvla-lora-rank 16 --openvla-lora-dropout 0.1
+  # Override OpenVLA-specific settings (LoRA)
+  python -m crane_x7_vla.training.cli train openvla --data-root ./data --lora-rank 16 --lora-dropout 0.1
 
-  # Override overfitting detection settings
-  python -m crane_x7_vla.training.cli train --config my_config.yaml --overfitting-overfit-check-interval 1000
+  # Override OpenPI-specific settings
+  python -m crane_x7_vla.training.cli train openpi --data-root ./data --action-chunk-size 50
 
   # Generate default configuration
   python -m crane_x7_vla.training.cli config --backend openvla --output openvla_config.yaml
 
   # Evaluate trained model
   python -m crane_x7_vla.training.cli evaluate --config my_config.yaml --checkpoint ./outputs/checkpoint-1000
-        """
+        """,
     )
 
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose logging"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # =====================
-    # Train command
+    # Train command (with backend subcommands)
     # =====================
     train_parser = subparsers.add_parser(
         "train",
         help="Train a VLA model",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    train_subparsers = train_parser.add_subparsers(dest="backend", help="VLA backend to use")
 
-    # Basic arguments
-    train_parser.add_argument(
-        "--backend",
-        type=str,
-        choices=["openvla", "openpi"],
-        default="openvla",
-        help="VLA backend to use"
-    )
-    train_parser.add_argument(
-        "--config",
-        type=str,
-        help="Path to configuration file (YAML). CLI arguments override config file values."
-    )
-    train_parser.add_argument(
-        "--data-root",
-        type=str,
-        help="Path to training data directory"
-    )
-    train_parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="./outputs",
-        help="Output directory for checkpoints and logs"
-    )
-    train_parser.add_argument(
-        "--experiment-name",
-        type=str,
-        default="crane_x7_vla",
-        help="Experiment name"
-    )
+    # Store argument mappings for each backend
+    all_arg_mappings = {}
 
-    # Store argument mappings for applying overrides
-    arg_mappings = {}
-
-    # Add training config arguments with "training" prefix
-    train_group = train_parser.add_argument_group('Training Configuration')
-    arg_mappings['training'] = add_dataclass_args_to_parser(
-        train_group,
-        TrainingConfig,
-        prefix="training"
+    # ----- OpenVLA subcommand -----
+    openvla_parser = train_subparsers.add_parser(
+        "openvla",
+        help="Train with OpenVLA backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _add_common_train_args(openvla_parser)
+    all_arg_mappings["openvla"] = _add_common_config_args(openvla_parser)
 
-    # Add overfitting config arguments with "overfitting" prefix
-    overfit_group = train_parser.add_argument_group('Overfitting Detection Configuration')
-    arg_mappings['overfitting'] = add_dataclass_args_to_parser(
-        overfit_group,
-        OverfittingConfig,
-        prefix="overfitting"
-    )
-
-    # Add data config arguments with "data" prefix (excluding complex types)
-    data_group = train_parser.add_argument_group('Data Configuration')
-    arg_mappings['data'] = add_dataclass_args_to_parser(
-        data_group,
-        DataConfig,
-        prefix="data",
-        exclude_fields=['cameras', 'data_root']  # data_root handled separately
-    )
-
-    # Add OpenVLA-specific arguments
-    openvla_group = train_parser.add_argument_group('OpenVLA Configuration')
-    arg_mappings['openvla'] = add_dataclass_args_to_parser(
+    # Add OpenVLA-specific arguments (without prefix for cleaner CLI)
+    openvla_group = openvla_parser.add_argument_group("OpenVLA Configuration")
+    all_arg_mappings["openvla"]["openvla"] = add_dataclass_args_to_parser(
         openvla_group,
         OpenVLASpecificConfig,
-        prefix="openvla",
-        exclude_fields=['lora_target_modules', 'action_range', 'image_size']  # Complex types
+        prefix="",  # No prefix for backend-specific args
+        exclude_fields=["lora_target_modules", "action_range", "image_size"],  # Complex types
     )
 
-    # Add OpenPI-specific arguments
-    openpi_group = train_parser.add_argument_group('OpenPI Configuration')
-    arg_mappings['openpi'] = add_dataclass_args_to_parser(
+    # ----- OpenPI subcommand -----
+    openpi_parser = train_subparsers.add_parser(
+        "openpi",
+        help="Train with OpenPI backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_common_train_args(openpi_parser)
+    all_arg_mappings["openpi"] = _add_common_config_args(openpi_parser)
+
+    # Add OpenPI-specific arguments (without prefix for cleaner CLI)
+    openpi_group = openpi_parser.add_argument_group("OpenPI Configuration")
+    all_arg_mappings["openpi"]["openpi"] = add_dataclass_args_to_parser(
         openpi_group,
         OpenPISpecificConfig,
-        prefix="openpi",
-        exclude_fields=['image_size']  # Complex types
+        prefix="",  # No prefix for backend-specific args
+        exclude_fields=["image_size"],  # Complex types
     )
 
     # =====================
     # Evaluate command
     # =====================
     eval_parser = subparsers.add_parser("evaluate", help="Evaluate a trained model")
-    eval_parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Path to configuration file (YAML)"
-    )
-    eval_parser.add_argument(
-        "--checkpoint",
-        type=str,
-        required=True,
-        help="Path to model checkpoint"
-    )
-    eval_parser.add_argument(
-        "--test-data",
-        type=str,
-        help="Path to test dataset"
-    )
+    eval_parser.add_argument("--config", type=str, required=True, help="Path to configuration file (YAML)")
+    eval_parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
+    eval_parser.add_argument("--test-data", type=str, help="Path to test dataset")
 
     # =====================
     # Config command
     # =====================
     config_parser = subparsers.add_parser("config", help="Generate default configuration file")
-    config_parser.add_argument(
-        "--backend",
-        type=str,
-        choices=["openvla", "openpi"],
-        required=True,
-        help="VLA backend"
-    )
-    config_parser.add_argument(
-        "--output",
-        type=str,
-        default="config.yaml",
-        help="Output configuration file path"
-    )
-    config_parser.add_argument(
-        "--data-root",
-        type=str,
-        help="Path to training data directory"
-    )
-    config_parser.add_argument(
-        "--output-dir",
-        type=str,
-        help="Output directory for checkpoints and logs"
-    )
-    config_parser.add_argument(
-        "--experiment-name",
-        type=str,
-        default="crane_x7_vla",
-        help="Experiment name"
-    )
+    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi"], required=True, help="VLA backend")
+    config_parser.add_argument("--output", type=str, default="config.yaml", help="Output configuration file path")
+    config_parser.add_argument("--data-root", type=str, help="Path to training data directory")
+    config_parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints and logs")
+    config_parser.add_argument("--experiment-name", type=str, default="crane_x7_vla", help="Experiment name")
 
     args = parser.parse_args()
 
@@ -575,7 +509,10 @@ Examples:
 
     # Execute command
     if args.command == "train":
-        train_command(args, arg_mappings)
+        if args.backend is None:
+            train_parser.print_help()
+            sys.exit(1)
+        train_command(args, all_arg_mappings.get(args.backend, {}))
     elif args.command == "evaluate":
         evaluate_command(args)
     elif args.command == "config":

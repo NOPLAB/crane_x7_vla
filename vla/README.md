@@ -187,13 +187,24 @@ data/tfrecord_logs/
 ```bash
 cd vla
 docker compose --profile openvla run --rm vla-finetune-openvla \
-  python -m crane_x7_vla.training.cli train \
-    --backend openvla \
+  python -m crane_x7_vla.training.cli train openvla \
     --data-root /workspace/data/tfrecord_logs \
     --experiment-name crane_x7_openvla \
-    --batch-size 16 \
-    --learning-rate 5e-4 \
-    --num-epochs 100
+    --training-batch-size 16 \
+    --training-learning-rate 5e-4 \
+    --training-num-epochs 100
+```
+
+**LoRA設定をカスタマイズ**:
+
+```bash
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla \
+  python -m crane_x7_vla.training.cli train openvla \
+    --data-root /workspace/data/tfrecord_logs \
+    --experiment-name crane_x7_openvla \
+    --lora-rank 16 \
+    --lora-dropout 0.1
 ```
 
 **設定ファイルを使用**:
@@ -201,7 +212,7 @@ docker compose --profile openvla run --rm vla-finetune-openvla \
 ```bash
 cd vla
 docker compose --profile openvla run --rm vla-finetune-openvla \
-  python -m crane_x7_vla.training.cli train \
+  python -m crane_x7_vla.training.cli train openvla \
     --config /workspace/vla/configs/openvla_default.yaml
 ```
 
@@ -210,13 +221,12 @@ docker compose --profile openvla run --rm vla-finetune-openvla \
 ```bash
 cd vla
 docker compose --profile openvla run --rm vla-finetune-openvla \
-  torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train \
-    --backend openvla \
+  torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train openvla \
     --data-root /workspace/data/tfrecord_logs \
     --experiment-name crane_x7_openvla \
-    --batch-size 8 \
-    --learning-rate 5e-4 \
-    --num-epochs 100
+    --training-batch-size 8 \
+    --training-learning-rate 5e-4 \
+    --training-num-epochs 100
 ```
 
 チェックポイントは`/workspace/outputs/crane_x7_openvla/`に保存されます。
@@ -228,13 +238,23 @@ docker compose --profile openvla run --rm vla-finetune-openvla \
 ```bash
 cd vla
 docker compose --profile openpi run --rm vla-finetune-openpi \
-  python -m crane_x7_vla.training.cli train \
-    --backend openpi \
+  python -m crane_x7_vla.training.cli train openpi \
     --data-root /workspace/data/tfrecord_logs \
     --experiment-name crane_x7_openpi \
-    --batch-size 16 \
-    --learning-rate 5e-4 \
-    --num-epochs 100
+    --training-batch-size 16 \
+    --training-learning-rate 5e-4 \
+    --training-num-epochs 100
+```
+
+**アクションチャンクサイズをカスタマイズ**:
+
+```bash
+cd vla
+docker compose --profile openpi run --rm vla-finetune-openpi \
+  python -m crane_x7_vla.training.cli train openpi \
+    --data-root /workspace/data/tfrecord_logs \
+    --experiment-name crane_x7_openpi \
+    --action-chunk-size 50
 ```
 
 チェックポイントは`/workspace/outputs/crane_x7_openpi/`に保存されます。
@@ -265,49 +285,54 @@ python -m crane_x7_vla.training.cli evaluate \
 
 ### trainコマンド
 
+`train`コマンドはバックエンドごとにサブコマンドが分かれています:
+
 ```bash
-python -m crane_x7_vla.training.cli train [オプション]
+# OpenVLAでトレーニング
+python -m crane_x7_vla.training.cli train openvla [オプション]
+
+# OpenPIでトレーニング
+python -m crane_x7_vla.training.cli train openpi [オプション]
 ```
 
-#### 基本設定
+#### 共通オプション（両バックエンド共通）
 
 | 引数 | 説明 | デフォルト |
 |------|------|----------|
-| `--backend {openvla,openpi}` | 使用するVLAバックエンド | `openvla` |
 | `--config PATH` | YAML設定ファイルのパス | なし |
 | `--data-root PATH` | TFRecordデータディレクトリ | 必須（configなしの場合） |
 | `--output-dir PATH` | 出力ディレクトリ | `./outputs` |
 | `--experiment-name NAME` | 実験名 | `crane_x7_vla` |
 
-#### トレーニング設定
+#### トレーニング設定（`--training-*`プレフィックス）
 
 | 引数 | 説明 | デフォルト |
 |------|------|----------|
-| `--batch-size INT` | GPU毎のバッチサイズ | 16 |
-| `--num-epochs INT` | 学習エポック数 | 100 |
-| `--learning-rate FLOAT` | 学習率 | 5e-4 |
-| `--weight-decay FLOAT` | 重み減衰 | 0.01 |
-| `--gradient-checkpointing` | 勾配チェックポイントを有効化 | false |
+| `--training-batch-size INT` | GPU毎のバッチサイズ | 16 |
+| `--training-num-epochs INT` | 学習エポック数 | 100 |
+| `--training-learning-rate FLOAT` | 学習率 | 5e-4 |
+| `--training-weight-decay FLOAT` | 重み減衰 | 0.01 |
+| `--training-gradient-checkpointing` | 勾配チェックポイントを有効化 | false |
+| `--training-save-interval INT` | チェックポイント保存間隔 | 1000 |
+| `--training-eval-interval INT` | 検証実行間隔（ステップ） | 500 |
 
-#### 検証設定
-
-| 引数 | 説明 | デフォルト |
-|------|------|----------|
-| `--val-interval INT` | 検証実行間隔（ステップ） | 500 |
-| `--val-steps INT` | 検証時のバッチ数 | 50 |
-
-#### チェックポイント設定
-
-| 引数 | 説明 | デフォルト |
-|------|------|----------|
-| `--save-interval INT` | チェックポイント保存間隔 | 1000 |
-
-#### OpenVLA固有設定
+#### OpenVLA固有設定（`train openvla`サブコマンド）
 
 | 引数 | 説明 | デフォルト |
 |------|------|----------|
 | `--lora-rank INT` | LoRAランク | 32 |
+| `--lora-dropout FLOAT` | LoRAドロップアウト率 | 0.05 |
 | `--use-quantization` | 量子化を有効化（4-bit/8-bit） | false |
+| `--image-aug` | 画像拡張を有効化 | false |
+| `--skip-merge-on-save` | 保存時のLoRAマージをスキップ | false |
+
+#### OpenPI固有設定（`train openpi`サブコマンド）
+
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--action-chunk-size INT` | アクションチャンクサイズ | 50 |
+| `--action-horizon INT` | アクションホライズン | 100 |
+| `--use-proprio` | プロプリオセプション（固有感覚）を使用 | true |
 
 ### evaluateコマンド
 
@@ -526,9 +551,9 @@ processor = AutoProcessor.from_pretrained(
 
 ### メモリ不足（CUDA Out of Memory）
 
-1. `--batch-size`を減らす（例: 16 → 8）
-2. `--gradient-checkpointing`を有効化
-3. `--lora-rank`を減らす（例: 32 → 16）
+1. `--training-batch-size`を減らす（例: 16 → 8）
+2. `--training-gradient-checkpointing`を有効化
+3. `--lora-rank`を減らす（例: 32 → 16、OpenVLA）
 4. `--use-quantization`を有効化（OpenVLA）
 5. マルチGPUトレーニングを使用
 
