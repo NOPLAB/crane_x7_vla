@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 # ============================================================================
 # Slurm Job Submission Script with W&B Sweep Support
 # ============================================================================

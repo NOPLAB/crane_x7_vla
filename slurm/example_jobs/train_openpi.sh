@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 #SBATCH --job-name=crane_x7_openpi
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
