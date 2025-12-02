@@ -39,6 +39,12 @@ training:
   eval_interval: 500
   log_interval: 10
 
+# Validation settings for WANDB monitoring
+validation:
+  val_split_ratio: 0.1  # 10% of data for validation (0.0 to disable)
+  val_interval: 500     # Run validation every N gradient steps
+  val_steps: 50         # Number of batches to evaluate per validation run
+
 backend_config:
   # Model settings
   model_id: openvla/openvla-7b
@@ -72,3 +78,11 @@ backend_config:
   # Optimization
   use_flash_attention: false
   compile_model: false
+
+  # Checkpoint saving
+  # When true, only LoRA adapters are saved (faster, avoids NCCL timeout on multi-GPU)
+  # Use merge_lora.py to merge adapters into base model after training
+  skip_merge_on_save: true
+
+  # Data augmentation
+  image_aug: true

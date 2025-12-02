@@ -73,6 +73,7 @@ class CraneX7FinetuneConfig:
     max_steps: int = 200_000                                        # Max number of fine-tuning steps
     save_steps: int = 5000                                          # Interval for checkpoint saving
     learning_rate: float = 5e-4                                     # Fine-tuning learning rate
+    weight_decay: float = 0.01                                      # Weight decay for AdamW optimizer
     grad_accumulation_steps: int = 1                                # Gradient accumulation steps
     image_aug: bool = True                                          # Whether to train with image augmentations
     shuffle_buffer_size: int = 100_000                              # Dataloader shuffle buffer size (can reduce if OOM)
@@ -208,7 +209,7 @@ class CraneX7Trainer:
 
         # Create Optimizer =>> note that we default to a simple constant learning rate!
         trainable_params = [param for param in vla.parameters() if param.requires_grad]
-        optimizer = AdamW(trainable_params, lr=self.cfg.learning_rate)
+        optimizer = AdamW(trainable_params, lr=self.cfg.learning_rate, weight_decay=self.cfg.weight_decay)
 
         # Create Action Tokenizer
         action_tokenizer = ActionTokenizer(processor.tokenizer)
@@ -579,6 +580,7 @@ class OpenVLABackend(VLABackend):
             max_steps=self.vla_config.training.max_steps,
             save_steps=self.vla_config.training.save_interval,
             learning_rate=self.vla_config.training.learning_rate,
+            weight_decay=self.vla_config.training.weight_decay,
             grad_accumulation_steps=self.vla_config.training.gradient_accumulation_steps,
             image_aug=self.vla_config.openvla.image_aug if hasattr(self.vla_config.openvla, 'image_aug') else True,
             shuffle_buffer_size=self.vla_config.data.shuffle_buffer_size if hasattr(self.vla_config.data, 'shuffle_buffer_size') else 100_000,

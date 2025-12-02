@@ -120,12 +120,18 @@ def train_command(args):
         config.training.num_epochs = args.num_epochs
     if args.gradient_checkpointing:
         config.training.gradient_checkpointing = True
+    if args.weight_decay is not None:
+        config.training.weight_decay = args.weight_decay
 
     # Override validation settings
     if args.val_interval:
         config.validation.val_interval = args.val_interval
     if args.val_steps:
         config.validation.val_steps = args.val_steps
+
+    # Override checkpoint settings
+    if args.save_interval:
+        config.training.save_interval = args.save_interval
 
     # Override backend-specific settings (OpenVLA)
     if config.backend == "openvla":
@@ -295,6 +301,16 @@ Examples:
         "--val-steps",
         type=int,
         help="Number of validation steps per evaluation"
+    )
+    train_parser.add_argument(
+        "--save-interval",
+        type=int,
+        help="Save checkpoint every N steps"
+    )
+    train_parser.add_argument(
+        "--weight-decay",
+        type=float,
+        help="Weight decay for regularization (default: 0.01)"
     )
 
     # Evaluate command

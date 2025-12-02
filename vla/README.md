@@ -32,18 +32,21 @@ vla/
 │   ├── crane_x7_vla/          # 統一されたトレーニングCLI
 │   │   ├── training/
 │   │   │   ├── cli.py         # メインCLIエントリポイント
-│   │   │   ├── config.py      # 設定データクラス
 │   │   │   └── trainer.py     # トレーニングロジック
 │   │   ├── backends/          # バックエンド固有の実装
 │   │   │   ├── openvla.py     # OpenVLAバックエンド
 │   │   │   ├── openpi.py      # OpenPIバックエンド
 │   │   │   └── base.py        # 基底クラス
 │   │   ├── config/            # 設定モジュール
+│   │   │   ├── base.py        # 基本設定（UnifiedVLAConfig等）
+│   │   │   ├── openvla_config.py  # OpenVLA固有設定
+│   │   │   └── openpi_config.py   # OpenPI固有設定
 │   │   ├── data/              # データローダー
-│   │   └── transforms/        # データ変換
+│   │   ├── transforms/        # データ変換
+│   │   └── scripts/           # ユーティリティスクリプト
+│   │       └── merge_lora.py  # LoRAアダプターマージスクリプト
 │   ├── openvla/               # OpenVLAサブモジュール
 │   └── openpi/                # OpenPIサブモジュール
-├── test_crane_x7_loader.py    # データセット検証スクリプト
 └── README.md                  # このファイル
 ```
 
@@ -70,9 +73,16 @@ HF_TOKEN=your_huggingface_token
 
 # Weights & Biases API key (ロギング用、オプション)
 WANDB_API_KEY=your_wandb_api_key
+WANDB_MODE=disabled  # disabled, online, offline
 
 # GPU設定
 CUDA_VISIBLE_DEVICES=0  # 使用するGPU ID（カンマ区切りで複数指定可能）
+GPU_COUNT=all           # 使用するGPU数
+
+# ユーザー設定（パーミッション用）
+USER_ID=1000   # id -u で取得
+GROUP_ID=1000  # id -g で取得
+USERNAME=vla
 ```
 
 #### OpenVLA環境構築
@@ -168,23 +178,7 @@ data/tfrecord_logs/
 
 ## クイックスタート
 
-### 1. データセット検証
-
-データセットが正しく読み込めることを確認:
-
-```bash
-cd vla
-
-# OpenVLAコンテナ内で
-docker compose --profile openvla run --rm vla-finetune-openvla \
-  python3 /workspace/vla/test_crane_x7_loader.py
-
-# OpenPIコンテナ内で
-docker compose --profile openpi run --rm vla-finetune-openpi \
-  python3 /workspace/vla/test_crane_x7_loader.py
-```
-
-### 2. ファインチューニングの実行
+### 1. ファインチューニングの実行
 
 #### OpenVLAファインチューニング
 
@@ -200,6 +194,15 @@ docker compose --profile openvla run --rm vla-finetune-openvla \
     --batch-size 16 \
     --learning-rate 5e-4 \
     --num-epochs 100
+```
+
+**設定ファイルを使用**:
+
+```bash
+cd vla
+docker compose --profile openvla run --rm vla-finetune-openvla \
+  python -m crane_x7_vla.training.cli train \
+    --config /workspace/vla/configs/openvla_default.yaml
 ```
 
 **マルチGPU（例: 2台）**:
@@ -229,73 +232,197 @@ docker compose --profile openpi run --rm vla-finetune-openpi \
     --backend openpi \
     --data-root /workspace/data/tfrecord_logs \
     --experiment-name crane_x7_openpi \
-    --batch-size 32 \
-    --learning-rate 3e-4 \
+    --batch-size 16 \
+    --learning-rate 5e-4 \
     --num-epochs 100
 ```
 
 チェックポイントは`/workspace/outputs/crane_x7_openpi/`に保存されます。
 
-### 3. Weights & Biasロギング
+### 2. デフォルト設定ファイルの生成
 
-トレーニング進行状況を追跡するため、W&Bを有効化:
+カスタム設定ファイルを生成してから編集:
 
 ```bash
-python -m crane_x7_vla.training.cli train \
+python -m crane_x7_vla.training.cli config \
   --backend openvla \
-  --data-root /workspace/data/tfrecord_logs \
-  --experiment-name crane_x7_openvla \
-  --use-wandb \
-  --wandb-project crane-x7-vla \
-  --wandb-entity your-username
+  --output my_config.yaml \
+  --data-root ./data \
+  --experiment-name my_experiment
+```
+
+### 3. 評価
+
+```bash
+python -m crane_x7_vla.training.cli evaluate \
+  --config my_config.yaml \
+  --checkpoint /workspace/outputs/crane_x7_openvla/checkpoint-5000
 ```
 
 ## CLI引数
 
-`crane_x7_vla.training.cli`は以下の引数をサポートしています:
+`crane_x7_vla.training.cli`は3つのサブコマンドをサポートしています: `train`, `evaluate`, `config`
 
-### 必須引数
+### trainコマンド
 
-- `--backend {openvla,openpi}`: 使用するVLAバックエンド
+```bash
+python -m crane_x7_vla.training.cli train [オプション]
+```
 
-### データ設定
+#### 基本設定
 
-- `--data-root PATH`: TFRecordデータディレクトリ（デフォルト: `/workspace/data/tfrecord_logs`）
-- `--instruction TEXT`: タスク指示（デフォルト: `"Pick and place the object"`）
-- `--image-size WIDTHxHEIGHT`: 画像サイズ（デフォルト: `224x224`）
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--backend {openvla,openpi}` | 使用するVLAバックエンド | `openvla` |
+| `--config PATH` | YAML設定ファイルのパス | なし |
+| `--data-root PATH` | TFRecordデータディレクトリ | 必須（configなしの場合） |
+| `--output-dir PATH` | 出力ディレクトリ | `./outputs` |
+| `--experiment-name NAME` | 実験名 | `crane_x7_vla` |
 
-### トレーニング設定
+#### トレーニング設定
 
-- `--batch-size INT`: GPU毎のバッチサイズ（デフォルト: OpenVLA=16, OpenPI=32）
-- `--num-epochs INT`: 学習エポック数（デフォルト: 100）
-- `--learning-rate FLOAT`: 学習率（デフォルト: OpenVLA=5e-4, OpenPI=3e-4）
-- `--grad-accumulation-steps INT`: 勾配蓄積ステップ数（デフォルト: 1）
-- `--warmup-ratio FLOAT`: ウォームアップ比率（デフォルト: 0.1）
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--batch-size INT` | GPU毎のバッチサイズ | 16 |
+| `--num-epochs INT` | 学習エポック数 | 100 |
+| `--learning-rate FLOAT` | 学習率 | 5e-4 |
+| `--weight-decay FLOAT` | 重み減衰 | 0.01 |
+| `--gradient-checkpointing` | 勾配チェックポイントを有効化 | false |
 
-### LoRA設定（OpenVLAのみ）
+#### 検証設定
 
-- `--use-lora`: LoRAファインチューニングを有効化（デフォルト: True）
-- `--lora-rank INT`: LoRAランク（デフォルト: 32）
-- `--lora-alpha INT`: LoRAアルファ（デフォルト: 64）
-- `--lora-dropout FLOAT`: LoRAドロップアウト（デフォルト: 0.1）
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--val-interval INT` | 検証実行間隔（ステップ） | 500 |
+| `--val-steps INT` | 検証時のバッチ数 | 50 |
 
-### 出力設定
+#### チェックポイント設定
 
-- `--experiment-name NAME`: 実験名（デフォルト: `crane_x7_{backend}`）
-- `--output-dir PATH`: 出力ディレクトリ（デフォルト: `/workspace/outputs/{experiment_name}`）
-- `--save-steps INT`: チェックポイント保存間隔（デフォルト: 500）
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--save-interval INT` | チェックポイント保存間隔 | 1000 |
 
-### ロギング設定
+#### OpenVLA固有設定
 
-- `--use-wandb`: Weights & Biasロギングを有効化
-- `--wandb-project NAME`: W&Bプロジェクト名
-- `--wandb-entity NAME`: W&Bエンティティ名
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--lora-rank INT` | LoRAランク | 32 |
+| `--use-quantization` | 量子化を有効化（4-bit/8-bit） | false |
 
-### その他
+### evaluateコマンド
 
-- `--gradient-checkpointing`: メモリ効率化のため勾配チェックポイントを有効化
-- `--num-workers INT`: データローダーワーカー数（デフォルト: 4）
-- `--seed INT`: 乱数シード（デフォルト: 42）
+```bash
+python -m crane_x7_vla.training.cli evaluate [オプション]
+```
+
+| 引数 | 説明 |
+|------|------|
+| `--config PATH` | YAML設定ファイルのパス（必須） |
+| `--checkpoint PATH` | チェックポイントのパス（必須） |
+| `--test-data PATH` | テストデータのパス（オプション） |
+
+### configコマンド
+
+```bash
+python -m crane_x7_vla.training.cli config [オプション]
+```
+
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--backend {openvla,openpi}` | VLAバックエンド（必須） | - |
+| `--output PATH` | 出力設定ファイルパス | `config.yaml` |
+| `--data-root PATH` | データディレクトリ | `./data` |
+| `--output-dir PATH` | 出力ディレクトリ | `./outputs` |
+| `--experiment-name NAME` | 実験名 | `crane_x7_vla` |
+
+## 設定ファイル（YAML）
+
+YAML設定ファイルを使用すると、より詳細なトレーニング設定が可能です。
+
+### 基本構造
+
+```yaml
+# バックエンドと基本設定
+backend: openvla  # または openpi
+output_dir: ./outputs/openvla
+experiment_name: crane_x7_openvla
+seed: 42
+resume_from_checkpoint: null
+
+# データ設定
+data:
+  data_root: ./data/tfrecord_logs
+  format: tfrecord
+  train_split: 0.9
+  val_split: 0.1
+  shuffle: true
+  num_workers: 4
+  prefetch_factor: 2
+  cameras:
+    - name: primary
+      topic: /camera/color/image_raw
+      enabled: true
+      width: 640
+      height: 480
+
+# トレーニング設定
+training:
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  warmup_steps: 1000
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  mixed_precision: bf16
+  gradient_checkpointing: false
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10
+
+# 検証設定
+validation:
+  val_split_ratio: 0.1
+  val_interval: 500
+  val_steps: 50
+
+# バックエンド固有設定（backend_config）
+backend_config:
+  model_id: openvla/openvla-7b
+  use_lora: true
+  lora_rank: 32
+  lora_alpha: 16
+  lora_dropout: 0.05
+  # ... 詳細は configs/ 内のサンプルを参照
+```
+
+### サンプル設定ファイル
+
+- `configs/openvla_default.yaml`: OpenVLA用のデフォルト設定
+- `configs/openpi_default.yaml`: OpenPI用のデフォルト設定
+
+## LoRAアダプターのマージ
+
+トレーニング後、LoRAアダプターをベースモデルにマージして推論用のスタンドアロンモデルを作成できます。
+
+### 使い方
+
+```bash
+python -m crane_x7_vla.scripts.merge_lora \
+  --adapter_path /workspace/outputs/crane_x7_openvla/lora_adapters \
+  --output_path /workspace/outputs/crane_x7_openvla_merged \
+  --base_model openvla/openvla-7b
+```
+
+### 引数
+
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--adapter_path` | LoRAアダプターのディレクトリ（必須） | - |
+| `--output_path` | マージ済みモデルの保存先（必須） | - |
+| `--base_model` | ベースモデルのHF ID | `openvla/openvla-7b` |
+| `--no_copy_processor` | プロセッサファイルをコピーしない | false |
+| `--no_copy_statistics` | データセット統計をコピーしない | false |
 
 ## メモリ要件
 
@@ -325,14 +452,12 @@ OpenPIはJAX/Flaxベースで、異なるメモリ特性を持ちます:
    - プロセッサ設定
    - トレーニング状態（オプティマイザ、スケジューラ）
 
-2. **ログ**:
-   - コンソール出力（損失、学習率、進行状況）
-   - Weights & Biases（有効時）
-   - TensorBoard（`{output_dir}/tensorboard/`）
+2. **設定ファイル**:
+   - `{output_dir}/config.yaml`: トレーニング設定
 
-3. **設定ファイル**:
-   - `{output_dir}/training_config.json`: トレーニング設定
-   - `{output_dir}/model_config.json`: モデル設定
+3. **ログ**:
+   - コンソール出力（損失、学習率、進行状況）
+   - Weights & Biases（WANDB_MODE=onlineの場合）
 
 ## ファインチューニング済みモデルの使用
 
@@ -353,12 +478,12 @@ base_model = AutoModelForVision2Seq.from_pretrained(
 # LoRAアダプターを読み込み
 model = PeftModel.from_pretrained(
     base_model,
-    "/workspace/outputs/crane_x7_openvla/checkpoint-5000"
+    "/workspace/outputs/crane_x7_openvla/lora_adapters"
 )
 
 # プロセッサを読み込み
 processor = AutoProcessor.from_pretrained(
-    "/workspace/outputs/crane_x7_openvla/checkpoint-5000",
+    "openvla/openvla-7b",
     trust_remote_code=True
 )
 
@@ -378,11 +503,23 @@ with torch.no_grad():
     action = processor.decode(outputs[0], skip_special_tokens=True)
 ```
 
-### OpenPIモデルの読み込み
+### マージ済みモデルの読み込み
 
 ```python
-# OpenPI固有のロード方法については、
-# src/crane_x7_vla/backends/openpi_wrapper.py を参照してください
+from transformers import AutoModelForVision2Seq, AutoProcessor
+import torch
+
+# マージ済みモデルを直接読み込み
+model = AutoModelForVision2Seq.from_pretrained(
+    "/workspace/outputs/crane_x7_openvla_merged",
+    torch_dtype=torch.bfloat16,
+    trust_remote_code=True
+)
+
+processor = AutoProcessor.from_pretrained(
+    "/workspace/outputs/crane_x7_openvla_merged",
+    trust_remote_code=True
+)
 ```
 
 ## トラブルシューティング
@@ -390,9 +527,9 @@ with torch.no_grad():
 ### メモリ不足（CUDA Out of Memory）
 
 1. `--batch-size`を減らす（例: 16 → 8）
-2. `--grad-accumulation-steps`を増やす（例: 1 → 2）
-3. `--gradient-checkpointing`を有効化
-4. `--lora-rank`を減らす（例: 32 → 16）
+2. `--gradient-checkpointing`を有効化
+3. `--lora-rank`を減らす（例: 32 → 16）
+4. `--use-quantization`を有効化（OpenVLA）
 5. マルチGPUトレーニングを使用
 
 ### tokenizers/transformersバージョンエラー
@@ -417,17 +554,14 @@ ls -lh /workspace/data/tfrecord_logs/
 
 # データセット統計を確認
 cat /workspace/data/tfrecord_logs/dataset_statistics.json
-
-# TFRecordファイルを検証
-python3 /workspace/vla/test_crane_x7_loader.py
 ```
 
 ### トレーニングが遅い
 
-1. `--num-workers`を増やす（例: 4 → 8）
-2. Flash Attention 2を有効化（OpenVLA）
+1. データローダーワーカー数を増やす（設定ファイルの`num_workers`）
+2. Flash Attention 2を有効化（OpenVLA、設定ファイルの`use_flash_attention`）
 3. マルチGPUトレーニングを使用（`torchrun`）
-4. より小さい画像サイズを使用（例: `--image-size 224x224`）
+4. より小さい画像サイズを使用（設定ファイルの`image_size`）
 
 ### JAX/Flaxエラー（OpenPI使用時）
 
@@ -444,46 +578,10 @@ export JAX_PLATFORMS=cuda
 
 ```bash
 # .envファイルでHF_TOKENが設定されているか確認
-cat ros2/.env | grep HF_TOKEN
+cat vla/.env | grep HF_TOKEN
 
 # または環境変数で設定
 export HF_TOKEN=your_huggingface_token
-```
-
-## 高度な使い方
-
-### カスタムデータセット指示
-
-複数の指示でトレーニング:
-
-```bash
-python -m crane_x7_vla.training.cli train \
-  --backend openvla \
-  --instruction "Pick up the {color} block and place it in the {location}"
-```
-
-### 画像なしのトレーニング（状態のみ）
-
-```bash
-python -m crane_x7_vla.training.cli train \
-  --backend openvla \
-  --no-use-image
-```
-
-### チェックポイントから再開
-
-```bash
-python -m crane_x7_vla.training.cli train \
-  --backend openvla \
-  --resume-from-checkpoint /workspace/outputs/crane_x7_openvla/checkpoint-5000
-```
-
-### カスタムモデルパス
-
-```bash
-python -m crane_x7_vla.training.cli train \
-  --backend openvla \
-  --vla-path openvla/openvla-7b-rlhf
 ```
 
 ## デプロイメント
@@ -493,7 +591,7 @@ python -m crane_x7_vla.training.cli train \
 ```bash
 # VLA推論ノードを起動
 ros2 launch crane_x7_vla vla_inference.launch.py \
-  model_path:=/workspace/outputs/crane_x7_openvla/checkpoint-5000
+  model_path:=/workspace/outputs/crane_x7_openvla_merged
 ```
 
 詳細については、[crane_x7_vla ROS 2パッケージ](../ros2/src/crane_x7_vla/)を参照してください。
