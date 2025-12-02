@@ -140,6 +140,11 @@ class CraneX7Dataset(IterableDataset):
 
     This implementation matches the original OpenVLA RLDSDataset,
     including BOUNDS_Q99 normalization and image augmentation.
+
+    For overfitting detection, the dataset splits individual steps (not episodes)
+    into train/overfit sets using a deterministic hash-based approach.
+    This ensures the overfit set contains steps from the same episodes as training,
+    allowing proper detection of memorization vs generalization.
     """
 
     # TFRecord feature description for CRANE-X7 format
@@ -161,8 +166,9 @@ class CraneX7Dataset(IterableDataset):
         shuffle_buffer_size: int = 256_000,
         train: bool = True,
         image_aug: bool = False,
-        val_split_ratio: float = 0.0,
+        overfit_split_ratio: float = 0.0,
         split: str = "train",
+        split_seed: int = 42,
     ) -> None:
         """
         Lightweight wrapper around TFRecord pipeline for use with PyTorch/OpenVLA Data Loaders.
@@ -177,8 +183,10 @@ class CraneX7Dataset(IterableDataset):
             shuffle_buffer_size: Buffer size for shuffling (default: 256_000 to match OpenVLA)
             train: Whether this is training set
             image_aug: Whether to apply image augmentation (matches OpenVLA finetune.py)
-            val_split_ratio: Ratio of data to use for validation (0.0 to disable split)
-            split: Dataset split to use ("train" or "val")
+            overfit_split_ratio: Ratio of steps to use for overfitting detection (0.0 to disable)
+                                 Steps are split deterministically within each episode.
+            split: Dataset split to use ("train" or "overfit")
+            split_seed: Random seed for deterministic step-level splitting
         """
         super().__init__()
         self.data_root_dir = Path(data_root_dir)
@@ -188,24 +196,16 @@ class CraneX7Dataset(IterableDataset):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.train = train
         self.image_aug = image_aug
-        self.val_split_ratio = val_split_ratio
+        self.overfit_split_ratio = overfit_split_ratio
         self.split = split
+        self.split_seed = split_seed
 
-        # Find TFRecord files
-        all_tfrecord_files = self._find_tfrecord_files()
-
-        # Split files into train/val if val_split_ratio > 0
-        if val_split_ratio > 0 and len(all_tfrecord_files) > 1:
-            n_val = max(1, int(len(all_tfrecord_files) * val_split_ratio))
-            # Use last N files for validation (deterministic split)
-            if split == "val":
-                self.tfrecord_files = all_tfrecord_files[-n_val:]
-            else:
-                self.tfrecord_files = all_tfrecord_files[:-n_val]
-        else:
-            self.tfrecord_files = all_tfrecord_files
+        # Find all TFRecord files (use all files for both splits)
+        self.tfrecord_files = self._find_tfrecord_files()
 
         print(f"Found {len(self.tfrecord_files)} TFRecord files for {split} split in {self.data_root_dir}")
+        if overfit_split_ratio > 0:
+            print(f"  Using step-level splitting with {overfit_split_ratio:.1%} for overfitting detection")
 
         # Compute or load dataset statistics (matches OpenVLA behavior)
         self.dataset_statistics = self._get_dataset_statistics()
@@ -418,6 +418,39 @@ class CraneX7Dataset(IterableDataset):
             "dataset_name": example["dataset_name"],
         }
 
+    def _should_include_step(self, step_index: tf.Tensor) -> tf.Tensor:
+        """
+        Determine if a step should be included based on split type.
+
+        Uses a deterministic hash-based approach to split steps within episodes.
+        This ensures reproducible splits regardless of data order.
+
+        Args:
+            step_index: Global step index in the dataset
+
+        Returns:
+            Boolean tensor indicating if this step should be included
+        """
+        if self.overfit_split_ratio <= 0:
+            return tf.constant(True)
+
+        # Use deterministic hash for splitting
+        # Hash the step index with the seed to get a pseudo-random value
+        hash_value = tf.bitwise.bitwise_xor(
+            tf.cast(step_index, tf.int64),
+            tf.constant(self.split_seed, dtype=tf.int64)
+        )
+        # Use modulo to get a value in [0, 1000)
+        mod_value = tf.math.abs(hash_value) % 1000
+        threshold = tf.cast(self.overfit_split_ratio * 1000, tf.int64)
+
+        if self.split == "overfit":
+            # Include steps where mod_value < threshold (overfit set)
+            return mod_value < threshold
+        else:
+            # Include steps where mod_value >= threshold (train set)
+            return mod_value >= threshold
+
     def _create_tf_dataset(self) -> tf.data.Dataset:
         """Create TensorFlow dataset pipeline with normalization and augmentation."""
         # Create dataset from TFRecord files
@@ -426,11 +459,25 @@ class CraneX7Dataset(IterableDataset):
             num_parallel_reads=tf.data.AUTOTUNE,
         )
 
-        # Parse examples
+        # Add step index for deterministic splitting
+        dataset = dataset.enumerate()
+
+        # Parse examples and add step index
+        def parse_with_index(index, example_proto):
+            parsed = self._parse_example(example_proto)
+            parsed["_step_index"] = index
+            return parsed
+
         dataset = dataset.map(
-            self._parse_example,
+            parse_with_index,
             num_parallel_calls=16,  # Match OpenVLA: num_parallel_calls=16
         )
+
+        # Filter based on train/overfit split (step-level splitting)
+        if self.overfit_split_ratio > 0:
+            dataset = dataset.filter(
+                lambda x: self._should_include_step(x["_step_index"])
+            )
 
         # Process: decode image, normalize action, apply augmentation
         dataset = dataset.map(

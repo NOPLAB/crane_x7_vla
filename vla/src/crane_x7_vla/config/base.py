@@ -74,17 +74,21 @@ class DataConfig:
 
 
 @dataclass
-class ValidationConfig:
-    """Configuration for validation during training."""
+class OverfittingConfig:
+    """Configuration for overfitting detection during training.
 
-    val_split_ratio: float = 0.1
-    """Ratio of data to use for validation (0.0 to disable)"""
+    Uses step-level splitting (not episode-level) to properly detect
+    memorization by holding out random steps from the same episodes.
+    """
 
-    val_interval: int = 500
-    """Run validation every N gradient steps"""
+    overfit_split_ratio: float = 0.1
+    """Ratio of steps to use for overfitting detection (0.0 to disable)"""
 
-    val_steps: int = 50
-    """Number of validation steps per evaluation"""
+    overfit_check_interval: int = 500
+    """Check overfitting every N gradient steps"""
+
+    overfit_check_steps: int = 50
+    """Number of steps per overfitting check"""
 
 
 @dataclass
@@ -149,8 +153,8 @@ class UnifiedVLAConfig:
     training: TrainingConfig
     """Training configuration"""
 
-    validation: ValidationConfig = field(default_factory=ValidationConfig)
-    """Validation configuration"""
+    overfitting: OverfittingConfig = field(default_factory=OverfittingConfig)
+    """Overfitting detection configuration"""
 
     output_dir: Union[str, Path] = "./outputs"
     """Output directory for checkpoints and logs"""
@@ -205,15 +209,15 @@ class UnifiedVLAConfig:
         training_config_dict = config_dict.pop('training', {})
         training_config = TrainingConfig(**training_config_dict)
 
-        # Parse validation config
-        validation_config_dict = config_dict.pop('validation', {})
-        validation_config = ValidationConfig(**validation_config_dict) if validation_config_dict else ValidationConfig()
+        # Parse overfitting config
+        overfitting_config_dict = config_dict.pop('overfitting', {})
+        overfitting_config = OverfittingConfig(**overfitting_config_dict) if overfitting_config_dict else OverfittingConfig()
 
         # Create main config
         return cls(
             data=data_config,
             training=training_config,
-            validation=validation_config,
+            overfitting=overfitting_config,
             **config_dict
         )
 
@@ -268,10 +272,10 @@ class UnifiedVLAConfig:
                 'eval_interval': self.training.eval_interval,
                 'log_interval': self.training.log_interval,
             },
-            'validation': {
-                'val_split_ratio': self.validation.val_split_ratio,
-                'val_interval': self.validation.val_interval,
-                'val_steps': self.validation.val_steps,
+            'overfitting': {
+                'overfit_split_ratio': self.overfitting.overfit_split_ratio,
+                'overfit_check_interval': self.overfitting.overfit_check_interval,
+                'overfit_check_steps': self.overfitting.overfit_check_steps,
             },
             'backend_config': self.backend_config
         }

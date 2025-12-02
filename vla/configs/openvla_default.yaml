@@ -39,11 +39,12 @@ training:
   eval_interval: 500
   log_interval: 10
 
-# Validation settings for WANDB monitoring
-validation:
-  val_split_ratio: 0.1  # 10% of data for validation (0.0 to disable)
-  val_interval: 500     # Run validation every N gradient steps
-  val_steps: 50         # Number of batches to evaluate per validation run
+# Overfitting detection settings for WANDB monitoring
+# Uses step-level splitting (not episode-level) to properly detect memorization
+overfitting:
+  overfit_split_ratio: 0.1      # 10% of steps for overfitting detection (0.0 to disable)
+  overfit_check_interval: 500   # Check overfitting every N gradient steps
+  overfit_check_steps: 50       # Number of batches to evaluate per overfitting check
 
 backend_config:
   # Model settings

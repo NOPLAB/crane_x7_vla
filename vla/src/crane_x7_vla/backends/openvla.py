@@ -77,14 +77,11 @@ class CraneX7FinetuneConfig:
     grad_accumulation_steps: int = 1                                # Gradient accumulation steps
     image_aug: bool = True                                          # Whether to train with image augmentations
     shuffle_buffer_size: int = 100_000                              # Dataloader shuffle buffer size (can reduce if OOM)
-    save_latest_checkpoint_only: bool = True                        # Whether to save only one checkpoint per run and
-                                                                    #   continually overwrite the latest checkpoint
-                                                                    #   (If False, saves all checkpoints)
 
-    # Validation Parameters
-    val_split_ratio: float = 0.1                                    # Ratio of data to use for validation (0.0 to disable)
-    val_interval: int = 500                                         # Run validation every N gradient steps
-    val_steps: int = 50                                             # Number of validation steps per evaluation
+    # Overfitting Detection Parameters
+    overfit_split_ratio: float = 0.1                                # Ratio of steps for overfitting detection (0.0 to disable)
+    overfit_check_interval: int = 500                               # Check overfitting every N gradient steps
+    overfit_check_steps: int = 50                                   # Number of steps per overfitting check
 
     # LoRA Arguments
     use_lora: bool = True                                           # Whether to use LoRA fine-tuning
@@ -222,7 +219,7 @@ class CraneX7Trainer:
             prompt_builder_fn=PurePromptBuilder if "v01" not in self.cfg.vla_path else VicunaV15ChatPromptBuilder,
         )
 
-        # Create training dataset (with optional train/val split)
+        # Create training dataset (with optional step-level split for overfitting detection)
         vla_dataset = CraneX7Dataset(
             self.cfg.data_root_dir,
             self.cfg.dataset_name,
@@ -230,24 +227,25 @@ class CraneX7Trainer:
             resize_resolution=tuple(unwrapped_vla.config.image_sizes),
             shuffle_buffer_size=self.cfg.shuffle_buffer_size,
             image_aug=self.cfg.image_aug,
-            val_split_ratio=self.cfg.val_split_ratio,
+            overfit_split_ratio=self.cfg.overfit_split_ratio,
             split="train",
         )
 
-        # Create validation dataset if val_split_ratio > 0
-        val_dataset = None
-        val_dataloader = None
-        if self.cfg.val_split_ratio > 0:
-            val_dataset = CraneX7Dataset(
+        # Create overfitting detection dataset if overfit_split_ratio > 0
+        # This dataset uses step-level splitting (not episode-level) to properly detect overfitting
+        overfit_dataset = None
+        overfit_dataloader = None
+        if self.cfg.overfit_split_ratio > 0:
+            overfit_dataset = CraneX7Dataset(
                 self.cfg.data_root_dir,
                 self.cfg.dataset_name,
                 batch_transform,
                 resize_resolution=tuple(unwrapped_vla.config.image_sizes),
-                shuffle_buffer_size=1000,  # Small buffer for validation
-                image_aug=False,  # No augmentation for validation
-                val_split_ratio=self.cfg.val_split_ratio,
-                split="val",
-                train=False,  # Don't repeat validation data
+                shuffle_buffer_size=1000,  # Small buffer for overfitting check
+                image_aug=False,  # No augmentation for overfitting check
+                overfit_split_ratio=self.cfg.overfit_split_ratio,
+                split="overfit",
+                train=False,  # Don't repeat overfitting check data
             )
 
         # [Important] Save Dataset Statistics =>> used to de-normalize actions for inference!
@@ -266,10 +264,10 @@ class CraneX7Trainer:
             num_workers=0,  # Important =>> Set to 0 if using RLDS; TFDS rolls its own parallelism!
         )
 
-        # Create validation dataloader if validation is enabled
-        if val_dataset is not None:
-            val_dataloader = DataLoader(
-                val_dataset,
+        # Create overfitting check dataloader if enabled
+        if overfit_dataset is not None:
+            overfit_dataloader = DataLoader(
+                overfit_dataset,
                 batch_size=self.cfg.batch_size,
                 sampler=None,
                 collate_fn=collator,
@@ -356,51 +354,58 @@ class CraneX7Trainer:
                     optimizer.zero_grad()
                     progress.update()
 
-                    # Run Validation at specified interval
+                    # Run overfitting check at specified interval
                     if (
-                        val_dataloader is not None
+                        overfit_dataloader is not None
                         and gradient_step_idx > 0
-                        and gradient_step_idx % self.cfg.val_interval == 0
+                        and gradient_step_idx % self.cfg.overfit_check_interval == 0
                     ):
-                        val_metrics = self._run_validation(
+                        overfit_metrics = self._run_overfit_check(
                             vla=vla,
-                            val_dataloader=val_dataloader,
+                            overfit_dataloader=overfit_dataloader,
                             device_id=device_id,
                             unwrapped_vla=unwrapped_vla,
                             action_tokenizer=action_tokenizer,
                             distributed_state=distributed_state,
                         )
 
-                        # Log validation metrics to W&B
+                        # Log overfitting metrics to W&B
                         if distributed_state.is_main_process:
                             wandb.log(
                                 {
-                                    "val_loss": val_metrics["val_loss"],
-                                    "val_action_accuracy": val_metrics["val_action_accuracy"],
-                                    "val_l1_loss": val_metrics["val_l1_loss"],
+                                    "overfit_loss": overfit_metrics["overfit_loss"],
+                                    "overfit_action_accuracy": overfit_metrics["overfit_action_accuracy"],
+                                    "overfit_l1_loss": overfit_metrics["overfit_l1_loss"],
                                 },
                                 step=gradient_step_idx,
                             )
                             print(
-                                f"[Step {gradient_step_idx}] Val Loss: {val_metrics['val_loss']:.4f}, "
-                                f"Val Accuracy: {val_metrics['val_action_accuracy']:.4f}, "
-                                f"Val L1: {val_metrics['val_l1_loss']:.4f}"
+                                f"[Step {gradient_step_idx}] Overfit Loss: {overfit_metrics['overfit_loss']:.4f}, "
+                                f"Overfit Accuracy: {overfit_metrics['overfit_action_accuracy']:.4f}, "
+                                f"Overfit L1: {overfit_metrics['overfit_l1_loss']:.4f}"
                             )
 
                         # Return model to training mode
                         vla.train()
 
-                # Save Model Checkpoint =>> by default, only keeps the latest checkpoint, continually overwriting it!
+                # Save Model Checkpoint
                 if gradient_step_idx > 0 and gradient_step_idx % self.cfg.save_steps == 0:
                     if distributed_state.is_main_process:
                         print(f"Saving Model Checkpoint for Step {gradient_step_idx}")
 
+                        # Create checkpoint directory with step number
+                        checkpoint_dir = run_dir / f"checkpoint-{gradient_step_idx}"
+                        os.makedirs(checkpoint_dir, exist_ok=True)
+
                         # Save Processor
-                        processor.save_pretrained(run_dir)
+                        processor.save_pretrained(checkpoint_dir)
+
+                        # Save dataset statistics
+                        save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
 
                         if self.cfg.use_lora:
-                            # Save adapter weights to a persistent directory within run_dir
-                            lora_save_dir = run_dir / "lora_adapters"
+                            # Save adapter weights to checkpoint directory
+                            lora_save_dir = checkpoint_dir / "lora_adapters"
                             os.makedirs(lora_save_dir, exist_ok=True)
                             unwrapped_vla.save_pretrained(lora_save_dir)
                             print(f"Saved LoRA adapters at: {lora_save_dir}")
@@ -425,18 +430,9 @@ class CraneX7Trainer:
                                 merged_vla = PeftModel.from_pretrained(base_vla, lora_save_dir, device_map="cpu")
                                 merged_vla = merged_vla.merge_and_unload()
 
-                                if self.cfg.save_latest_checkpoint_only:
-                                    # Overwrite latest checkpoint
-                                    merged_vla.save_pretrained(run_dir)
-                                    print(f"Saved merged model at: {run_dir}")
-                                else:
-                                    # Save checkpoint in new directory
-                                    checkpoint_dir = Path(str(run_dir) + f"--{gradient_step_idx}_chkpt")
-                                    os.makedirs(checkpoint_dir, exist_ok=True)
-                                    save_dataset_statistics(vla_dataset.dataset_statistics, checkpoint_dir)
-                                    processor.save_pretrained(checkpoint_dir)
-                                    merged_vla.save_pretrained(checkpoint_dir)
-                                    print(f"Saved merged model at: {checkpoint_dir}")
+                                # Save merged model to checkpoint directory
+                                merged_vla.save_pretrained(checkpoint_dir)
+                                print(f"Saved merged model at: {checkpoint_dir}")
 
                                 # Clean up
                                 del base_vla, merged_vla
@@ -446,9 +442,9 @@ class CraneX7Trainer:
                                 print(f"Skipping LoRA merge (skip_merge_on_save=True). Run merge_lora.py post-training.")
                         else:
                             # Full model (no LoRA) - save directly
-                            unwrapped_vla.save_pretrained(run_dir)
+                            unwrapped_vla.save_pretrained(checkpoint_dir)
 
-                        print(f"Checkpoint saved for Step {gradient_step_idx}")
+                        print(f"Checkpoint saved at: {checkpoint_dir}")
 
                     # Synchronize all processes after checkpoint saving
                     # This barrier is lightweight since only file I/O is performed (no heavy merge)
@@ -463,38 +459,41 @@ class CraneX7Trainer:
         # Update tracking variables
         self.global_step = gradient_step_idx
 
-    def _run_validation(
+    def _run_overfit_check(
         self,
         vla,
-        val_dataloader,
+        overfit_dataloader,
         device_id: int,
         unwrapped_vla,
         action_tokenizer: ActionTokenizer,
         distributed_state,
     ) -> Dict[str, float]:
         """
-        Run validation loop and compute metrics.
+        Run overfitting check loop and compute metrics.
+
+        This uses held-out steps from the same episodes (not separate episodes)
+        to properly detect overfitting/memorization.
 
         Args:
             vla: The VLA model
-            val_dataloader: Validation data loader
+            overfit_dataloader: Overfitting check data loader
             device_id: GPU device ID
             unwrapped_vla: Unwrapped model for accessing internals
             action_tokenizer: Action tokenizer instance
             distributed_state: Distributed training state
 
         Returns:
-            Dictionary containing validation metrics
+            Dictionary containing overfitting check metrics
         """
         vla.eval()
 
-        val_losses = []
-        val_action_accuracies = []
-        val_l1_losses = []
+        overfit_losses = []
+        overfit_action_accuracies = []
+        overfit_l1_losses = []
 
         with torch.no_grad():
-            for val_step, batch in enumerate(val_dataloader):
-                if val_step >= self.cfg.val_steps:
+            for overfit_step, batch in enumerate(overfit_dataloader):
+                if overfit_step >= self.cfg.overfit_check_steps:
                     break
 
                 with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -527,15 +526,15 @@ class CraneX7Trainer:
                 )
                 action_l1_loss = torch.nn.functional.l1_loss(continuous_actions_pred, continuous_actions_gt)
 
-                val_losses.append(loss.item())
-                val_action_accuracies.append(action_accuracy.item())
-                val_l1_losses.append(action_l1_loss.item())
+                overfit_losses.append(loss.item())
+                overfit_action_accuracies.append(action_accuracy.item())
+                overfit_l1_losses.append(action_l1_loss.item())
 
         # Compute average metrics
         metrics = {
-            "val_loss": sum(val_losses) / len(val_losses) if val_losses else 0.0,
-            "val_action_accuracy": sum(val_action_accuracies) / len(val_action_accuracies) if val_action_accuracies else 0.0,
-            "val_l1_loss": sum(val_l1_losses) / len(val_l1_losses) if val_l1_losses else 0.0,
+            "overfit_loss": sum(overfit_losses) / len(overfit_losses) if overfit_losses else 0.0,
+            "overfit_action_accuracy": sum(overfit_action_accuracies) / len(overfit_action_accuracies) if overfit_action_accuracies else 0.0,
+            "overfit_l1_loss": sum(overfit_l1_losses) / len(overfit_l1_losses) if overfit_l1_losses else 0.0,
         }
 
         return metrics
@@ -584,10 +583,10 @@ class OpenVLABackend(VLABackend):
             grad_accumulation_steps=self.vla_config.training.gradient_accumulation_steps,
             image_aug=self.vla_config.openvla.image_aug if hasattr(self.vla_config.openvla, 'image_aug') else True,
             shuffle_buffer_size=self.vla_config.data.shuffle_buffer_size if hasattr(self.vla_config.data, 'shuffle_buffer_size') else 100_000,
-            # Validation Parameters
-            val_split_ratio=self.vla_config.validation.val_split_ratio if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_split_ratio') else 0.1,
-            val_interval=self.vla_config.validation.val_interval if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_interval') else 500,
-            val_steps=self.vla_config.validation.val_steps if hasattr(self.vla_config, 'validation') and hasattr(self.vla_config.validation, 'val_steps') else 50,
+            # Overfitting Detection Parameters
+            overfit_split_ratio=self.vla_config.overfitting.overfit_split_ratio if hasattr(self.vla_config, 'overfitting') and hasattr(self.vla_config.overfitting, 'overfit_split_ratio') else 0.1,
+            overfit_check_interval=self.vla_config.overfitting.overfit_check_interval if hasattr(self.vla_config, 'overfitting') and hasattr(self.vla_config.overfitting, 'overfit_check_interval') else 500,
+            overfit_check_steps=self.vla_config.overfitting.overfit_check_steps if hasattr(self.vla_config, 'overfitting') and hasattr(self.vla_config.overfitting, 'overfit_check_steps') else 50,
             # LoRA Arguments
             use_lora=self.vla_config.openvla.use_lora,
             lora_rank=self.vla_config.openvla.lora_rank,
