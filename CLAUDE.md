@@ -14,6 +14,7 @@
 - [vla/README.md](vla/README.md) - VLAファインチューニング詳細
 - [sim/README.md](sim/README.md) - ManiSkillシミュレータ詳細
 - [ros2/src/crane_x7_gemini/README.md](ros2/src/crane_x7_gemini/README.md) - Gemini API統合詳細
+- [slurm/README.md](slurm/README.md) - Slurmジョブ投下ツール詳細
 
 ## アーキテクチャ
 
@@ -67,6 +68,12 @@
    - ピックアンドプレースタスク環境
    - ハンドカメラ統合（640x480 RGB）
    - 8次元行動空間（アーム7関節 + グリッパー1関節）
+
+5. **Slurmジョブ投下ツール** (`slurm/`)
+   - SSH経由でSlurmクラスターにトレーニングジョブを投下
+   - OpenVLA/OpenPI両方のトレーニングジョブに対応
+   - パスワード認証と公開鍵認証をサポート
+   - `.env`ファイルでSSH接続情報とSlurm設定を管理
 
 ### Gazeboシミュレーション環境
 
@@ -138,6 +145,7 @@ ROS 2パッケージのテストはcolconで実行。VLAデータセットの検
 - `ros2/src/` - ROS 2パッケージソース
 - `vla/src/crane_x7_vla/` - VLAトレーニングCLI実装
 - `sim/src/` - ManiSkillシミュレータ実装
+- `slurm/` - Slurmジョブ投下ツール
 - `data/tfrecord_logs/` - 収集されたエピソードデータ
 - `outputs/` - トレーニング済みモデルとチェックポイント
 
@@ -237,6 +245,29 @@ OpenPI用Dockerイメージでトレーニング（JAXベース）。
 各バックエンド用のDockerコンテナ内でデータセット検証スクリプトを実行可能。
 詳細は [vla/README.md](vla/README.md) を参照。
 
+### 5. Slurmクラスターでのトレーニング
+
+SSH経由でSlurmクラスターにジョブを投下するツールを提供：
+
+```bash
+# セットアップ
+cd slurm
+cp .env.template .env
+# .env を編集してSSH接続情報を設定
+
+# ジョブの投下
+./submit.sh jobs/train_openvla.sh          # OpenVLAトレーニング
+./submit.sh jobs/train_openpi.sh           # OpenPIトレーニング
+./submit.sh jobs/train_openvla.sh --dry-run # ドライラン
+
+# ジョブ管理
+./submit.sh --status                        # キュー状態確認
+./submit.sh --cancel <job_id>               # ジョブキャンセル
+```
+
+`example_jobs/`からジョブスクリプトを`jobs/`にコピーしてカスタマイズ。
+詳細は [slurm/README.md](slurm/README.md) を参照。
+
 ## ライセンスに関する注記
 
 ### このリポジトリ（オリジナルコード）
@@ -270,4 +301,3 @@ OpenPI用Dockerイメージでトレーニング（JAXベース）。
 ## 注意事項
 
 - 必ず日本語で応答すること
-
