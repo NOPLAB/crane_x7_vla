@@ -1,3 +1,4 @@
 .env
 
 /jobs
+/.sweep_state

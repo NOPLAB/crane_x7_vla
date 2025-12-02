@@ -1,0 +1,61 @@
+# ============================================================================
+# W&B Sweep Configuration for OpenPI
+# ============================================================================
+# ハイパーパラメータ自動探索の設定ファイル
+#
+# 使い方:
+#   ./sweep.sh sweeps/sweep_openpi.yaml --backend openpi --max-runs 20
+# ============================================================================
+
+# Sweep基本設定
+method: bayes  # 探索方法: bayes, grid, random
+metric:
+  name: eval/loss
+  goal: minimize
+
+# 探索するハイパーパラメータ
+parameters:
+  # 学習率 (対数スケールで探索)
+  learning_rate:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  # バッチサイズ (離散値)
+  batch_size:
+    values: [1, 2, 4, 8]
+
+  # モデルタイプ
+  model_type:
+    values: ["pi0", "pi0_fast"]
+
+  # アクションホライズン
+  action_horizon:
+    values: [10, 25, 50, 100]
+
+  # LoRAランク
+  lora_rank:
+    values: [8, 16, 32, 64]
+
+  # LoRAドロップアウト
+  lora_dropout:
+    distribution: uniform
+    min: 0.0
+    max: 0.2
+
+  # 重み減衰 (対数スケール)
+  weight_decay:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-1
+
+  # 正規化モード
+  normalization_mode:
+    values: ["zscore", "quantile"]
+
+# 早期終了設定
+early_terminate:
+  type: hyperband
+  min_iter: 3
+  eta: 3
+  s: 2

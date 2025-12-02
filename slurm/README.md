@@ -117,3 +117,172 @@ slurm/
 ### Pyxis/Enrootコンテナの使用
 
 Pyxis/Enrootプラグインを使用する環境では、`#SBATCH --container=`オプションでDockerイメージを直接指定できます。`jobs/train_openvla.sh`を参照してください。
+
+---
+
+## W&B Sweep（ハイパーパラメータ自動探索）
+
+Weights & Biases Sweepsを使用して、ハイパーパラメータの自動探索を行うことができます。
+
+### 動作原理
+
+1. ローカルマシンでW&B Sweepを作成・制御
+2. W&B APIから次のハイパーパラメータを取得
+3. パラメータを埋め込んだSlurmジョブスクリプトを生成
+4. SSHでリモートクラスターにジョブを投下
+5. ジョブ完了を定期的にポーリングして待機
+6. 指定回数分繰り返し
+
+### セットアップ
+
+1. `.env`ファイルにSweep用の設定を追加:
+
+```bash
+# W&B Sweep設定
+WANDB_ENTITY=your-team-or-username  # W&Bエンティティ
+WANDB_PROJECT=crane_x7_sweep        # プロジェクト名
+
+# トレーニング設定
+DATA_ROOT=/root/vla/data            # データディレクトリ（リモート）
+OUTPUT_DIR=/root/vla/output         # 出力ディレクトリ（リモート）
+NUM_EPOCHS=10                       # エポック数
+SAVE_INTERVAL=500                   # チェックポイント保存間隔
+EVAL_INTERVAL=100                   # 評価間隔
+```
+
+2. 必要に応じてSweep設定ファイルをカスタマイズ:
+
+```bash
+# sweeps/sweep_openvla.yaml  - OpenVLA用
+# sweeps/sweep_openpi.yaml   - OpenPI用
+```
+
+### Sweepの実行
+
+```bash
+# OpenVLAでSweepを開始（20回実行）
+./submit.sh sweep sweeps/sweep_openvla.yaml --max-runs 20
+
+# OpenPIでSweepを開始
+./submit.sh sweep sweeps/sweep_openpi.yaml --backend openpi --max-runs 15
+
+# ポーリング間隔を変更（デフォルト: 300秒）
+./submit.sh sweep sweeps/sweep_openvla.yaml --poll-interval 600
+
+# ドライラン（テスト用、実際にはジョブを投下しない）
+./submit.sh sweep sweeps/sweep_openvla.yaml --dry-run
+```
+
+### 既存Sweepの再開
+
+```bash
+# Sweep IDを指定して再開
+./submit.sh sweep --resume abc123xyz --max-runs 10
+
+# バックエンドを指定して再開
+./submit.sh sweep --resume abc123xyz --backend openpi --max-runs 5
+```
+
+### Sweep設定ファイルの構造
+
+`sweeps/sweep_openvla.yaml`の例:
+
+```yaml
+# 探索方法: bayes（ベイズ最適化）, grid（グリッド探索）, random（ランダム探索）
+method: bayes
+
+# 最適化するメトリック
+metric:
+  name: eval/loss
+  goal: minimize
+
+# 探索するハイパーパラメータ
+parameters:
+  learning_rate:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  batch_size:
+    values: [1, 2, 4, 8, 16]
+
+  lora_rank:
+    values: [8, 16, 32, 64]
+
+# 早期終了（性能の悪いrunを早期に終了）
+early_terminate:
+  type: hyperband
+  min_iter: 3
+```
+
+### 探索可能なハイパーパラメータ
+
+#### OpenVLA
+
+| パラメータ | 説明 | 推奨範囲 |
+|-----------|------|---------|
+| `learning_rate` | 学習率 | 1e-6 ~ 1e-3 |
+| `batch_size` | バッチサイズ | 1, 2, 4, 8, 16 |
+| `lora_rank` | LoRAランク | 8, 16, 32, 64 |
+| `lora_dropout` | LoRAドロップアウト | 0.0 ~ 0.2 |
+| `weight_decay` | 重み減衰 | 1e-5 ~ 1e-1 |
+| `warmup_steps` | ウォームアップステップ | 100 ~ 2000 |
+| `max_grad_norm` | 勾配クリッピング | 0.5 ~ 2.0 |
+
+#### OpenPI
+
+上記に加えて:
+
+| パラメータ | 説明 | 推奨範囲 |
+|-----------|------|---------|
+| `model_type` | モデルタイプ | pi0, pi0_fast |
+| `action_horizon` | アクションホライズン | 10, 25, 50, 100 |
+| `normalization_mode` | 正規化モード | zscore, quantile |
+
+### 結果の確認
+
+Sweepの結果はW&Bダッシュボードで確認できます:
+
+```
+https://wandb.ai/<entity>/<project>/sweeps/<sweep_id>
+```
+
+### ディレクトリ構成（Sweep関連）
+
+```
+slurm/
+├── submit.sh             # ジョブ投下 & Sweepコントローラー
+├── sweeps/               # Sweep設定ファイル
+│   ├── sweep_openvla.yaml
+│   └── sweep_openpi.yaml
+└── .sweep_state/         # Sweep状態ファイル（自動生成、gitignore対象）
+    ├── current_sweep_id
+    └── job_*.sh
+```
+
+### トラブルシューティング
+
+#### W&B APIキーエラー
+
+```
+エラー: WANDB_API_KEY が設定されていません
+```
+
+→ `.env`ファイルに`WANDB_API_KEY`を設定してください。キーは https://wandb.ai/settings で取得できます。
+
+#### Sweepが見つからない
+
+```
+ERROR:Sweep not found
+```
+
+→ `WANDB_ENTITY`と`WANDB_PROJECT`が正しく設定されているか確認してください。
+
+#### ジョブが失敗する
+
+ジョブの出力ログを確認:
+
+```bash
+# リモートサーバーでログを確認
+ssh user@cluster "cat ~/vla/logs/sweep_*_<job_id>.out"
+```

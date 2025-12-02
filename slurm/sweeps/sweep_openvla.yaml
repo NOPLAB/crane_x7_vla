@@ -1,0 +1,59 @@
+# ============================================================================
+# W&B Sweep Configuration for OpenVLA
+# ============================================================================
+# ハイパーパラメータ自動探索の設定ファイル
+#
+# 使い方:
+#   ./sweep.sh sweeps/sweep_openvla.yaml --max-runs 20
+# ============================================================================
+
+# Sweep基本設定
+method: bayes  # 探索方法: bayes, grid, random
+metric:
+  name: eval/loss
+  goal: minimize
+
+# 探索するハイパーパラメータ
+parameters:
+  # 学習率 (対数スケールで探索)
+  learning_rate:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  # バッチサイズ (離散値)
+  batch_size:
+    values: [1, 2, 4, 8, 16]
+
+  # LoRAランク
+  lora_rank:
+    values: [8, 16, 32, 64]
+
+  # LoRAドロップアウト
+  lora_dropout:
+    distribution: uniform
+    min: 0.0
+    max: 0.2
+
+  # 重み減衰 (対数スケール)
+  weight_decay:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-1
+
+  # ウォームアップステップ
+  warmup_steps:
+    values: [100, 500, 1000, 2000]
+
+  # 勾配クリッピング
+  max_grad_norm:
+    distribution: uniform
+    min: 0.5
+    max: 2.0
+
+# 早期終了設定 (性能が悪いrunを早期に終了)
+early_terminate:
+  type: hyperband
+  min_iter: 3
+  eta: 3
+  s: 2
