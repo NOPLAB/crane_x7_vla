@@ -199,11 +199,17 @@ class WandbSweepClient:
         sweep_path = f"{entity}/{project}/{sweep_id}" if entity else f"{project}/{sweep_id}"
 
         try:
+            # Sweep Agentとして動作するため環境変数を設定
+            os.environ["WANDB_SWEEP_ID"] = sweep_id
+            if entity:
+                os.environ["WANDB_ENTITY"] = entity
+            if project:
+                os.environ["WANDB_PROJECT"] = project
+
             # Sweep Agentとしてrunを初期化
             run = self._wandb.init(
                 entity=entity,
                 project=project,
-                sweep_id=sweep_id,
                 reinit=True,
             )
 

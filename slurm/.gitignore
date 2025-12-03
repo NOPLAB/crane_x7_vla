@@ -7,6 +7,9 @@
 # Sweep状態ファイル
 /.sweep_state
 
+# wandb
+/wandb
+
 # Python
 __pycache__/
 *.py[cod]

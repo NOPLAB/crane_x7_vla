@@ -148,6 +148,27 @@ class SSHClient:
             self._sftp = self._client.open_sftp()
         return self._sftp
 
+    def _expand_remote_path(self, remote_path: str | Path) -> str:
+        """リモートパスのチルダを展開.
+
+        SFTPはチルダ(~)を展開しないため、ホームディレクトリの
+        絶対パスに変換する。
+
+        Args:
+            remote_path: リモートパス
+
+        Returns:
+            展開されたパス
+        """
+        path_str = str(remote_path)
+        if path_str.startswith("~/") or path_str == "~":
+            # ホームディレクトリを取得
+            stdout, stderr, exit_code = self.execute("echo $HOME")
+            if exit_code == 0:
+                home_dir = stdout.strip()
+                path_str = path_str.replace("~", home_dir, 1)
+        return path_str
+
     def upload(self, local_path: Path, remote_path: str | Path) -> None:
         """ファイルをアップロード.
 
@@ -163,7 +184,8 @@ class SSHClient:
 
         try:
             sftp = self._get_sftp()
-            sftp.put(str(local_path), str(remote_path))
+            expanded_path = self._expand_remote_path(remote_path)
+            sftp.put(str(local_path), expanded_path)
         except (OSError, paramiko.SFTPError) as e:
             raise SSHError(f"ファイルのアップロードに失敗しました: {e}") from e
 
@@ -179,7 +201,8 @@ class SSHClient:
         """
         try:
             sftp = self._get_sftp()
-            with sftp.file(str(remote_path), "w") as f:
+            expanded_path = self._expand_remote_path(remote_path)
+            with sftp.file(expanded_path, "w") as f:
                 f.write(content)
         except (OSError, paramiko.SFTPError) as e:
             raise SSHError(f"ファイルのアップロードに失敗しました: {e}") from e
@@ -196,9 +219,10 @@ class SSHClient:
         """
         try:
             sftp = self._get_sftp()
+            expanded_path = self._expand_remote_path(remote_path)
             # ローカルディレクトリが存在しない場合は作成
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            sftp.get(str(remote_path), str(local_path))
+            sftp.get(expanded_path, str(local_path))
         except (OSError, paramiko.SFTPError) as e:
             raise SSHError(f"ファイルのダウンロードに失敗しました: {e}") from e
 
@@ -227,7 +251,8 @@ class SSHClient:
         """
         try:
             sftp = self._get_sftp()
-            sftp.stat(str(remote_path))
+            expanded_path = self._expand_remote_path(remote_path)
+            sftp.stat(expanded_path)
             return True
         except FileNotFoundError:
             return False
