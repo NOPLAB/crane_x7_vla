@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2025 nop
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slurm-submit"
+version = "0.1.0"
+description = "SSH経由でSlurmクラスターにジョブを投下するツール"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "nop" }]
+keywords = ["slurm", "hpc", "job-scheduler", "ssh", "wandb", "sweep"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = [
+    "typer>=0.9.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "paramiko>=3.0",
+    "python-dotenv>=1.0",
+    "wandb>=0.15",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "types-paramiko>=3.0",
+    "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+slurm-submit = "slurm_submit.cli:app"
+
+[project.urls]
+Repository = "https://github.com/nop/crane_x7_vla"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slurm_submit"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["wandb.*", "paramiko.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

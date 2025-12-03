@@ -1,13 +1,27 @@
-# Slurm ジョブ投下ツール
+# slurm-submit
 
-SSHサーバー経由でSlurmクラスターにジョブを投下するためのツールです。
+SSH経由でSlurmクラスターにジョブを投下するPythonツールです。
+
+## 特徴
+
+- SSH経由でリモートSlurmクラスターにジョブを投下
+- パスワード認証・公開鍵認証の両方をサポート
+- W&B Sweepによるハイパーパラメータ自動探索
+- pydanticによる設定バリデーション
+- richによる見やすいCLI出力
+
+## インストール
+
+```bash
+cd slurm
+pip install -e .
+```
 
 ## セットアップ
 
 1. `.env`ファイルを作成:
 
 ```bash
-cd slurm
 cp .env.template .env
 ```
 
@@ -15,7 +29,7 @@ cp .env.template .env
 
 ```bash
 # API Keys
-WANDB_API_KEY=your-wandb-api-key  # W&B実験トラッキング用
+WANDB_API_KEY=your-wandb-api-key  # W&B実験トラッキング用（オプション）
 
 # SSH接続設定（必須）
 SLURM_SSH_HOST=your-cluster.example.com
@@ -28,7 +42,7 @@ SLURM_SSH_AUTH=password  # パスワード認証の場合
 
 # Slurm設定（オプション）
 SLURM_SSH_PORT=22
-SLURM_REMOTE_WORKDIR=~/crane_x7_vla
+SLURM_REMOTE_WORKDIR=~/workdir
 SLURM_PARTITION=gpu
 SLURM_GPUS=1
 SLURM_TIME=24:00:00
@@ -49,76 +63,47 @@ cp example_jobs/train_openvla.sh jobs/
 ### ジョブの投下
 
 ```bash
-# OpenVLAトレーニングジョブを投下
-./submit.sh jobs/train_openvla.sh
-
-# OpenPIトレーニングジョブを投下
-./submit.sh jobs/train_openpi.sh
+# ジョブスクリプトを投下
+slurm-submit submit jobs/train.sh
 
 # ドライラン（実際には投下しない）
-./submit.sh jobs/train_openvla.sh --dry-run
+slurm-submit submit jobs/train.sh --dry-run
+
+# 別の.envファイルを使用
+slurm-submit submit jobs/train.sh --env /path/to/.env
 ```
 
 ### キュー状態の確認
 
 ```bash
-./submit.sh --status
+# 自分のジョブを確認
+slurm-submit status
+
+# 特定のジョブを確認
+slurm-submit status 12345
+
+# 全ユーザーのジョブを確認
+slurm-submit status --all
 ```
 
 ### ジョブのキャンセル
 
 ```bash
-./submit.sh --cancel <job_id>
+slurm-submit cancel 12345
 ```
 
-## ディレクトリ構成
-
-```
-slurm/
-├── .env.template     # 環境変数テンプレート
-├── .env              # 環境変数（gitignore対象）
-├── .gitignore        # Git除外設定
-├── submit.sh         # ジョブ投下スクリプト
-├── README.md         # このファイル
-├── example_jobs/     # サンプルジョブスクリプト（テンプレート）
-│   ├── train_openvla.sh
-│   └── train_openpi.sh
-└── jobs/             # 実際に使用するジョブスクリプト（gitignore対象）
-    ├── train_openvla.sh
-    └── train_openpi.sh
-```
-
-**注意**: `jobs/`ディレクトリは`.gitignore`に含まれています。環境固有の設定（パス、GPU数など）を含むため、`example_jobs/`からコピーして各自でカスタマイズしてください。
-
-## ジョブスクリプトのカスタマイズ
-
-`example_jobs/`ディレクトリ内のサンプルを参考に、`jobs/`ディレクトリにカスタマイズしたスクリプトを作成してください。
-
-### SBATCH オプション
+### ジョブ完了待機
 
 ```bash
-#SBATCH --job-name=crane_x7_openvla  # ジョブ名
-#SBATCH --partition=gpu              # パーティション
-#SBATCH --nodes=1                    # ノード数
-#SBATCH --ntasks=1                   # タスク数
-#SBATCH --cpus-per-task=8            # CPU数
-#SBATCH --mem=64G                    # メモリ
-#SBATCH --gres=gpu:1                 # GPU数
-#SBATCH --time=48:00:00              # 実行時間
+# ジョブ完了まで待機
+slurm-submit wait 12345
 
-# コンテナを使用する場合（Pyxis/Enroot）
-#SBATCH --container=noppdev/vla      # Dockerイメージ
+# ポーリング間隔を指定（秒）
+slurm-submit wait 12345 --interval 120
+
+# タイムアウトを指定（秒）
+slurm-submit wait 12345 --timeout 3600
 ```
-
-### Singularityコンテナの使用
-
-リモートサーバーでSingularityコンテナを使用する場合は、`example_jobs/`内のコメントアウトされたセクションを参考にしてください。
-
-### Pyxis/Enrootコンテナの使用
-
-Pyxis/Enrootプラグインを使用する環境では、`#SBATCH --container=`オプションでDockerイメージを直接指定できます。`jobs/train_openvla.sh`を参照してください。
-
----
 
 ## W&B Sweep（ハイパーパラメータ自動探索）
 
@@ -135,57 +120,53 @@ Weights & Biases Sweepsを使用して、ハイパーパラメータの自動探
 
 ### セットアップ
 
-1. `.env`ファイルにSweep用の設定を追加:
+`.env`ファイルにSweep用の設定を追加:
 
 ```bash
 # W&B Sweep設定
 WANDB_ENTITY=your-team-or-username  # W&Bエンティティ
-WANDB_PROJECT=crane_x7_sweep        # プロジェクト名
+WANDB_PROJECT=my_sweep              # プロジェクト名
 
 # トレーニング設定
-DATA_ROOT=/root/vla/data            # データディレクトリ（リモート）
-OUTPUT_DIR=/root/vla/output         # 出力ディレクトリ（リモート）
-NUM_EPOCHS=10                       # エポック数
-SAVE_INTERVAL=500                   # チェックポイント保存間隔
-EVAL_INTERVAL=100                   # 評価間隔
-```
-
-2. 必要に応じてSweep設定ファイルをカスタマイズ:
-
-```bash
-# sweeps/sweep_openvla.yaml  - OpenVLA用
-# sweeps/sweep_openpi.yaml   - OpenPI用
+DATA_ROOT=/path/to/data
+OUTPUT_DIR=/path/to/output
+NUM_EPOCHS=10
+SAVE_INTERVAL=500
+EVAL_INTERVAL=100
 ```
 
 ### Sweepの実行
 
 ```bash
-# OpenVLAでSweepを開始（20回実行）
-./submit.sh sweep sweeps/sweep_openvla.yaml --max-runs 20
-
-# OpenPIでSweepを開始
-./submit.sh sweep sweeps/sweep_openpi.yaml --backend openpi --max-runs 15
+# Sweepを開始（10回実行）
+slurm-submit sweep start sweeps/config.yaml --max-runs 10
 
 # ポーリング間隔を変更（デフォルト: 300秒）
-./submit.sh sweep sweeps/sweep_openvla.yaml --poll-interval 600
+slurm-submit sweep start sweeps/config.yaml --poll-interval 600
 
-# ドライラン（テスト用、実際にはジョブを投下しない）
-./submit.sh sweep sweeps/sweep_openvla.yaml --dry-run
+# カスタムジョブテンプレートを使用
+slurm-submit sweep start sweeps/config.yaml --template jobs/sweep_template.sh
+
+# ドライラン
+slurm-submit sweep start sweeps/config.yaml --dry-run
 ```
 
 ### 既存Sweepの再開
 
 ```bash
 # Sweep IDを指定して再開
-./submit.sh sweep --resume abc123xyz --max-runs 10
+slurm-submit sweep resume abc123xyz --max-runs 10
+```
 
-# バックエンドを指定して再開
-./submit.sh sweep --resume abc123xyz --backend openpi --max-runs 5
+### Sweepの状態確認
+
+```bash
+slurm-submit sweep status abc123xyz
 ```
 
 ### Sweep設定ファイルの構造
 
-`sweeps/sweep_openvla.yaml`の例:
+`sweeps/config.yaml`の例:
 
 ```yaml
 # 探索方法: bayes（ベイズ最適化）, grid（グリッド探索）, random（ランダム探索）
@@ -206,83 +187,135 @@ parameters:
   batch_size:
     values: [1, 2, 4, 8, 16]
 
-  lora_rank:
-    values: [8, 16, 32, 64]
-
 # 早期終了（性能の悪いrunを早期に終了）
 early_terminate:
   type: hyperband
   min_iter: 3
 ```
 
-### 探索可能なハイパーパラメータ
+### カスタムジョブテンプレート
 
-#### OpenVLA
+`--template`オプションでカスタムジョブテンプレートを指定できます。テンプレート内では以下のプレースホルダが使用可能:
 
-| パラメータ | 説明 | 推奨範囲 |
-|-----------|------|---------|
-| `learning_rate` | 学習率 | 1e-6 ~ 1e-3 |
-| `batch_size` | バッチサイズ | 1, 2, 4, 8, 16 |
-| `lora_rank` | LoRAランク | 8, 16, 32, 64 |
-| `lora_dropout` | LoRAドロップアウト | 0.0 ~ 0.2 |
-| `weight_decay` | 重み減衰 | 1e-5 ~ 1e-1 |
-| `warmup_steps` | ウォームアップステップ | 100 ~ 2000 |
-| `max_grad_norm` | 勾配クリッピング | 0.5 ~ 2.0 |
+- `{{RUN_ID}}`: W&B Run ID
+- `{{PARAMS_JSON}}`: パラメータのJSON文字列
+- `{{learning_rate}}`, `{{batch_size}}`, など: 個別パラメータ
 
-#### OpenPI
+テンプレート例（`jobs/sweep_template.sh`）:
 
-上記に加えて:
+```bash
+#!/bin/bash
+#SBATCH --job-name=sweep_{{RUN_ID}}
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --time=24:00:00
 
-| パラメータ | 説明 | 推奨範囲 |
-|-----------|------|---------|
-| `model_type` | モデルタイプ | pi0, pi0_fast |
-| `action_horizon` | アクションホライズン | 10, 25, 50, 100 |
-| `normalization_mode` | 正規化モード | zscore, quantile |
+export WANDB_RUN_ID={{RUN_ID}}
 
-### 結果の確認
-
-Sweepの結果はW&Bダッシュボードで確認できます:
-
-```
-https://wandb.ai/<entity>/<project>/sweeps/<sweep_id>
+python train.py \
+    --learning-rate {{learning_rate}} \
+    --batch-size {{batch_size}}
 ```
 
-### ディレクトリ構成（Sweep関連）
+## ディレクトリ構成
 
 ```
 slurm/
-├── submit.sh             # ジョブ投下 & Sweepコントローラー
-├── sweeps/               # Sweep設定ファイル
-│   ├── sweep_openvla.yaml
-│   └── sweep_openpi.yaml
-└── .sweep_state/         # Sweep状態ファイル（自動生成、gitignore対象）
-    ├── current_sweep_id
-    └── job_*.sh
+├── src/
+│   └── slurm_submit/     # Pythonパッケージ
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py        # CLIエントリーポイント
+│       ├── config.py     # 設定管理
+│       ├── ssh_client.py # SSH/SCP操作
+│       ├── slurm_client.py # Slurmコマンド
+│       ├── job_script.py # ジョブスクリプト生成
+│       └── sweep/        # W&B Sweep統合
+├── pyproject.toml
+├── .env.template         # 環境変数テンプレート
+├── .env                  # 環境変数（gitignore対象）
+├── .gitignore
+├── README.md
+├── example_jobs/         # サンプルジョブスクリプト
+│   ├── train_openvla.sh
+│   └── train_openpi.sh
+├── jobs/                 # 実際に使用するジョブスクリプト（gitignore対象）
+└── sweeps/               # Sweep設定ファイル
+    ├── sweep_openvla.yaml
+    └── sweep_openpi.yaml
 ```
 
-### トラブルシューティング
+**注意**: `jobs/`ディレクトリは`.gitignore`に含まれています。環境固有の設定を含むため、`example_jobs/`からコピーして各自でカスタマイズしてください。
 
-#### W&B APIキーエラー
+## ジョブスクリプトのカスタマイズ
+
+### SBATCH オプション
+
+```bash
+#SBATCH --job-name=my_job       # ジョブ名
+#SBATCH --partition=gpu         # パーティション
+#SBATCH --nodes=1               # ノード数
+#SBATCH --cpus-per-task=8       # CPU数
+#SBATCH --mem=64G               # メモリ
+#SBATCH --gres=gpu:1            # GPU数
+#SBATCH --time=48:00:00         # 実行時間
+
+# コンテナを使用する場合（Pyxis/Enroot）
+#SBATCH --container-image=myimage:latest
+```
+
+## プログラムからの使用
+
+```python
+from slurm_submit import Settings, SSHClient, SlurmClient
+from slurm_submit.config import load_settings
+
+# 設定を読み込み
+settings = load_settings(".env")
+
+# SSHクライアントを作成して接続
+with SSHClient(settings.ssh) as ssh:
+    ssh.connect()
+
+    # Slurmクライアントを作成
+    slurm = SlurmClient(ssh, settings.slurm)
+
+    # ジョブを投下
+    job_id = slurm.submit(Path("jobs/train.sh"))
+    print(f"Job ID: {job_id}")
+
+    # 状態を確認
+    jobs = slurm.status()
+    for job in jobs:
+        print(f"{job.job_id}: {job.state}")
+```
+
+## トラブルシューティング
+
+### SSH接続エラー
 
 ```
-エラー: WANDB_API_KEY が設定されていません
+SSH接続に失敗しました: Authentication failed
+```
+
+→ `.env`ファイルの`SLURM_SSH_USER`、`SLURM_SSH_AUTH`、`SLURM_SSH_KEY`を確認してください。
+
+### W&B APIキーエラー
+
+```
+WANDB_API_KEY が設定されていません
 ```
 
 → `.env`ファイルに`WANDB_API_KEY`を設定してください。キーは https://wandb.ai/settings で取得できます。
 
-#### Sweepが見つからない
+### Sweepが見つからない
 
 ```
-ERROR:Sweep not found
+Sweep状態の取得に失敗
 ```
 
 → `WANDB_ENTITY`と`WANDB_PROJECT`が正しく設定されているか確認してください。
 
-#### ジョブが失敗する
+## ライセンス
 
-ジョブの出力ログを確認:
-
-```bash
-# リモートサーバーでログを確認
-ssh user@cluster "cat ~/vla/logs/sweep_*_<job_id>.out"
-```
+MIT License
