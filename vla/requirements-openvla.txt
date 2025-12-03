@@ -11,7 +11,7 @@
 transformers==4.57.3
 tokenizers==0.22.1
 timm==0.9.10
-sentencepiece==0.1.99
+sentencepiece==0.2.1
 
 # Training and fine-tuning
 peft>=0.13.0
