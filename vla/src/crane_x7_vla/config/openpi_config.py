@@ -80,6 +80,26 @@ class OpenPISpecificConfig:
     chunk_interpolation: Literal["repeat", "linear"] = "linear"
     """How to generate action chunks from single actions"""
 
+    # FSDP settings
+    fsdp_devices: int = 1
+    """Number of devices for FSDP sharding (1 = no sharding)"""
+
+    # Checkpoint settings
+    keep_period: int = 5000
+    """Keep checkpoints at this interval (steps)"""
+
+    # EMA settings
+    ema_decay: float = 0.99
+    """EMA decay rate (only used when use_lora=False)"""
+
+    # Default prompt
+    default_prompt: str = "manipulate objects"
+    """Default language instruction for tasks"""
+
+    # Delta actions
+    use_delta_actions: bool = False
+    """Whether to use delta actions (action = next_state - current_state)"""
+
 
 @dataclass
 class OpenPIConfig(UnifiedVLAConfig):
@@ -118,6 +138,11 @@ class OpenPIConfig(UnifiedVLAConfig):
             'max_token_len': self.openpi.max_token_len,
             'use_depth': self.openpi.use_depth,
             'chunk_interpolation': self.openpi.chunk_interpolation,
+            'fsdp_devices': self.openpi.fsdp_devices,
+            'keep_period': self.openpi.keep_period,
+            'ema_decay': self.openpi.ema_decay,
+            'default_prompt': self.openpi.default_prompt,
+            'use_delta_actions': self.openpi.use_delta_actions,
         }
 
     @property

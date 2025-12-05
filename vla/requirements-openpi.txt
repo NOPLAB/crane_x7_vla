@@ -52,5 +52,12 @@ typing-extensions>=4.12.2
 wandb>=0.19.1
 tqdm-loggable>=0.2
 
+# etils for path utilities
+etils>=1.0.0
+
+# OpenPI shared utilities
+pydantic>=2.0.0
+openpi-client>=0.1.0
+
 # CRANE-X7 VLA integration
 -e ./src/crane_x7_vla

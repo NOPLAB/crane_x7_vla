@@ -123,3 +123,21 @@ backend_config:
 
   # Action chunking
   chunk_interpolation: linear  # 'repeat' or 'linear'
+
+  # FSDP (Fully Sharded Data Parallel) settings
+  # Set > 1 to shard model across devices for memory efficiency
+  fsdp_devices: 1
+
+  # Checkpoint management
+  keep_period: 5000  # Keep checkpoints at this interval
+
+  # EMA (Exponential Moving Average) decay
+  # Only used when use_lora=False
+  ema_decay: 0.99
+
+  # Default language prompt for tasks
+  default_prompt: "manipulate objects"
+
+  # Delta actions
+  # If true, actions are encoded as deltas from current state
+  use_delta_actions: false
