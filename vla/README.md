@@ -8,12 +8,14 @@
 
 ### サポートされているバックエンド
 
-| バックエンド | Dockerfile | Requirements | Python | PyTorch | Transformers | 主な特徴 |
-|------------|-----------|--------------|--------|---------|--------------|---------|
-| **OpenVLA** | `Dockerfile.openvla` | `requirements-openvla.txt` | 3.10 | 2.5.1 | 4.57.3 | Prismatic VLM、単一ステップアクション |
-| **OpenPI** | `Dockerfile.openpi` | `requirements-openpi.txt` | 3.11 | 2.7.1 | 4.53.2 | JAX/Flax、アクションチャンク |
+| バックエンド | Dockerfile | Requirements | Python | PyTorch | Transformers | 実装状況 | 主な特徴 |
+|------------|-----------|--------------|--------|---------|--------------|---------|---------|
+| **OpenVLA** | `Dockerfile.openvla` | `requirements-openvla.txt` | 3.10 | 2.5.1 | 4.57.3 | 完全実装 | Prismatic VLM、単一ステップアクション |
+| **OpenPI** | `Dockerfile.openpi` | `requirements-openpi.txt` | 3.11 | 2.7.1 | 4.53.2 | 未実装 | JAX/Flax、アクションチャンク |
 
 **重要**: OpenVLAとOpenPIは互いに競合する依存関係を持つため、**別々のDockerイメージとrequirementsファイル**を使用します。同じ環境で両方をインストールすることはできません。
+
+**注意**: 現時点ではOpenVLAバックエンドのみ完全に実装されています。OpenPIバックエンドはデータ変換機能は実装されていますが、トレーニングパイプラインは未実装です。
 
 ### ディレクトリ構造
 
@@ -23,7 +25,6 @@ vla/
 ├── Dockerfile.openpi           # OpenPI専用Dockerイメージ (CUDA 12.9, Python 3.11)
 ├── requirements-openvla.txt    # OpenVLA依存関係
 ├── requirements-openpi.txt     # OpenPI依存関係
-├── docker-compose.yml          # Docker Compose設定
 ├── .env.template               # 環境変数テンプレート
 ├── configs/                    # 設定ファイル
 │   ├── openvla_default.yaml   # OpenVLAデフォルト設定
@@ -34,17 +35,24 @@ vla/
 │   │   │   ├── cli.py         # メインCLIエントリポイント
 │   │   │   └── trainer.py     # トレーニングロジック
 │   │   ├── backends/          # バックエンド固有の実装
-│   │   │   ├── openvla.py     # OpenVLAバックエンド
-│   │   │   ├── openpi.py      # OpenPIバックエンド
+│   │   │   ├── openvla.py     # OpenVLAバックエンド（実装済み）
+│   │   │   ├── openpi.py      # OpenPIバックエンド（未実装）
 │   │   │   └── base.py        # 基底クラス
 │   │   ├── config/            # 設定モジュール
 │   │   │   ├── base.py        # 基本設定（UnifiedVLAConfig等）
 │   │   │   ├── openvla_config.py  # OpenVLA固有設定
 │   │   │   └── openpi_config.py   # OpenPI固有設定
-│   │   ├── data/              # データローダー
+│   │   ├── data/              # データローダー・変換
+│   │   │   ├── crane_x7_dataset.py  # CRANE-X7データセット
+│   │   │   ├── adapters.py    # データアダプター
+│   │   │   └── converters.py  # フォーマット変換
 │   │   ├── transforms/        # データ変換
-│   │   └── scripts/           # ユーティリティスクリプト
-│   │       └── merge_lora.py  # LoRAアダプターマージスクリプト
+│   │   │   ├── action_transforms.py  # アクション変換
+│   │   │   ├── state_transforms.py   # 状態変換
+│   │   │   └── image_transforms.py   # 画像変換
+│   │   ├── scripts/           # ユーティリティスクリプト
+│   │   │   └── merge_lora.py  # LoRAアダプターマージスクリプト
+│   │   └── tests/             # テストモジュール
 │   ├── openvla/               # OpenVLAサブモジュール
 │   └── openpi/                # OpenPIサブモジュール
 └── README.md                  # このファイル
@@ -91,10 +99,14 @@ USERNAME=vla
 cd vla
 
 # OpenVLA用Dockerイメージをビルド
-docker compose --profile openvla build
+docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
 
 # インタラクティブコンテナを起動
-docker compose --profile openvla run --rm vla-finetune-openvla bash
+docker run --rm -it --gpus all \
+  -v $(pwd)/..:/workspace \
+  -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
+  --env-file .env \
+  crane_x7_vla_openvla bash
 ```
 
 #### OpenPI環境構築
@@ -103,10 +115,14 @@ docker compose --profile openvla run --rm vla-finetune-openvla bash
 cd vla
 
 # OpenPI用Dockerイメージをビルド
-docker compose --profile openpi build
+docker build -f Dockerfile.openpi -t crane_x7_vla_openpi .
 
 # インタラクティブコンテナを起動
-docker compose --profile openpi run --rm vla-finetune-openpi bash
+docker run --rm -it --gpus all \
+  -v $(pwd)/..:/workspace \
+  -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
+  --env-file .env \
+  crane_x7_vla_openpi bash
 ```
 
 ### オプション2: ローカルインストール（非推奨）
@@ -141,7 +157,8 @@ VLAモデルをファインチューニングする前に、デモンストレ�
 ```bash
 # テレオペレーション（手動教示）でデータ収集
 # リーダーロボットを手で動かしながらデータを記録
-docker compose -f ros2/docker-compose.yml --profile teleop-leader-logger up
+cd ros2
+docker compose --profile teleop-leader-logger up
 
 # データは自動的に data/tfrecord_logs に保存されます
 ```
@@ -186,78 +203,54 @@ data/tfrecord_logs/
 
 ```bash
 cd vla
-docker compose --profile openvla run --rm vla-finetune-openvla \
-  python -m crane_x7_vla.training.cli train openvla \
-    --data-root /workspace/data/tfrecord_logs \
-    --experiment-name crane_x7_openvla \
-    --training-batch-size 16 \
-    --training-learning-rate 5e-4 \
-    --training-num-epochs 100
+python -m crane_x7_vla.training.cli train openvla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openvla \
+  --training-batch-size 16 \
+  --training-learning-rate 5e-4 \
+  --training-max-steps 200000
 ```
 
 **LoRA設定をカスタマイズ**:
 
 ```bash
-cd vla
-docker compose --profile openvla run --rm vla-finetune-openvla \
-  python -m crane_x7_vla.training.cli train openvla \
-    --data-root /workspace/data/tfrecord_logs \
-    --experiment-name crane_x7_openvla \
-    --lora-rank 16 \
-    --lora-dropout 0.1
+python -m crane_x7_vla.training.cli train openvla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openvla \
+  --lora-rank 16 \
+  --lora-dropout 0.1
 ```
 
 **設定ファイルを使用**:
 
 ```bash
-cd vla
-docker compose --profile openvla run --rm vla-finetune-openvla \
-  python -m crane_x7_vla.training.cli train openvla \
-    --config /workspace/vla/configs/openvla_default.yaml
+python -m crane_x7_vla.training.cli train openvla \
+  --config /workspace/vla/configs/openvla_default.yaml
 ```
 
 **マルチGPU（例: 2台）**:
 
 ```bash
-cd vla
-docker compose --profile openvla run --rm vla-finetune-openvla \
-  torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train openvla \
-    --data-root /workspace/data/tfrecord_logs \
-    --experiment-name crane_x7_openvla \
-    --training-batch-size 8 \
-    --training-learning-rate 5e-4 \
-    --training-num-epochs 100
+torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train openvla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openvla \
+  --training-batch-size 8 \
+  --training-learning-rate 5e-4 \
+  --training-max-steps 200000
 ```
 
-チェックポイントは`/workspace/outputs/crane_x7_openvla/`に保存されます。
+チェックポイントは`./outputs/`以下に保存されます。
 
-#### OpenPIファインチューニング
+#### OpenPIファインチューニング（未実装）
 
-**シングルGPU**:
+**注意**: OpenPIバックエンドのトレーニングパイプラインは現在未実装です。以下のコマンドは将来の実装のためのインターフェースです。
 
 ```bash
-cd vla
-docker compose --profile openpi run --rm vla-finetune-openpi \
-  python -m crane_x7_vla.training.cli train openpi \
-    --data-root /workspace/data/tfrecord_logs \
-    --experiment-name crane_x7_openpi \
-    --training-batch-size 16 \
-    --training-learning-rate 5e-4 \
-    --training-num-epochs 100
+python -m crane_x7_vla.training.cli train openpi \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_openpi \
+  --training-batch-size 16
 ```
-
-**アクションチャンクサイズをカスタマイズ**:
-
-```bash
-cd vla
-docker compose --profile openpi run --rm vla-finetune-openpi \
-  python -m crane_x7_vla.training.cli train openpi \
-    --data-root /workspace/data/tfrecord_logs \
-    --experiment-name crane_x7_openpi \
-    --action-chunk-size 50
-```
-
-チェックポイントは`/workspace/outputs/crane_x7_openpi/`に保存されます。
 
 ### 2. デフォルト設定ファイルの生成
 
@@ -281,7 +274,7 @@ python -m crane_x7_vla.training.cli evaluate \
 
 ## CLI引数
 
-`crane_x7_vla.training.cli`は3つのサブコマンドをサポートしています: `train`, `evaluate`, `config`
+`crane_x7_vla.training.cli`は4つのサブコマンドをサポートしています: `train`, `agent`, `evaluate`, `config`
 
 ### trainコマンド
 
@@ -291,7 +284,7 @@ python -m crane_x7_vla.training.cli evaluate \
 # OpenVLAでトレーニング
 python -m crane_x7_vla.training.cli train openvla [オプション]
 
-# OpenPIでトレーニング
+# OpenPIでトレーニング（未実装）
 python -m crane_x7_vla.training.cli train openpi [オプション]
 ```
 
@@ -310,29 +303,96 @@ python -m crane_x7_vla.training.cli train openpi [オプション]
 |------|------|----------|
 | `--training-batch-size INT` | GPU毎のバッチサイズ | 16 |
 | `--training-num-epochs INT` | 学習エポック数 | 100 |
+| `--training-max-steps INT` | 最大トレーニングステップ数 | 200000 |
 | `--training-learning-rate FLOAT` | 学習率 | 5e-4 |
 | `--training-weight-decay FLOAT` | 重み減衰 | 0.01 |
+| `--training-warmup-steps INT` | ウォームアップステップ数 | 1000 |
+| `--training-gradient-accumulation-steps INT` | 勾配累積ステップ数 | 1 |
+| `--training-max-grad-norm FLOAT` | 勾配クリッピングの最大ノルム | 1.0 |
+| `--training-mixed-precision {no,fp16,bf16}` | 混合精度トレーニング | bf16 |
 | `--training-gradient-checkpointing` | 勾配チェックポイントを有効化 | false |
 | `--training-save-interval INT` | チェックポイント保存間隔 | 1000 |
 | `--training-eval-interval INT` | 検証実行間隔（ステップ） | 500 |
+| `--training-log-interval INT` | ログ出力間隔（ステップ） | 10 |
+
+#### 過学習検出設定（`--overfitting-*`プレフィックス）
+
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--overfitting-overfit-split-ratio FLOAT` | 過学習検出用ステップの割合（0で無効） | 0.1 |
+| `--overfitting-overfit-check-interval INT` | 過学習チェック間隔（ステップ） | 500 |
+| `--overfitting-overfit-check-steps INT` | 過学習チェック時の評価ステップ数 | 50 |
 
 #### OpenVLA固有設定（`train openvla`サブコマンド）
 
 | 引数 | 説明 | デフォルト |
 |------|------|----------|
+| `--model-id STR` | HuggingFaceモデルID | openvla/openvla-7b |
+| `--use-lora` | LoRAを使用 | true |
 | `--lora-rank INT` | LoRAランク | 32 |
+| `--lora-alpha INT` | LoRA alphaスケーリング | 16 |
 | `--lora-dropout FLOAT` | LoRAドロップアウト率 | 0.05 |
+| `--action-tokenization-bins INT` | アクション離散化ビン数 | 256 |
+| `--max-sequence-length INT` | 最大シーケンス長 | 512 |
+| `--use-flash-attention` | Flash Attention 2を使用 | false |
 | `--use-quantization` | 量子化を有効化（4-bit/8-bit） | false |
-| `--image-aug` | 画像拡張を有効化 | false |
-| `--skip-merge-on-save` | 保存時のLoRAマージをスキップ | false |
+| `--compile-model` | torch.compile()を使用 | false |
+| `--skip-merge-on-save` | 保存時のLoRAマージをスキップ | true |
+| `--image-aug` | 画像拡張を有効化 | true |
 
-#### OpenPI固有設定（`train openpi`サブコマンド）
+#### OpenPI固有設定（`train openpi`サブコマンド）（未実装）
 
 | 引数 | 説明 | デフォルト |
 |------|------|----------|
-| `--action-chunk-size INT` | アクションチャンクサイズ | 50 |
-| `--action-horizon INT` | アクションホライズン | 100 |
-| `--use-proprio` | プロプリオセプション（固有感覚）を使用 | true |
+| `--model-type {pi0,pi0_fast,pi0.5}` | OpenPIモデルタイプ | pi0_fast |
+| `--pretrained-model-path PATH` | 事前学習モデルのパス | null |
+| `--action-dim INT` | アクション次元（OpenPIは32を期待） | 32 |
+| `--state-dim INT` | 状態次元 | 32 |
+| `--action-horizon INT` | 予測するアクションチャンク数 | 50 |
+| `--num-cameras INT` | カメラ数 | 3 |
+| `--normalize-actions` | アクション正規化を有効化 | true |
+| `--normalization-mode {quantile,zscore}` | 正規化モード | quantile |
+| `--quantile-low FLOAT` | 正規化の下限分位数 | 0.01 |
+| `--quantile-high FLOAT` | 正規化の上限分位数 | 0.99 |
+| `--use-lora` | LoRAを使用 | true |
+| `--lora-rank INT` | LoRAランク | 32 |
+| `--lora-alpha INT` | LoRA alpha | 16 |
+| `--lora-dropout FLOAT` | LoRAドロップアウト率 | 0.1 |
+| `--max-token-len INT` | 最大トークン長 | 128 |
+| `--use-depth` | デプス画像を使用 | false |
+| `--chunk-interpolation {repeat,linear}` | アクションチャンク補間方法 | linear |
+
+### agentコマンド（W&B Sweep）
+
+`agent`コマンドはWeights & Biasesのハイパーパラメータ最適化（Sweep）を実行します:
+
+```bash
+# OpenVLAでSweepエージェントを実行
+python -m crane_x7_vla.training.cli agent openvla \
+  --sweep-id abc123 \
+  --data-root ./data \
+  --project my-project
+
+# OpenPIでSweepエージェントを実行（未実装）
+python -m crane_x7_vla.training.cli agent openpi \
+  --sweep-id abc123 \
+  --data-root ./data \
+  --entity my-team \
+  --project my-project \
+  --count 5
+```
+
+#### agentコマンドのオプション
+
+| 引数 | 説明 | デフォルト |
+|------|------|----------|
+| `--sweep-id ID` | W&B Sweep ID（必須） | - |
+| `--entity NAME` | W&B entity（チーム/ユーザー名） | デフォルト |
+| `--project NAME` | W&Bプロジェクト名 | crane_x7 |
+| `--count INT` | 実行するrun数 | 1 |
+
+`train`コマンドと同じオプションも使用可能です（`--config`, `--data-root`等）。
+Sweepで指定されたハイパーパラメータはCLI引数を上書きします。
 
 ### evaluateコマンド
 
@@ -374,13 +434,18 @@ experiment_name: crane_x7_openvla
 seed: 42
 resume_from_checkpoint: null
 
+# Weights & Biases設定
+wandb_project: crane-x7-vla
+wandb_entity: null  # W&Bユーザー名またはチーム名
+
 # データ設定
 data:
   data_root: ./data/tfrecord_logs
-  format: tfrecord
+  format: tfrecord  # 'tfrecord' or 'lerobot'
   train_split: 0.9
   val_split: 0.1
   shuffle: true
+  shuffle_buffer_size: 1000
   num_workers: 4
   prefetch_factor: 2
   cameras:
@@ -389,27 +454,30 @@ data:
       enabled: true
       width: 640
       height: 480
+      calibration_file: null
 
 # トレーニング設定
 training:
   batch_size: 16
   num_epochs: 100
+  max_steps: 200000
   learning_rate: 0.0005
   weight_decay: 0.01
   warmup_steps: 1000
   gradient_accumulation_steps: 1
   max_grad_norm: 1.0
-  mixed_precision: bf16
+  mixed_precision: bf16  # 'no', 'fp16', or 'bf16'
   gradient_checkpointing: false
   save_interval: 1000
   eval_interval: 500
   log_interval: 10
 
-# 検証設定
-validation:
-  val_split_ratio: 0.1
-  val_interval: 500
-  val_steps: 50
+# 過学習検出設定
+# ステップレベルの分割を使用して暗記（memorization）を検出
+overfitting:
+  overfit_split_ratio: 0.1      # 過学習検出用ステップの割合（0.0で無効）
+  overfit_check_interval: 500   # 過学習チェック間隔（勾配ステップ数）
+  overfit_check_steps: 50       # 過学習チェックあたりの評価バッチ数
 
 # バックエンド固有設定（backend_config）
 backend_config:
@@ -566,8 +634,8 @@ ERROR: tokenizers>=0.21,<0.22 is required but...
 **原因**: OpenVLAとOpenPIで必要なバージョンが異なります。
 
 **解決策**: 適切なDockerイメージを使用してください:
-- OpenVLA: `docker compose --profile openvla build`
-- OpenPI: `docker compose --profile openpi build`
+- OpenVLA: `docker build -f Dockerfile.openvla`
+- OpenPI: `docker build -f Dockerfile.openpi`
 
 **重要**: 両方を同じ環境にインストールしないでください。
 
