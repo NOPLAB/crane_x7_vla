@@ -91,20 +91,14 @@
 ### 開発モード
 
 リポジトリはdocker-composeプロファイルで制御される複数の実行モードをサポートしています：
-- **real**: 物理的なCRANE-X7にUSB経由で接続（`/dev/ttyUSB0`）、データロガー付き
-- **real-viewer**: カメラビューア付き実機（RealSense D435ストリームを表示）
-- **sim**: ハードウェアなしでGazeboシミュレーションを実行、データロガー付き
-- **teleop-leader**: リーダーロボットでトルクOFFモード（手動教示）
-- **teleop-leader-logger**: リーダーロボット + データロガー（記録あり）
-- **teleop-leader-viewer**: リーダーロボット + データロガー + カメラビューア
-- **teleop-follower**: フォロワーロボット（リーダーの動きを模倣、2台必要）
-- **teleop-follower-viewer**: フォロワーロボット + カメラビューア
-- **teleop-follower-logger**: フォロワーロボット + データロガー（記録あり）
+- **real**: 物理的なCRANE-X7にUSB経由で接続（`USE_D435`/`USE_VIEWER`環境変数でカメラ/ビューア切替可能）
+- **sim**: ハードウェアなしでGazeboシミュレーションを実行（`USE_VIEWER`環境変数でビューア切替可能）
 - **teleop**: リーダー + フォロワーを同時起動（2台必要）
-- **teleop-logger**: リーダー + フォロワー + データロガー（2台必要）
-- **teleop-viewer**: リーダー + フォロワー + カメラビューア（フォロワー側）
+- **teleop-viewer**: テレオペ + カメラビューア（フォロワー側）
 - **gemini**: 実機ロボットでGemini Robotics-ER APIを使用した物体検出とマニピュレーション
 - **gemini-sim**: GazeboシミュレーションでGemini APIを使用したピックアンドプレースタスク
+- **vla**: 実機ロボットでVLA推論を実行（GPU必須）
+- **vla-sim**: シミュレーションでVLA推論を実行（GPU必須）
 
 ### Docker Compose（クイックスタート）
 
