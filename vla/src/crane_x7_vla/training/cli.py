@@ -271,12 +271,26 @@ def create_default_config(backend: str, data_root: Path, output_dir: Path, exper
     return config
 
 
-def train_command(args, arg_mappings: dict[str, dict[str, tuple]]):
-    """Execute training command."""
-    backend = args.backend
+def _build_config_from_args(
+    backend: str,
+    args: argparse.Namespace,
+    arg_mappings: dict[str, dict[str, tuple]],
+    sweep_overrides: dict | None = None,
+) -> UnifiedVLAConfig:
+    """
+    Build configuration from CLI arguments and optional sweep overrides.
 
+    Args:
+        backend: Backend type ('openvla' or 'openpi')
+        args: Parsed CLI arguments
+        arg_mappings: Mapping from arg name to (config_path, field_name, type)
+        sweep_overrides: Optional dictionary of sweep parameter overrides
+
+    Returns:
+        UnifiedVLAConfig instance
+    """
     # Load or create configuration
-    if args.config:
+    if hasattr(args, "config") and args.config:
         # Load from YAML and determine backend
         config = UnifiedVLAConfig.from_yaml(args.config)
 
@@ -300,25 +314,75 @@ def train_command(args, arg_mappings: dict[str, dict[str, tuple]]):
                 experiment_name=config.experiment_name,
             )
     else:
-        if not args.data_root:
+        data_root = getattr(args, "data_root", None)
+        if not data_root:
             raise ValueError("--data-root is required when not using --config")
 
         config = create_default_config(
             backend=backend,
-            data_root=Path(args.data_root),
-            output_dir=Path(args.output_dir),
-            experiment_name=args.experiment_name,
+            data_root=Path(data_root),
+            output_dir=Path(getattr(args, "output_dir", "./outputs")),
+            experiment_name=getattr(args, "experiment_name", "crane_x7_vla"),
         )
 
     # Apply all CLI overrides automatically
     for mapping in arg_mappings.values():
         apply_cli_overrides(config, args, mapping)
 
+    # Apply sweep overrides (these take precedence)
+    if sweep_overrides:
+        _apply_sweep_overrides(config, sweep_overrides)
+
     # Handle backend-specific overrides for OpenVLA
     if config.backend == "openvla" and hasattr(config, "openvla") and config.backend_config is not None:
         for attr in ["lora_rank", "lora_dropout", "use_quantization", "image_aug", "skip_merge_on_save"]:
             if hasattr(config.openvla, attr):
                 config.backend_config[attr] = getattr(config.openvla, attr)
+
+    return config
+
+
+def _apply_sweep_overrides(config: UnifiedVLAConfig, sweep_params: dict) -> None:
+    """
+    Apply sweep parameter overrides to configuration.
+
+    Maps sweep parameter names to configuration attributes.
+
+    Args:
+        config: Configuration to modify
+        sweep_params: Dictionary of sweep parameters
+    """
+    # Mapping from sweep parameter name to config attribute path
+    PARAM_MAP = {
+        "learning_rate": ("training", "learning_rate"),
+        "batch_size": ("training", "batch_size"),
+        "weight_decay": ("training", "weight_decay"),
+        "warmup_steps": ("training", "warmup_steps"),
+        "max_grad_norm": ("training", "max_grad_norm"),
+        "gradient_accumulation_steps": ("training", "grad_accumulation_steps"),
+        "lora_rank": ("openvla", "lora_rank"),
+        "lora_alpha": ("openvla", "lora_alpha"),
+        "lora_dropout": ("openvla", "lora_dropout"),
+        "image_aug": ("openvla", "image_aug"),
+    }
+
+    for param_name, value in sweep_params.items():
+        if param_name in PARAM_MAP:
+            section, attr = PARAM_MAP[param_name]
+            obj = getattr(config, section, None)
+            if obj is not None and hasattr(obj, attr):
+                setattr(obj, attr, value)
+                logging.debug(f"Sweep override: {section}.{attr} = {value}")
+        else:
+            logging.warning(f"Unknown sweep parameter: {param_name}")
+
+
+def train_command(args, arg_mappings: dict[str, dict[str, tuple]]):
+    """Execute training command."""
+    backend = args.backend
+
+    # Build configuration from CLI arguments
+    config = _build_config_from_args(backend, args, arg_mappings)
 
     # Save configuration
     config_save_path = Path(config.output_dir) / "config.yaml"
@@ -331,6 +395,79 @@ def train_command(args, arg_mappings: dict[str, dict[str, tuple]]):
     results = trainer.train()
 
     logging.info(f"Training completed: {results}")
+
+
+def agent_command(args, arg_mappings: dict[str, dict[str, tuple]]):
+    """
+    Execute W&B sweep agent command.
+
+    Runs wandb.agent() which will:
+    1. Connect to the W&B sweep controller
+    2. Receive hyperparameters for each run
+    3. Execute training with the received parameters
+    """
+    try:
+        import wandb
+    except ImportError:
+        logging.error("wandb is not installed. Please install it with: pip install wandb")
+        sys.exit(1)
+
+    backend = args.backend
+    sweep_id = args.sweep_id
+    entity = args.entity
+    project = args.project
+    count = args.count
+
+    logging.info("=" * 60)
+    logging.info("W&B Sweep Agent")
+    logging.info("=" * 60)
+    logging.info(f"Sweep ID: {sweep_id}")
+    logging.info(f"Entity: {entity or '(default)'}")
+    logging.info(f"Project: {project}")
+    logging.info(f"Backend: {backend}")
+    logging.info(f"Count: {count}")
+    logging.info("=" * 60)
+
+    def run_training():
+        """Callback function for wandb.agent()."""
+        # Initialize W&B run (automatically connected to sweep)
+        run = wandb.init()
+
+        try:
+            # Get sweep parameters
+            sweep_params = dict(run.config)
+            logging.info(f"Sweep parameters: {sweep_params}")
+
+            # Build configuration with sweep overrides
+            config = _build_config_from_args(backend, args, arg_mappings, sweep_overrides=sweep_params)
+
+            # Save configuration
+            config_save_path = Path(config.output_dir) / "config.yaml"
+            config_save_path.parent.mkdir(parents=True, exist_ok=True)
+            config.to_yaml(config_save_path)
+            logging.info(f"Configuration saved to {config_save_path}")
+
+            # Create trainer and start training
+            trainer = VLATrainer(config)
+            results = trainer.train()
+
+            logging.info(f"Training completed: {results}")
+
+        except Exception as e:
+            logging.exception(f"Training failed: {e}")
+            wandb.log({"training_failed": True, "error": str(e)})
+            raise
+        finally:
+            wandb.finish()
+
+    # Run the sweep agent
+    wandb.agent(
+        sweep_id=sweep_id,
+        function=run_training,
+        entity=entity if entity else None,
+        project=project,
+        count=count,
+    )
 
 
 def evaluate_command(args):
@@ -502,6 +639,75 @@ Examples:
     config_parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints and logs")
     config_parser.add_argument("--experiment-name", type=str, default="crane_x7_vla", help="Experiment name")
 
+    # =====================
+    # Agent command (W&B Sweep)
+    # =====================
+    agent_parser = subparsers.add_parser(
+        "agent",
+        help="Run W&B sweep agent for hyperparameter optimization",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run sweep agent for OpenVLA
+  python -m crane_x7_vla.training.cli agent openvla --sweep-id abc123 --data-root ./data
+
+  # Run sweep agent with specific entity/project
+  python -m crane_x7_vla.training.cli agent openvla --sweep-id abc123 \\
+      --entity my-team --project my-project --data-root ./data
+
+  # Run multiple sweep runs
+  python -m crane_x7_vla.training.cli agent openvla --sweep-id abc123 --count 5 --data-root ./data
+        """,
+    )
+    agent_subparsers = agent_parser.add_subparsers(dest="backend", help="VLA backend to use")
+
+    # Store agent argument mappings
+    agent_arg_mappings = {}
+
+    # ----- Agent OpenVLA subcommand -----
+    agent_openvla_parser = agent_subparsers.add_parser(
+        "openvla",
+        help="Run sweep agent with OpenVLA backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    agent_openvla_parser.add_argument("--sweep-id", type=str, required=True, help="W&B Sweep ID")
+    agent_openvla_parser.add_argument("--entity", type=str, help="W&B entity (team/username)")
+    agent_openvla_parser.add_argument("--project", type=str, default="crane_x7", help="W&B project name")
+    agent_openvla_parser.add_argument("--count", type=int, default=1, help="Number of runs to execute")
+    _add_common_train_args(agent_openvla_parser)
+    agent_arg_mappings["openvla"] = _add_common_config_args(agent_openvla_parser)
+
+    # Add OpenVLA-specific arguments
+    agent_openvla_group = agent_openvla_parser.add_argument_group("OpenVLA Configuration")
+    agent_arg_mappings["openvla"]["openvla"] = add_dataclass_args_to_parser(
+        agent_openvla_group,
+        OpenVLASpecificConfig,
+        prefix="",
+        exclude_fields=["lora_target_modules", "action_range", "image_size"],
+    )
+
+    # ----- Agent OpenPI subcommand -----
+    agent_openpi_parser = agent_subparsers.add_parser(
+        "openpi",
+        help="Run sweep agent with OpenPI backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    agent_openpi_parser.add_argument("--sweep-id", type=str, required=True, help="W&B Sweep ID")
+    agent_openpi_parser.add_argument("--entity", type=str, help="W&B entity (team/username)")
+    agent_openpi_parser.add_argument("--project", type=str, default="crane_x7", help="W&B project name")
+    agent_openpi_parser.add_argument("--count", type=int, default=1, help="Number of runs to execute")
+    _add_common_train_args(agent_openpi_parser)
+    agent_arg_mappings["openpi"] = _add_common_config_args(agent_openpi_parser)
+
+    # Add OpenPI-specific arguments
+    agent_openpi_group = agent_openpi_parser.add_argument_group("OpenPI Configuration")
+    agent_arg_mappings["openpi"]["openpi"] = add_dataclass_args_to_parser(
+        agent_openpi_group,
+        OpenPISpecificConfig,
+        prefix="",
+        exclude_fields=["image_size"],
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -513,6 +719,11 @@ Examples:
             train_parser.print_help()
             sys.exit(1)
         train_command(args, all_arg_mappings.get(args.backend, {}))
+    elif args.command == "agent":
+        if args.backend is None:
+            agent_parser.print_help()
+            sys.exit(1)
+        agent_command(args, agent_arg_mappings.get(args.backend, {}))
     elif args.command == "evaluate":
         evaluate_command(args)
     elif args.command == "config":

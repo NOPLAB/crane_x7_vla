@@ -8,6 +8,7 @@ This module implements OpenVLA-style fine-tuning using the CRANE-X7 dataset,
 directly based on the OpenVLA finetune.py implementation.
 """
 
+import logging
 import os
 import sys
 from collections import deque
@@ -16,6 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 import torch
 import torch.distributed as dist
 import tqdm
@@ -83,9 +86,13 @@ class CraneX7FinetuneConfig:
     overfit_check_interval: int = 500                               # Check overfitting every N gradient steps
     overfit_check_steps: int = 50                                   # Number of steps per overfitting check
 
+    # Memory Optimization
+    gradient_checkpointing: bool = False                            # Enable gradient checkpointing for memory optimization
+
     # LoRA Arguments
     use_lora: bool = True                                           # Whether to use LoRA fine-tuning
     lora_rank: int = 32                                             # Rank of LoRA weight matrix
+    lora_alpha: int = 16                                            # LoRA alpha scaling parameter
     lora_dropout: float = 0.0                                       # Dropout applied to LoRA weights
     use_quantization: bool = False                                  # Whether to 4-bit quantize VLA for LoRA fine-tuning
                                                                     #   => CAUTION: Reduces memory but hurts performance
@@ -184,13 +191,30 @@ class CraneX7Trainer:
         else:
             vla = vla.to(device_id)
 
-        # [LoRA] Wrap Model w/ PEFT `LoraConfig` =>> by default we set `target_modules=all-linear`
+        # Enable gradient checkpointing for memory optimization
+        if self.cfg.gradient_checkpointing:
+            vla.gradient_checkpointing_enable()
+            logger.info("Gradient checkpointing enabled")
+
+        # [LoRA] Wrap Model w/ PEFT `LoraConfig`
+        # NOTE: We explicitly target only the LLM layers, NOT the Vision Backbone (timm ViT).
+        # Using "all-linear" causes CUBLAS errors with timm ViT + bfloat16 on some GPU configurations.
         if self.cfg.use_lora:
+            # Target LLM (Llama) layers only - exclude vision_backbone to avoid CUBLAS errors
+            llm_target_modules = [
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ]
             lora_config = LoraConfig(
                 r=self.cfg.lora_rank,
-                lora_alpha=min(self.cfg.lora_rank, 16),
+                lora_alpha=self.cfg.lora_alpha,
                 lora_dropout=self.cfg.lora_dropout,
-                target_modules="all-linear",
+                target_modules=llm_target_modules,
                 init_lora_weights="gaussian",
             )
             vla = get_peft_model(vla, lora_config)
@@ -200,6 +224,10 @@ class CraneX7Trainer:
         is_distributed = distributed_state.num_processes > 1
         if is_distributed:
             vla = DDP(vla, device_ids=[device_id], find_unused_parameters=True, gradient_as_bucket_view=True)
+            # Enable static graph for compatibility with gradient checkpointing + LoRA
+            # This prevents "Expected to mark a variable ready only once" errors
+            if self.cfg.gradient_checkpointing:
+                vla._set_static_graph()
 
         # Get unwrapped model for accessing config/internals
         unwrapped_vla = vla.module if is_distributed else vla
@@ -275,8 +303,21 @@ class CraneX7Trainer:
             )
 
         # Initialize Logging =>> W&B
+        # Skip if wandb run is already active (e.g., when called from agent command)
         if distributed_state.is_main_process:
-            wandb.init(entity=self.cfg.wandb_entity, project=self.cfg.wandb_project, name=f"ft+{exp_id}")
+            if wandb.run is not None:
+                # Already in an active wandb run (from agent command or sweep)
+                logger.info(f"Using existing W&B run: {wandb.run.id}")
+            else:
+                # タイムアウトを延長（モデル読み込みに時間がかかる場合があるため）
+                wandb_settings = wandb.Settings(init_timeout=300)
+                # Create new run
+                wandb.init(
+                    entity=self.cfg.wandb_entity,
+                    project=self.cfg.wandb_project,
+                    name=f"ft+{exp_id}",
+                    settings=wandb_settings,
+                )
 
         # Deque to store recent train metrics (used for computing smoothened metrics for gradient accumulation)
         recent_losses = deque(maxlen=self.cfg.grad_accumulation_steps)
@@ -376,6 +417,10 @@ class CraneX7Trainer:
                                     "overfit_loss": overfit_metrics["overfit_loss"],
                                     "overfit_action_accuracy": overfit_metrics["overfit_action_accuracy"],
                                     "overfit_l1_loss": overfit_metrics["overfit_l1_loss"],
+                                    # W&B Sweep用メトリクス (eval/lossとして記録)
+                                    "eval/loss": overfit_metrics["overfit_loss"],
+                                    "eval/action_accuracy": overfit_metrics["overfit_action_accuracy"],
+                                    "eval/l1_loss": overfit_metrics["overfit_l1_loss"],
                                 },
                                 step=gradient_step_idx,
                             )
@@ -583,6 +628,8 @@ class OpenVLABackend(VLABackend):
             grad_accumulation_steps=self.vla_config.training.gradient_accumulation_steps,
             image_aug=self.vla_config.openvla.image_aug if hasattr(self.vla_config.openvla, 'image_aug') else True,
             shuffle_buffer_size=self.vla_config.data.shuffle_buffer_size if hasattr(self.vla_config.data, 'shuffle_buffer_size') else 100_000,
+            # Memory Optimization
+            gradient_checkpointing=self.vla_config.training.gradient_checkpointing,
             # Overfitting Detection Parameters
             overfit_split_ratio=self.vla_config.overfitting.overfit_split_ratio if hasattr(self.vla_config, 'overfitting') and hasattr(self.vla_config.overfitting, 'overfit_split_ratio') else 0.1,
             overfit_check_interval=self.vla_config.overfitting.overfit_check_interval if hasattr(self.vla_config, 'overfitting') and hasattr(self.vla_config.overfitting, 'overfit_check_interval') else 500,
@@ -590,6 +637,7 @@ class OpenVLABackend(VLABackend):
             # LoRA Arguments
             use_lora=self.vla_config.openvla.use_lora,
             lora_rank=self.vla_config.openvla.lora_rank,
+            lora_alpha=self.vla_config.openvla.lora_alpha,
             lora_dropout=self.vla_config.openvla.lora_dropout,
             use_quantization=self.vla_config.openvla.use_quantization,
             # Tracking Parameters

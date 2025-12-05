@@ -238,8 +238,35 @@ class CraneX7Dataset(IterableDataset):
         This matches the OpenVLA behavior of computing q01/q99 for BOUNDS_Q99 normalization.
         Returns statistics in the format expected by save_dataset_statistics:
         {dataset_name: {action: {...}, proprio: {...}, num_transitions: int, num_trajectories: int}}
+
+        Raises:
+            FileNotFoundError: If no TFRecord files are found in the data directory.
+            ValueError: If TFRecord files exist but contain no valid data.
         """
         import json
+
+        # Check if any TFRecord files were found
+        if not self.tfrecord_files:
+            raise FileNotFoundError(
+                f"\n"
+                f"========================================\n"
+                f"ERROR: No TFRecord files found\n"
+                f"========================================\n"
+                f"Data directory: {self.data_root_dir}\n"
+                f"\n"
+                f"Expected TFRecord file patterns:\n"
+                f"  - {self.data_root_dir}/episode_*/episode_data.tfrecord\n"
+                f"  - {self.data_root_dir}/**/*.tfrecord\n"
+                f"\n"
+                f"Please ensure:\n"
+                f"  1. The --data_dir path is correct\n"
+                f"  2. TFRecord files have been generated using crane_x7_log\n"
+                f"  3. The directory contains episode_*/episode_data.tfrecord files\n"
+                f"\n"
+                f"To collect data, use the ROS 2 data logging package:\n"
+                f"  cd ros2 && docker compose --profile real up\n"
+                f"========================================\n"
+            )
 
         # Try to load existing statistics
         stats_path = self.data_root_dir / "dataset_statistics.json"
@@ -274,6 +301,32 @@ class CraneX7Dataset(IterableDataset):
                 actions.append(example["action"].numpy())
                 proprios.append(example["observation/proprio"].numpy())
                 num_transitions += 1
+
+        # Check if any data was loaded from the TFRecord files
+        if num_transitions == 0:
+            raise ValueError(
+                f"\n"
+                f"========================================\n"
+                f"ERROR: TFRecord files contain no data\n"
+                f"========================================\n"
+                f"Found {len(self.tfrecord_files)} TFRecord file(s) in: {self.data_root_dir}\n"
+                f"But no valid transitions could be read from them.\n"
+                f"\n"
+                f"TFRecord files found:\n"
+                + "\n".join(f"  - {f}" for f in self.tfrecord_files[:10])
+                + (f"\n  ... and {len(self.tfrecord_files) - 10} more" if len(self.tfrecord_files) > 10 else "")
+                + f"\n\n"
+                f"Possible causes:\n"
+                f"  1. TFRecord files are corrupted or empty\n"
+                f"  2. TFRecord format doesn't match expected schema\n"
+                f"  3. Data collection was interrupted before saving\n"
+                f"\n"
+                f"Expected TFRecord features:\n"
+                f"  - action: float32[8]\n"
+                f"  - observation/proprio: float32[8]\n"
+                f"  - observation/image_primary: bytes (JPEG)\n"
+                f"========================================\n"
+            )
 
         actions = np.array(actions)
         proprios = np.array(proprios)

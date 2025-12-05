@@ -8,55 +8,18 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from pydantic import ValidationError
-from rich.console import Console
 from rich.panel import Panel
 
-from slurm_submit.config import Settings, load_settings
-from slurm_submit.slurm_client import SlurmClient
-from slurm_submit.ssh_client import SSHClient, SSHError
+from slurm_submit.core import console, create_clients, load_settings_with_error
 from slurm_submit.sweep.engine import SweepEngine, create_custom_job_generator
 from slurm_submit.sweep.wandb_client import WandbSweepClient, WandbSweepError
 
-console = Console()
 
 sweep_app = typer.Typer(
     name="sweep",
     help="W&B Sweepコマンド",
     no_args_is_help=True,
 )
-
-
-def _load_settings_with_error(env_file: Path) -> Settings:
-    """設定を読み込み、エラー時はわかりやすいメッセージを表示."""
-    try:
-        return load_settings(env_file)
-    except ValidationError as e:
-        console.print("[red]設定ファイルの読み込みに失敗しました[/red]")
-        for error in e.errors():
-            field = ".".join(str(loc) for loc in error["loc"])
-            msg = error["msg"]
-            console.print(f"  [yellow]{field}[/yellow]: {msg}")
-        console.print(f"\n[dim]設定ファイル: {env_file}[/dim]")
-        raise typer.Exit(1) from e
-    except FileNotFoundError:
-        console.print(f"[red]設定ファイルが見つかりません: {env_file}[/red]")
-        raise typer.Exit(1)
-
-
-def _create_clients(
-    settings: Settings, password: str | None = None
-) -> tuple[SSHClient, SlurmClient]:
-    """SSH/Slurmクライアントを作成して接続."""
-    ssh = SSHClient(settings.ssh)
-    try:
-        ssh.connect(password=password)
-    except SSHError as e:
-        console.print(f"[red]SSH接続に失敗しました: {e}[/red]")
-        raise typer.Exit(1) from e
-
-    slurm = SlurmClient(ssh, settings.slurm)
-    return ssh, slurm
 
 
 @sweep_app.command("start")
@@ -88,13 +51,21 @@ def sweep_start(
         ),
     ] = 10,
     poll_interval: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--poll-interval",
             "-i",
-            help="ジョブ完了待機のポーリング間隔 (秒)",
+            help="状態ポーリング間隔 (秒) [default: SLURM_POLL_INTERVAL]",
         ),
-    ] = 300,
+    ] = None,
+    log_interval: Annotated[
+        Optional[int],
+        typer.Option(
+            "--log-interval",
+            "-l",
+            help="ログポーリング間隔 (秒) [default: SLURM_LOG_POLL_INTERVAL]",
+        ),
+    ] = None,
     template: Annotated[
         Optional[Path],
         typer.Option(
@@ -125,7 +96,11 @@ def sweep_start(
     ] = None,
 ) -> None:
     """新規Sweepを開始."""
-    settings = _load_settings_with_error(env_file)
+    settings = load_settings_with_error(env_file)
+
+    # 設定からデフォルト値を取得
+    actual_poll_interval = poll_interval if poll_interval is not None else settings.slurm.poll_interval
+    actual_log_interval = log_interval if log_interval is not None else settings.slurm.log_poll_interval
 
     # W&Bクライアントを作成してSweepを作成
     wandb_client = WandbSweepClient(settings.wandb)
@@ -136,9 +111,13 @@ def sweep_start(
         console.print(f"[red]Sweep作成に失敗しました: {e}[/red]")
         raise typer.Exit(1) from e
 
+    # W&Bの実効entityを取得（テンプレートに渡すため）
+    effective_entity = wandb_client.effective_entity
+
     console.print(
         Panel(
             f"Sweep ID: {sweep_id}\n"
+            f"Entity: {effective_entity or '(default)'}\n"
             f"URL: {wandb_client.get_sweep_url(sweep_id)}",
             title="Sweep作成完了",
             border_style="green",
@@ -146,14 +125,18 @@ def sweep_start(
     )
 
     # SSH/Slurmクライアントを作成
-    ssh, slurm = _create_clients(settings, password)
+    ssh, slurm = create_clients(settings, password)
 
     try:
+        # 追加変数（実効entityを含む）
+        extra_vars = {"WANDB_ENTITY": effective_entity} if effective_entity else None
+
         # ジョブ生成関数を作成
         if template:
             job_generator = create_custom_job_generator(
                 template_path=template,
-                settings=settings,
+                env_file=env_file,
+                extra_vars=extra_vars,
             )
         else:
             job_generator = None
@@ -169,7 +152,8 @@ def sweep_start(
         engine.run(
             sweep_id=sweep_id,
             max_runs=max_runs,
-            poll_interval=poll_interval,
+            poll_interval=actual_poll_interval,
+            log_poll_interval=actual_log_interval,
             dry_run=dry_run,
         )
 
@@ -200,13 +184,21 @@ def sweep_resume(
         ),
     ] = 10,
     poll_interval: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--poll-interval",
             "-i",
-            help="ジョブ完了待機のポーリング間隔 (秒)",
+            help="状態ポーリング間隔 (秒) [default: SLURM_POLL_INTERVAL]",
         ),
-    ] = 300,
+    ] = None,
+    log_interval: Annotated[
+        Optional[int],
+        typer.Option(
+            "--log-interval",
+            "-l",
+            help="ログポーリング間隔 (秒) [default: SLURM_LOG_POLL_INTERVAL]",
+        ),
+    ] = None,
     template: Annotated[
         Optional[Path],
         typer.Option(
@@ -237,7 +229,11 @@ def sweep_resume(
     ] = None,
 ) -> None:
     """既存Sweepを再開."""
-    settings = _load_settings_with_error(env_file)
+    settings = load_settings_with_error(env_file)
+
+    # 設定からデフォルト値を取得
+    actual_poll_interval = poll_interval if poll_interval is not None else settings.slurm.poll_interval
+    actual_log_interval = log_interval if log_interval is not None else settings.slurm.log_poll_interval
 
     # W&Bクライアントを作成
     wandb_client = WandbSweepClient(settings.wandb)
@@ -248,9 +244,13 @@ def sweep_resume(
         console.print("[yellow]このSweepは既に終了しています[/yellow]")
         raise typer.Exit(0)
 
+    # W&Bの実効entityを取得（テンプレートに渡すため）
+    effective_entity = wandb_client.effective_entity
+
     console.print(
         Panel(
             f"Sweep ID: {sweep_id}\n"
+            f"Entity: {effective_entity or '(default)'}\n"
             f"状態: {sweep_state}\n"
             f"URL: {wandb_client.get_sweep_url(sweep_id)}",
             title="Sweep再開",
@@ -259,14 +259,18 @@ def sweep_resume(
     )
 
     # SSH/Slurmクライアントを作成
-    ssh, slurm = _create_clients(settings, password)
+    ssh, slurm = create_clients(settings, password)
 
     try:
+        # 追加変数（実効entityを含む）
+        extra_vars = {"WANDB_ENTITY": effective_entity} if effective_entity else None
+
         # ジョブ生成関数を作成
         if template:
             job_generator = create_custom_job_generator(
                 template_path=template,
-                settings=settings,
+                env_file=env_file,
+                extra_vars=extra_vars,
             )
         else:
             job_generator = None
@@ -282,7 +286,8 @@ def sweep_resume(
         engine.run(
             sweep_id=sweep_id,
             max_runs=max_runs,
-            poll_interval=poll_interval,
+            poll_interval=actual_poll_interval,
+            log_poll_interval=actual_log_interval,
             dry_run=dry_run,
         )
 
@@ -306,7 +311,7 @@ def sweep_status(
     ] = Path(".env"),
 ) -> None:
     """Sweepの状態を確認."""
-    settings = _load_settings_with_error(env_file)
+    settings = load_settings_with_error(env_file)
 
     wandb_client = WandbSweepClient(settings.wandb)
     sweep_state = wandb_client.get_sweep_state(sweep_id)

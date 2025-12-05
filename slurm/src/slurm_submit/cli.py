@@ -11,15 +11,10 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from pydantic import ValidationError
-from rich.console import Console
 
 from slurm_submit import __version__
-from slurm_submit.config import Settings, load_settings
-from slurm_submit.slurm_client import SlurmClient, SlurmError
-from slurm_submit.ssh_client import SSHClient, SSHError
-
-console = Console()
+from slurm_submit.clients import SlurmError
+from slurm_submit.core import console, create_clients, load_settings_with_error
 
 app = typer.Typer(
     name="slurm-submit",
@@ -51,37 +46,6 @@ def main(
 ) -> None:
     """SSH経由でSlurmクラスターにジョブを投下するツール."""
     pass
-
-
-def _load_settings_with_error(env_file: Path) -> Settings:
-    """設定を読み込み、エラー時はわかりやすいメッセージを表示."""
-    try:
-        return load_settings(env_file)
-    except ValidationError as e:
-        console.print("[red]設定ファイルの読み込みに失敗しました[/red]")
-        for error in e.errors():
-            field = ".".join(str(loc) for loc in error["loc"])
-            msg = error["msg"]
-            console.print(f"  [yellow]{field}[/yellow]: {msg}")
-        console.print(f"\n[dim]設定ファイル: {env_file}[/dim]")
-        raise typer.Exit(1) from e
-    except FileNotFoundError:
-        console.print(f"[red]設定ファイルが見つかりません: {env_file}[/red]")
-        console.print("[dim].env.templateをコピーして.envを作成してください[/dim]")
-        raise typer.Exit(1)
-
-
-def _create_clients(settings: Settings, password: str | None = None) -> tuple[SSHClient, SlurmClient]:
-    """SSH/Slurmクライアントを作成して接続."""
-    ssh = SSHClient(settings.ssh)
-    try:
-        ssh.connect(password=password)
-    except SSHError as e:
-        console.print(f"[red]SSH接続に失敗しました: {e}[/red]")
-        raise typer.Exit(1) from e
-
-    slurm = SlurmClient(ssh, settings.slurm)
-    return ssh, slurm
 
 
 @app.command()
@@ -123,7 +87,7 @@ def submit(
     ] = None,
 ) -> None:
     """ジョブスクリプトをSlurmクラスターに投下."""
-    settings = _load_settings_with_error(env_file)
+    settings = load_settings_with_error(env_file)
 
     if dry_run:
         console.print("[yellow]ドライランモード: 実際には投下しません[/yellow]")
@@ -135,7 +99,7 @@ def submit(
         console.print(f"[dim]リモートワークディレクトリ: {settings.slurm.remote_workdir}[/dim]")
         return
 
-    ssh, slurm = _create_clients(settings, password)
+    ssh, slurm = create_clients(settings, password)
     try:
         job_id = slurm.submit(script)
         console.print(f"\n[bold green]ジョブID: {job_id}[/bold green]")
@@ -179,8 +143,8 @@ def status(
     ] = None,
 ) -> None:
     """ジョブキューの状態を確認."""
-    settings = _load_settings_with_error(env_file)
-    ssh, slurm = _create_clients(settings, password)
+    settings = load_settings_with_error(env_file)
+    ssh, slurm = create_clients(settings, password)
 
     try:
         user = None if all_users else settings.ssh.user
@@ -218,8 +182,8 @@ def cancel(
     ] = None,
 ) -> None:
     """ジョブをキャンセル."""
-    settings = _load_settings_with_error(env_file)
-    ssh, slurm = _create_clients(settings, password)
+    settings = load_settings_with_error(env_file)
+    ssh, slurm = create_clients(settings, password)
 
     try:
         slurm.cancel(job_id)
@@ -245,13 +209,13 @@ def wait(
         ),
     ] = Path(".env"),
     poll_interval: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--interval",
             "-i",
-            help="ポーリング間隔 (秒)",
+            help="状態ポーリング間隔 (秒) [default: SLURM_POLL_INTERVAL or 60]",
         ),
-    ] = 60,
+    ] = None,
     timeout: Annotated[
         Optional[int],
         typer.Option(
@@ -269,16 +233,45 @@ def wait(
             hide_input=True,
         ),
     ] = None,
+    no_log: Annotated[
+        bool,
+        typer.Option(
+            "--no-log",
+            help="ログ表示を無効化",
+        ),
+    ] = False,
+    log_interval: Annotated[
+        Optional[int],
+        typer.Option(
+            "--log-interval",
+            "-l",
+            help="ログポーリング間隔 (秒) [default: SLURM_LOG_POLL_INTERVAL or 5]",
+        ),
+    ] = None,
 ) -> None:
-    """ジョブの完了を待機."""
-    settings = _load_settings_with_error(env_file)
-    ssh, slurm = _create_clients(settings, password)
+    """ジョブの完了を待機.
+
+    実行時間とログを表示しながらジョブの完了を待ちます。
+    ログは5行のスクロールウィンドウで表示されます。
+
+    ポーリング間隔は.envファイルで設定可能:
+      SLURM_POLL_INTERVAL=60      # 状態確認間隔 (秒)
+      SLURM_LOG_POLL_INTERVAL=5   # ログ確認間隔 (秒)
+    """
+    settings = load_settings_with_error(env_file)
+    ssh, slurm = create_clients(settings, password)
+
+    # 設定からデフォルト値を取得（コマンドライン引数で上書き可能）
+    actual_poll_interval = poll_interval if poll_interval is not None else settings.slurm.poll_interval
+    actual_log_interval = log_interval if log_interval is not None else settings.slurm.log_poll_interval
 
     try:
         final_state = slurm.wait_for_completion(
             job_id,
-            poll_interval=poll_interval,
+            poll_interval=actual_poll_interval,
             timeout=timeout,
+            show_log=not no_log,
+            log_poll_interval=actual_log_interval,
         )
         if final_state in ("COMPLETED",):
             raise typer.Exit(0)

@@ -1,18 +1,29 @@
 # OpenVLA Training Configuration for CRANE-X7
 # This is a sample configuration file for training OpenVLA on CRANE-X7 robot data
 
+# =============================================================================
+# Top-level Settings
+# =============================================================================
 backend: openvla
 output_dir: ./outputs/openvla
 experiment_name: crane_x7_openvla
 seed: 42
 resume_from_checkpoint: null
 
+# Weights & Biases logging
+wandb_project: crane-x7-vla
+wandb_entity: null  # Your W&B username or team name
+
+# =============================================================================
+# Data Configuration
+# =============================================================================
 data:
   data_root: ./data/tfrecord_logs
-  format: tfrecord
+  format: tfrecord  # 'tfrecord' or 'lerobot'
   train_split: 0.9
   val_split: 0.1
   shuffle: true
+  shuffle_buffer_size: 1000
   num_workers: 4
   prefetch_factor: 2
 
@@ -25,32 +36,41 @@ data:
       height: 480
       calibration_file: null
 
+# =============================================================================
+# Training Configuration
+# =============================================================================
 training:
   batch_size: 16
   num_epochs: 100
+  max_steps: 200000
   learning_rate: 0.0005
   weight_decay: 0.01
   warmup_steps: 1000
   gradient_accumulation_steps: 1
   max_grad_norm: 1.0
-  mixed_precision: bf16
+  mixed_precision: bf16  # 'no', 'fp16', or 'bf16'
   gradient_checkpointing: false
   save_interval: 1000
   eval_interval: 500
   log_interval: 10
 
-# Overfitting detection settings for WANDB monitoring
+# =============================================================================
+# Overfitting Detection Settings
 # Uses step-level splitting (not episode-level) to properly detect memorization
+# =============================================================================
 overfitting:
   overfit_split_ratio: 0.1      # 10% of steps for overfitting detection (0.0 to disable)
   overfit_check_interval: 500   # Check overfitting every N gradient steps
   overfit_check_steps: 50       # Number of batches to evaluate per overfitting check
 
+# =============================================================================
+# OpenVLA Backend Configuration
+# =============================================================================
 backend_config:
   # Model settings
   model_id: openvla/openvla-7b
 
-  # LoRA settings
+  # LoRA settings for parameter-efficient fine-tuning
   use_lora: true
   lora_rank: 32
   lora_alpha: 16
@@ -77,8 +97,9 @@ backend_config:
     - 224
 
   # Optimization
-  use_flash_attention: false
-  compile_model: false
+  use_flash_attention: false  # Use Flash Attention 2 if available
+  use_quantization: false     # Use quantization (4-bit/8-bit) for memory efficiency
+  compile_model: false        # Use torch.compile() for optimization
 
   # Checkpoint saving
   # When true, only LoRA adapters are saved (faster, avoids NCCL timeout on multi-GPU)

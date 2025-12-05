@@ -2,14 +2,18 @@
 # Copyright 2025 nop
 """W&B Sweep APIクライアント.
 
-wandbを使用してSweepの作成と管理を行う。
+wandbを使用してSweepの作成と状態管理を行う。
+
+新しいアーキテクチャでは、パラメータの取得とRunの作成は
+Slurmジョブ内のwandb.agent()が行います。
+このクライアントはSweepの作成と状態確認のみを担当します。
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import yaml
 from rich.console import Console
@@ -24,7 +28,11 @@ class WandbSweepError(Exception):
 
 
 class WandbSweepClient:
-    """W&B Sweep APIのラッパー."""
+    """W&B Sweep APIのラッパー.
+
+    Sweepの作成と状態確認のみを担当。
+    パラメータ取得とRun作成はSlurmジョブ内のwandb.agent()が行う。
+    """
 
     def __init__(self, config: WandbConfig):
         """クライアントを初期化.
@@ -53,7 +61,24 @@ class WandbSweepClient:
                 "wandbがインストールされていません。pip install wandb を実行してください"
             ) from e
 
+        # デフォルトentityを取得（configで未設定の場合）
+        if not self.config.entity:
+            try:
+                api = wandb.Api()
+                self._default_entity = api.default_entity
+                console.print(f"[dim]W&Bデフォルトentity: {self._default_entity}[/dim]")
+            except Exception:
+                self._default_entity = None
+        else:
+            self._default_entity = None
+
         self._initialized = True
+
+    @property
+    def effective_entity(self) -> str | None:
+        """実効entity（config設定値またはデフォルト）を取得."""
+        self._ensure_initialized()
+        return self.config.entity or self._default_entity
 
     def create_sweep(
         self,
@@ -87,7 +112,7 @@ class WandbSweepClient:
             raise WandbSweepError(f"Sweep設定の読み込みに失敗しました: {e}") from e
 
         # エンティティとプロジェクトを決定
-        entity = entity or self.config.entity
+        entity = entity or self.effective_entity
         project = project or self.config.project
 
         if not project:
@@ -103,191 +128,6 @@ class WandbSweepClient:
             return sweep_id
         except Exception as e:
             raise WandbSweepError(f"Sweep作成に失敗しました: {e}") from e
-
-    def get_next_run(
-        self,
-        sweep_id: str,
-        entity: str | None = None,
-        project: str | None = None,
-    ) -> dict[str, Any] | None:
-        """次の実行パラメータを取得.
-
-        Args:
-            sweep_id: SweepのID
-            entity: W&Bエンティティ
-            project: W&Bプロジェクト
-
-        Returns:
-            パラメータ辞書、または取得できない場合はNone
-        """
-        self._ensure_initialized()
-
-        entity = entity or self.config.entity
-        project = project or self.config.project
-
-        if not project:
-            raise WandbSweepError("W&Bプロジェクト名が指定されていません")
-
-        try:
-            # Sweep Agentとして次のパラメータを取得
-            api = self._wandb.Api()
-            sweep_path = f"{entity}/{project}/{sweep_id}" if entity else f"{project}/{sweep_id}"
-            sweep = api.sweep(sweep_path)
-
-            # Sweepの状態を確認
-            if sweep.state == "FINISHED":
-                console.print("[yellow]Sweepは終了しています[/yellow]")
-                return None
-
-            # 新しいrunを初期化してパラメータを取得
-            run = self._wandb.init(
-                entity=entity,
-                project=project,
-                group=f"sweep-{sweep_id}",
-                reinit=True,
-            )
-
-            if run is None:
-                return None
-
-            # パラメータを取得
-            params = dict(run.config)
-            run_id = run.id
-
-            # runを終了
-            run.finish()
-
-            if not params:
-                return None
-
-            return {
-                "run_id": run_id,
-                "params": params,
-            }
-
-        except Exception as e:
-            console.print(f"[yellow]パラメータ取得に失敗しました: {e}[/yellow]")
-            return None
-
-    def init_sweep_agent_run(
-        self,
-        sweep_id: str,
-        entity: str | None = None,
-        project: str | None = None,
-    ) -> tuple[str, dict[str, Any]] | None:
-        """Sweep Agentとしてrunを初期化してパラメータを取得.
-
-        W&B Sweep Agentのようにパラメータを取得する。
-        取得後、実際のジョブ実行前にfinishする必要がある。
-
-        Args:
-            sweep_id: SweepのID
-            entity: W&Bエンティティ
-            project: W&Bプロジェクト
-
-        Returns:
-            (run_id, params)のタプル、または取得できない場合はNone
-        """
-        self._ensure_initialized()
-
-        entity = entity or self.config.entity
-        project = project or self.config.project
-
-        if not project:
-            raise WandbSweepError("W&Bプロジェクト名が指定されていません")
-
-        sweep_path = f"{entity}/{project}/{sweep_id}" if entity else f"{project}/{sweep_id}"
-
-        try:
-            # Sweep Agentとして動作するため環境変数を設定
-            os.environ["WANDB_SWEEP_ID"] = sweep_id
-            if entity:
-                os.environ["WANDB_ENTITY"] = entity
-            if project:
-                os.environ["WANDB_PROJECT"] = project
-
-            # Sweep Agentとしてrunを初期化
-            run = self._wandb.init(
-                entity=entity,
-                project=project,
-                reinit=True,
-            )
-
-            if run is None:
-                return None
-
-            # パラメータを取得
-            params = dict(run.config)
-            run_id = run.id
-
-            console.print(f"[dim]W&B Run: {run_id}[/dim]")
-            console.print(f"[dim]パラメータ: {params}[/dim]")
-
-            return run_id, params
-
-        except self._wandb.errors.CommError as e:
-            # Sweepが終了している場合など
-            console.print(f"[yellow]Sweepエージェント初期化に失敗: {e}[/yellow]")
-            return None
-        except Exception as e:
-            console.print(f"[red]予期せぬエラー: {e}[/red]")
-            return None
-
-    def finish_run(
-        self,
-        exit_code: int = 0,
-    ) -> None:
-        """現在のrunを終了.
-
-        Args:
-            exit_code: 終了コード (0=成功, 1=失敗)
-        """
-        self._ensure_initialized()
-
-        try:
-            if self._wandb.run is not None:
-                self._wandb.finish(exit_code=exit_code)
-        except Exception as e:
-            console.print(f"[yellow]Run終了に失敗: {e}[/yellow]")
-
-    def report_run_result(
-        self,
-        sweep_id: str,
-        run_id: str,
-        status: Literal["finished", "failed", "crashed"],
-        entity: str | None = None,
-        project: str | None = None,
-    ) -> None:
-        """実行結果を報告.
-
-        Args:
-            sweep_id: SweepのID
-            run_id: RunのID
-            status: 実行結果
-            entity: W&Bエンティティ
-            project: W&Bプロジェクト
-        """
-        self._ensure_initialized()
-
-        entity = entity or self.config.entity
-        project = project or self.config.project
-
-        # W&B APIで状態を更新
-        try:
-            api = self._wandb.Api()
-            run_path = f"{entity}/{project}/{run_id}" if entity else f"{project}/{run_id}"
-            run = api.run(run_path)
-
-            # 状態に応じたサマリを記録
-            if status == "finished":
-                console.print(f"[green]Run {run_id} を完了として記録[/green]")
-            elif status == "failed":
-                console.print(f"[red]Run {run_id} を失敗として記録[/red]")
-            else:
-                console.print(f"[yellow]Run {run_id} をクラッシュとして記録[/yellow]")
-
-        except Exception as e:
-            console.print(f"[yellow]結果報告に失敗しました: {e}[/yellow]")
 
     def get_sweep_state(
         self,
@@ -307,7 +147,7 @@ class WandbSweepClient:
         """
         self._ensure_initialized()
 
-        entity = entity or self.config.entity
+        entity = entity or self.effective_entity
         project = project or self.config.project
 
         try:
@@ -335,6 +175,7 @@ class WandbSweepClient:
         Returns:
             SweepのURL
         """
-        entity = entity or self.config.entity or "unknown"
+        self._ensure_initialized()
+        entity = entity or self.effective_entity or "unknown"
         project = project or self.config.project or "unknown"
         return f"https://wandb.ai/{entity}/{project}/sweeps/{sweep_id}"

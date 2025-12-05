@@ -8,18 +8,17 @@ paramikoを使用してSSH接続とファイル転送を行う。
 from __future__ import annotations
 
 import getpass
+import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import paramiko
-from rich.console import Console
 
 from slurm_submit.config import SSHConfig
+from slurm_submit.core.console import console
 
 if TYPE_CHECKING:
     from paramiko.channel import ChannelFile
-
-console = Console()
 
 
 class SSHError(Exception):
@@ -129,7 +128,9 @@ class SSHClient:
             raise SSHError("SSH接続が確立されていません")
 
         try:
-            stdin, stdout, stderr = self._client.exec_command(command, timeout=timeout)
+            # ログインシェルとして実行（.bashrc等を読み込む）
+            wrapped_command = f"bash -l -c {shlex.quote(command)}"
+            stdin, stdout, stderr = self._client.exec_command(wrapped_command, timeout=timeout)
             exit_code = stdout.channel.recv_exit_status()
             return (
                 stdout.read().decode("utf-8", errors="replace"),

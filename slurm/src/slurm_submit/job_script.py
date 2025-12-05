@@ -62,7 +62,7 @@ class SlurmDirectives:
             lines.append(f"#SBATCH --error={self.job_name}_%j.err")
 
         if self.container:
-            lines.append(f"#SBATCH --container-image={self.container}")
+            lines.append(f"#SBATCH --container={self.container}")
 
         if self.account:
             lines.append(f"#SBATCH --account={self.account}")

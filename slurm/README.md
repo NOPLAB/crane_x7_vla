@@ -7,6 +7,7 @@ SSH経由でSlurmクラスターにジョブを投下するPythonツールです
 - SSH経由でリモートSlurmクラスターにジョブを投下
 - パスワード認証・公開鍵認証の両方をサポート
 - W&B Sweepによるハイパーパラメータ自動探索
+- ジョブ完了待機とリアルタイムログ表示
 - pydanticによる設定バリデーション
 - richによる見やすいCLI出力
 
@@ -45,16 +46,23 @@ SLURM_SSH_PORT=22
 SLURM_REMOTE_WORKDIR=~/workdir
 SLURM_PARTITION=gpu
 SLURM_GPUS=1
+SLURM_GPU_TYPE=           # 例: a100, v100, h100
 SLURM_TIME=24:00:00
 SLURM_MEM=32G
 SLURM_CPUS=8
+SLURM_JOB_PREFIX=crane_x7 # ジョブ名のプレフィックス
+SLURM_CONTAINER=          # Pyxis/Enroot使用時のコンテナイメージ
+
+# ジョブ待機設定
+SLURM_POLL_INTERVAL=60    # 状態確認間隔 (秒)
+SLURM_LOG_POLL_INTERVAL=5 # ログ確認間隔 (秒)
 ```
 
-3. `example_jobs/`からジョブスクリプトをコピーして環境に合わせてカスタマイズ:
+3. `examples/jobs/`からジョブスクリプトをコピーして環境に合わせてカスタマイズ:
 
 ```bash
 mkdir -p jobs
-cp example_jobs/train_openvla.sh jobs/
+cp examples/jobs/train_openvla.sh jobs/
 # jobs/train_openvla.sh を環境に合わせて編集
 ```
 
@@ -95,11 +103,17 @@ slurm-submit cancel 12345
 ### ジョブ完了待機
 
 ```bash
-# ジョブ完了まで待機
+# ジョブ完了まで待機（リアルタイムログ表示付き）
 slurm-submit wait 12345
 
 # ポーリング間隔を指定（秒）
 slurm-submit wait 12345 --interval 120
+
+# ログポーリング間隔を指定（秒）
+slurm-submit wait 12345 --log-interval 10
+
+# ログ表示を無効化
+slurm-submit wait 12345 --no-log
 
 # タイムアウトを指定（秒）
 slurm-submit wait 12345 --timeout 3600
@@ -125,12 +139,12 @@ Weights & Biases Sweepsを使用して、ハイパーパラメータの自動探
 ```bash
 # W&B Sweep設定
 WANDB_ENTITY=your-team-or-username  # W&Bエンティティ
-WANDB_PROJECT=my_sweep              # プロジェクト名
+WANDB_PROJECT=crane_x7_sweep        # プロジェクト名
 
-# トレーニング設定
+# トレーニング設定 (ジョブテンプレートで使用)
 DATA_ROOT=/path/to/data
 OUTPUT_DIR=/path/to/output
-NUM_EPOCHS=10
+MAX_STEPS=10000
 SAVE_INTERVAL=500
 EVAL_INTERVAL=100
 ```
@@ -139,16 +153,20 @@ EVAL_INTERVAL=100
 
 ```bash
 # Sweepを開始（10回実行）
-slurm-submit sweep start sweeps/config.yaml --max-runs 10
-
-# ポーリング間隔を変更（デフォルト: 300秒）
-slurm-submit sweep start sweeps/config.yaml --poll-interval 600
+slurm-submit sweep start examples/sweeps/sweep_openvla.yaml --max-runs 10
 
 # カスタムジョブテンプレートを使用
-slurm-submit sweep start sweeps/config.yaml --template jobs/sweep_template.sh
+slurm-submit sweep start examples/sweeps/sweep_openvla.yaml \
+    --template examples/templates/openvla_sweep.sh \
+    --max-runs 10
+
+# ポーリング間隔を変更
+slurm-submit sweep start examples/sweeps/sweep_openvla.yaml \
+    --poll-interval 120 \
+    --log-interval 10
 
 # ドライラン
-slurm-submit sweep start sweeps/config.yaml --dry-run
+slurm-submit sweep start examples/sweeps/sweep_openvla.yaml --dry-run
 ```
 
 ### 既存Sweepの再開
@@ -166,7 +184,7 @@ slurm-submit sweep status abc123xyz
 
 ### Sweep設定ファイルの構造
 
-`sweeps/config.yaml`の例:
+`examples/sweeps/sweep_openvla.yaml`の例:
 
 ```yaml
 # 探索方法: bayes（ベイズ最適化）, grid（グリッド探索）, random（ランダム探索）
@@ -197,24 +215,42 @@ early_terminate:
 
 `--template`オプションでカスタムジョブテンプレートを指定できます。テンプレート内では以下のプレースホルダが使用可能:
 
+**共通プレースホルダ:**
 - `{{RUN_ID}}`: W&B Run ID
 - `{{PARAMS_JSON}}`: パラメータのJSON文字列
-- `{{learning_rate}}`, `{{batch_size}}`, など: 個別パラメータ
 
-テンプレート例（`jobs/sweep_template.sh`）:
+**Sweep設定からのパラメータ:**
+- `{{learning_rate}}`, `{{batch_size}}`, など: Sweep設定で定義したパラメータ
+
+**.envファイルからの設定:**
+- `{{SLURM_PARTITION}}`, `{{SLURM_GPUS}}`, `{{SLURM_MEM}}`, `{{SLURM_CPUS}}`: Slurm設定
+- `{{SLURM_CONTAINER}}`: コンテナイメージ
+- `{{WANDB_API_KEY}}`: W&B APIキー
+- `{{DATA_ROOT}}`, `{{OUTPUT_DIR}}`, `{{MAX_STEPS}}`, など: トレーニング設定
+
+テンプレート例（`examples/templates/openvla_sweep.sh`）:
 
 ```bash
 #!/bin/bash
-#SBATCH --job-name=sweep_{{RUN_ID}}
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --time=24:00:00
+#SBATCH --partition={{SLURM_PARTITION}}
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task={{SLURM_CPUS}}
+#SBATCH --gpus-per-task={{SLURM_GPUS}}
+#SBATCH --mem={{SLURM_MEM}}
+#SBATCH --container={{SLURM_CONTAINER}}
 
-export WANDB_RUN_ID={{RUN_ID}}
+echo "Starting training with parameters:"
+echo "  RUN_ID: {{RUN_ID}}"
+echo "  learning_rate: {{learning_rate}}"
+echo "  batch_size: {{batch_size}}"
 
-python train.py \
-    --learning-rate {{learning_rate}} \
-    --batch-size {{batch_size}}
+export WANDB_API_KEY={{WANDB_API_KEY}}
+
+torchrun --nproc_per_node={{SLURM_GPUS}} -m crane_x7_vla.training.cli train openvla \
+    --data-root {{DATA_ROOT}} \
+    --output-dir {{OUTPUT_DIR}} \
+    --training-batch-size {{batch_size}} \
+    --training-learning-rate {{learning_rate}}
 ```
 
 ## ディレクトリ構成
@@ -222,30 +258,38 @@ python train.py \
 ```
 slurm/
 ├── src/
-│   └── slurm_submit/     # Pythonパッケージ
+│   └── slurm_submit/        # Pythonパッケージ
 │       ├── __init__.py
 │       ├── __main__.py
-│       ├── cli.py        # CLIエントリーポイント
-│       ├── config.py     # 設定管理
-│       ├── ssh_client.py # SSH/SCP操作
-│       ├── slurm_client.py # Slurmコマンド
-│       ├── job_script.py # ジョブスクリプト生成
-│       └── sweep/        # W&B Sweep統合
+│       ├── cli.py           # CLIエントリーポイント
+│       ├── config.py        # 設定管理
+│       ├── ssh_client.py    # SSH/SCP操作
+│       ├── slurm_client.py  # Slurmコマンド
+│       ├── job_script.py    # ジョブスクリプト生成
+│       ├── utils.py         # ユーティリティ関数
+│       └── sweep/           # W&B Sweep統合
+│           ├── __init__.py
+│           ├── cli.py       # Sweepサブコマンド
+│           ├── engine.py    # Sweep実行エンジン
+│           └── wandb_client.py # W&B API連携
+├── examples/
+│   ├── jobs/                # サンプルジョブスクリプト
+│   │   ├── train_openvla.sh
+│   │   └── train_openpi.sh
+│   ├── sweeps/              # サンプルSweep設定ファイル
+│   │   ├── sweep_openvla.yaml
+│   │   └── sweep_openpi.yaml
+│   └── templates/           # サンプルSweepジョブテンプレート
+│       └── openvla_sweep.sh
+├── jobs/                    # カスタムジョブスクリプト（gitignore対象）
 ├── pyproject.toml
-├── .env.template         # 環境変数テンプレート
-├── .env                  # 環境変数（gitignore対象）
+├── .env.template            # 環境変数テンプレート
+├── .env                     # 環境変数（gitignore対象）
 ├── .gitignore
-├── README.md
-├── example_jobs/         # サンプルジョブスクリプト
-│   ├── train_openvla.sh
-│   └── train_openpi.sh
-├── jobs/                 # 実際に使用するジョブスクリプト（gitignore対象）
-└── sweeps/               # Sweep設定ファイル
-    ├── sweep_openvla.yaml
-    └── sweep_openpi.yaml
+└── README.md
 ```
 
-**注意**: `jobs/`ディレクトリは`.gitignore`に含まれています。環境固有の設定を含むため、`example_jobs/`からコピーして各自でカスタマイズしてください。
+**注意**: `jobs/`ディレクトリは`.gitignore`に含まれています。環境固有の設定を含むため、`examples/jobs/`からコピーして各自でカスタマイズしてください。
 
 ## ジョブスクリプトのカスタマイズ
 
@@ -261,7 +305,7 @@ slurm/
 #SBATCH --time=48:00:00         # 実行時間
 
 # コンテナを使用する場合（Pyxis/Enroot）
-#SBATCH --container-image=myimage:latest
+#SBATCH --container=myimage:latest
 ```
 
 ## プログラムからの使用

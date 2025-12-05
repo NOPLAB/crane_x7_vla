@@ -54,6 +54,10 @@ class SlurmConfig(BaseModel):
     job_prefix: str = Field(default="job", description="ジョブ名のプレフィックス")
     container: str | None = Field(default=None, description="コンテナイメージ (Pyxis/Enroot用)")
 
+    # wait コマンド用設定
+    poll_interval: int = Field(default=60, ge=1, description="状態ポーリング間隔 (秒)")
+    log_poll_interval: int = Field(default=5, ge=1, description="ログポーリング間隔 (秒)")
+
     @field_validator("remote_workdir", mode="before")
     @classmethod
     def expand_home_workdir(cls, v: str | Path) -> Path:
@@ -107,7 +111,7 @@ class TrainingConfig(BaseModel):
 
     data_root: Path = Field(default=Path("/data"), description="データディレクトリ")
     output_dir: Path = Field(default=Path("/output"), description="出力ディレクトリ")
-    num_epochs: int = Field(default=10, ge=1, description="エポック数")
+    max_steps: int = Field(default=10000, ge=1, description="最大トレーニングステップ数")
     save_interval: int = Field(default=500, ge=1, description="チェックポイント保存間隔")
     eval_interval: int = Field(default=100, ge=1, description="評価間隔")
 
@@ -141,6 +145,8 @@ class Settings(BaseSettings):
     slurm_cpus: int = Field(default=8, alias="SLURM_CPUS")
     slurm_job_prefix: str = Field(default="job", alias="SLURM_JOB_PREFIX")
     slurm_container: str | None = Field(default=None, alias="SLURM_CONTAINER")
+    slurm_poll_interval: int = Field(default=60, alias="SLURM_POLL_INTERVAL")
+    slurm_log_poll_interval: int = Field(default=5, alias="SLURM_LOG_POLL_INTERVAL")
 
     # W&B設定
     wandb_api_key: str | None = Field(default=None, alias="WANDB_API_KEY")
@@ -150,9 +156,25 @@ class Settings(BaseSettings):
     # トレーニング設定
     data_root: str = Field(default="/data", alias="DATA_ROOT")
     output_dir: str = Field(default="/output", alias="OUTPUT_DIR")
-    num_epochs: int = Field(default=10, alias="NUM_EPOCHS")
+    max_steps: int = Field(default=10000, alias="MAX_STEPS")
     save_interval: int = Field(default=500, alias="SAVE_INTERVAL")
     eval_interval: int = Field(default=100, alias="EVAL_INTERVAL")
+
+    @field_validator(
+        "slurm_ssh_key",
+        "slurm_gpu_type",
+        "slurm_container",
+        "wandb_api_key",
+        "wandb_entity",
+        "wandb_project",
+        mode="before",
+    )
+    @classmethod
+    def empty_to_none(cls, v: str | None) -> str | None:
+        """空文字列をNoneに変換."""
+        if v == "":
+            return None
+        return v
 
     @property
     def ssh(self) -> SSHConfig:
@@ -178,6 +200,8 @@ class Settings(BaseSettings):
             cpus=self.slurm_cpus,
             job_prefix=self.slurm_job_prefix,
             container=self.slurm_container if self.slurm_container else None,
+            poll_interval=self.slurm_poll_interval,
+            log_poll_interval=self.slurm_log_poll_interval,
         )
 
     @property
@@ -195,7 +219,7 @@ class Settings(BaseSettings):
         return TrainingConfig(
             data_root=Path(self.data_root),
             output_dir=Path(self.output_dir),
-            num_epochs=self.num_epochs,
+            max_steps=self.max_steps,
             save_interval=self.save_interval,
             eval_interval=self.eval_interval,
         )
@@ -214,3 +238,46 @@ def load_settings(env_file: Path | str = ".env") -> Settings:
         ValidationError: 設定のバリデーションに失敗した場合
     """
     return Settings(_env_file=str(env_file))
+
+
+def load_env_vars(env_file: Path | str = ".env") -> dict[str, str]:
+    """`.env`ファイルから全ての環境変数を読み込む.
+
+    pydantic Settingsで定義されていない変数も含め、全てのキー=値ペアを取得する。
+    これにより、テンプレート内の`{{VAR_NAME}}`プレースホルダに対応可能。
+
+    Args:
+        env_file: .envファイルのパス
+
+    Returns:
+        環境変数名をキー、値を値とする辞書
+    """
+    env_path = Path(env_file)
+    env_vars: dict[str, str] = {}
+
+    if not env_path.exists():
+        return env_vars
+
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            # 空行とコメント行をスキップ
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            # KEY=VALUE形式をパース
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+
+                # クォートを除去 (シングルまたはダブル)
+                if len(value) >= 2:
+                    if (value.startswith('"') and value.endswith('"')) or (
+                        value.startswith("'") and value.endswith("'")
+                    ):
+                        value = value[1:-1]
+
+                env_vars[key] = value
+
+    return env_vars

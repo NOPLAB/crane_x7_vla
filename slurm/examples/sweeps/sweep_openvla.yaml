@@ -1,0 +1,88 @@
+# ============================================================================
+# W&B Sweep Configuration for OpenVLA
+# ============================================================================
+# ハイパーパラメータ自動探索の設定ファイル
+#
+# 使用方法:
+#   slurm-submit sweep start examples/sweeps/sweep_openvla.yaml \
+#     --template examples/templates/openvla_sweep.sh -n 10
+#
+# ============================================================================
+
+# Sweep基本設定
+method: bayes  # 探索方法: bayes, grid, random
+metric:
+  name: eval/loss
+  goal: minimize
+
+# エージェントが実行するコマンド
+# パラメータは ${param_name} 形式で渡される
+# ${env} は環境変数を設定（WANDB_関連など）
+# ${interpreter} は python
+# ${args_no_boolean_flags} は boolean以外のパラメータを --key value 形式で展開
+# 注: torchrun使用時は別途テンプレートで対応（このcommandは直接使用しない）
+command:
+  - ${env}
+  - ${interpreter}
+  - -m
+  - crane_x7_vla.training.cli
+  - train
+  - openvla
+  - ${args_no_boolean_flags}
+
+# 探索するハイパーパラメータ
+parameters:
+  # 学習率 (対数スケールで探索)
+  learning_rate:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  # バッチサイズ (離散値)
+  batch_size:
+    values: [1]
+
+  # LoRAランク
+  lora_rank:
+    values: [8, 16, 32, 64]
+
+  # LoRA alpha (通常はrankと同じか2倍)
+  lora_alpha:
+    values: [8, 16, 32, 64]
+
+  # LoRAドロップアウト
+  lora_dropout:
+    distribution: uniform
+    min: 0.0
+    max: 0.2
+
+  # 重み減衰 (対数スケール)
+  weight_decay:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-1
+
+  # ウォームアップステップ
+  warmup_steps:
+    values: [100, 500, 1000, 2000]
+
+  # 勾配クリッピング
+  max_grad_norm:
+    distribution: uniform
+    min: 0.5
+    max: 2.0
+
+  # 勾配累積ステップ (実効バッチサイズ = batch_size * gradient_accumulation_steps)
+  gradient_accumulation_steps:
+    values: [1, 2, 4, 8]
+
+  # 画像オーグメンテーション
+  image_aug:
+    values: [true, false]
+
+# 早期終了設定 (性能が悪いrunを早期に終了)
+early_terminate:
+  type: hyperband
+  min_iter: 3
+  eta: 3
+  s: 2

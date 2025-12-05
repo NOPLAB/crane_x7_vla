@@ -1,10 +1,8 @@
 # ============================================================================
-# W&B Sweep Configuration for OpenVLA
+# W&B Sweep Configuration for OpenPI
 # ============================================================================
 # ハイパーパラメータ自動探索の設定ファイル
 #
-# 使い方:
-#   ./sweep.sh sweeps/sweep_openvla.yaml --max-runs 20
 # ============================================================================
 
 # Sweep基本設定
@@ -23,7 +21,15 @@ parameters:
 
   # バッチサイズ (離散値)
   batch_size:
-    values: [1, 2, 4, 8, 16]
+    values: [1, 2, 4, 8]
+
+  # モデルタイプ
+  model_type:
+    values: ["pi0", "pi0_fast"]
+
+  # アクションホライズン
+  action_horizon:
+    values: [10, 25, 50, 100]
 
   # LoRAランク
   lora_rank:
@@ -41,17 +47,11 @@ parameters:
     min: 1e-5
     max: 1e-1
 
-  # ウォームアップステップ
-  warmup_steps:
-    values: [100, 500, 1000, 2000]
+  # 正規化モード
+  normalization_mode:
+    values: ["zscore", "quantile"]
 
-  # 勾配クリッピング
-  max_grad_norm:
-    distribution: uniform
-    min: 0.5
-    max: 2.0
-
-# 早期終了設定 (性能が悪いrunを早期に終了)
+# 早期終了設定
 early_terminate:
   type: hyperband
   min_iter: 3
