@@ -94,9 +94,20 @@ def init_wandb(
     log_code: bool = False,
     enabled: bool = True,
 ):
-    """Initialize Weights & Biases logging."""
+    """Initialize Weights & Biases logging.
+
+    If a W&B run is already active (e.g., from wandb.agent()), it will be reused
+    instead of creating a new run. This prevents duplicate runs when using sweeps.
+    """
     if not enabled:
         wandb.init(mode="disabled")
+        return
+
+    # Check if W&B run is already active (e.g., from wandb.agent() callback)
+    if wandb.run is not None:
+        logger.info(f"W&B run already active: {wandb.run.id} (sweep mode)")
+        # Update config with training parameters
+        wandb.config.update(dataclasses.asdict(config), allow_val_change=True)
         return
 
     ckpt_dir = config.checkpoint_dir
