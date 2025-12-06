@@ -1,79 +1,57 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
+#
+# =============================================================================
+# OpenPI Training Template for Slurm
+# =============================================================================
+#
+# このテンプレートはTFRecordデータの変換からOpenPIトレーニングまでの
+# 完全なパイプラインを実行します。
+#
+# OpenPIはLeRobot形式のデータを必要とするため、TFRecordからの変換が必須です。
+#
+# 使用方法:
+#   slurm-submit submit jobs/openpi_train.sh
+#
+# =============================================================================
 
-#SBATCH --job-name=crane_x7_openpi
-#SBATCH --partition=gpu
+#SBATCH --job-name={{SLURM_JOB_PREFIX}}_openpi
+#SBATCH --partition={{SLURM_PARTITION}}
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --gres=gpu:1
-#SBATCH --time=48:00:00
+#SBATCH --tasks-per-node=1
+#SBATCH --cpus-per-task={{SLURM_CPUS}}
+#SBATCH --gpus-per-task={{SLURM_GPUS}}
+#SBATCH --mem={{SLURM_MEM}}
+#SBATCH --time={{SLURM_TIME}}
 #SBATCH --output=logs/openpi_%j.out
 #SBATCH --error=logs/openpi_%j.err
 
-# ============================================================================
-# OpenPI Training Job Script (JAX/Flax)
-#
-# このスクリプトはTFRecordデータの変換からOpenPIトレーニングまでの
-# 完全なパイプラインを実行します。
-#
-# 重要: OpenPIはLeRobot形式のデータを必要とするため、TFRecordからの
-#       変換が必須です。
-#
-# 使用方法:
-#   1. このファイルを jobs/ にコピー: cp examples/jobs/train_openpi.sh jobs/
-#   2. 環境に合わせて編集
-#   3. slurm-submit submit jobs/train_openpi.sh
-# ============================================================================
+#SBATCH --container={{SLURM_CONTAINER}}
 
 set -euo pipefail
-
-echo "=========================================="
-echo "OpenPI Training Pipeline (JAX/Flax)"
-echo "=========================================="
-echo "Job ID: ${SLURM_JOB_ID:-N/A}"
-echo "Node: ${SLURM_NODELIST:-N/A}"
-echo "GPUs: ${CUDA_VISIBLE_DEVICES:-N/A}"
-echo "Start time: $(date)"
-echo "=========================================="
-
-# =============================================================================
-# Configuration - 環境に合わせて編集してください
-# =============================================================================
-
-# 作業ディレクトリ
-WORKDIR="${SLURM_SUBMIT_DIR:-$HOME/crane_x7_vla}"
-cd "${WORKDIR}"
-
-# データパス設定
-DATA_ROOT="${DATA_ROOT:-./data/tfrecord_logs}"
-OUTPUT_DIR="${OUTPUT_DIR:-./outputs/crane_x7_openpi}"
-LEROBOT_DATASET_NAME="${LEROBOT_DATASET_NAME:-crane_x7_openpi}"
-
-# トレーニング設定
-BATCH_SIZE="${BATCH_SIZE:-16}"
-LEARNING_RATE="${LEARNING_RATE:-5e-4}"
-MAX_STEPS="${MAX_STEPS:-200000}"
-SAVE_INTERVAL="${SAVE_INTERVAL:-1000}"
-EVAL_INTERVAL="${EVAL_INTERVAL:-500}"
-
-# OpenPI固有設定
-MODEL_TYPE="${MODEL_TYPE:-pi0_fast}"
-ACTION_HORIZON="${ACTION_HORIZON:-50}"
-LORA_RANK="${LORA_RANK:-32}"
-
-# W&B設定（オプション）
-# export WANDB_API_KEY=your-api-key
-# export WANDB_PROJECT=crane_x7_openpi
-# export WANDB_ENTITY=your-entity
 
 # =============================================================================
 # Environment Setup
 # =============================================================================
+echo "=========================================="
+echo "OpenPI Training Pipeline (JAX/Flax)"
+echo "=========================================="
+echo "Date: $(date)"
+echo "Hostname: $(hostname)"
+echo "SLURM_JOB_ID: ${SLURM_JOB_ID:-N/A}"
+echo "SLURM_JOB_NODELIST: ${SLURM_JOB_NODELIST:-N/A}"
+echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-N/A}"
+echo "=========================================="
+
+# 作業ディレクトリに移動
+cd "${SLURM_SUBMIT_DIR:-{{SLURM_REMOTE_WORKDIR}}}"
+echo "Working directory: $(pwd)"
+
+# ログディレクトリを作成
 mkdir -p logs
 
+# 環境変数の設定
 export PYTHONUNBUFFERED=1
 export TF_CPP_MIN_LOG_LEVEL=2
 
@@ -81,15 +59,41 @@ export TF_CPP_MIN_LOG_LEVEL=2
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
 
-# LeRobotデータセットの保存先
-export HF_LEROBOT_HOME="${OUTPUT_DIR}/lerobot_datasets"
-mkdir -p "${HF_LEROBOT_HOME}"
+# W&B設定（オプション）
+export WANDB_API_KEY={{WANDB_API_KEY}}
+export WANDB_PROJECT={{WANDB_PROJECT}}
+export WANDB_ENTITY={{WANDB_ENTITY}}
+export WANDB_MODE=${WANDB_MODE:-online}
+
+# データパス設定
+DATA_ROOT=${DATA_ROOT:-{{DATA_ROOT}}}
+OUTPUT_DIR=${OUTPUT_DIR:-{{OUTPUT_DIR}}}
+LEROBOT_DATASET_NAME=${LEROBOT_DATASET_NAME:-crane_x7_openpi}
+
+# トレーニング設定（Sweepでオーバーライド可能）
+BATCH_SIZE=${BATCH_SIZE:-{{batch_size}}}
+LEARNING_RATE=${LEARNING_RATE:-{{learning_rate}}}
+MAX_STEPS=${MAX_STEPS:-{{MAX_STEPS}}}
+SAVE_INTERVAL=${SAVE_INTERVAL:-{{SAVE_INTERVAL}}}
+EVAL_INTERVAL=${EVAL_INTERVAL:-{{EVAL_INTERVAL}}}
+
+# OpenPI固有設定
+MODEL_TYPE=${MODEL_TYPE:-pi0_fast}
+ACTION_HORIZON=${ACTION_HORIZON:-50}
+LORA_RANK=${LORA_RANK:-32}
+
+# デフォルト値（テンプレートプレースホルダが未置換の場合）
+BATCH_SIZE=${BATCH_SIZE:-16}
+LEARNING_RATE=${LEARNING_RATE:-5e-4}
+MAX_STEPS=${MAX_STEPS:-200000}
+SAVE_INTERVAL=${SAVE_INTERVAL:-1000}
+EVAL_INTERVAL=${EVAL_INTERVAL:-500}
 
 echo ""
 echo "=== Configuration ==="
-echo "WORKDIR: ${WORKDIR}"
 echo "DATA_ROOT: ${DATA_ROOT}"
 echo "OUTPUT_DIR: ${OUTPUT_DIR}"
+echo "LEROBOT_DATASET_NAME: ${LEROBOT_DATASET_NAME}"
 echo "MODEL_TYPE: ${MODEL_TYPE}"
 echo "BATCH_SIZE: ${BATCH_SIZE}"
 echo "LEARNING_RATE: ${LEARNING_RATE}"
@@ -105,8 +109,12 @@ echo "=========================================="
 echo "Step 1: TFRecord to LeRobot Conversion"
 echo "=========================================="
 
-LEROBOT_DATASET_PATH="${HF_LEROBOT_HOME}/${LEROBOT_DATASET_NAME}"
+# LeRobotデータセットの保存先
+export HF_LEROBOT_HOME="${OUTPUT_DIR}/lerobot_datasets"
+mkdir -p "${HF_LEROBOT_HOME}"
 
+# 既存のLeRobotデータセットをチェック
+LEROBOT_DATASET_PATH="${HF_LEROBOT_HOME}/${LEROBOT_DATASET_NAME}"
 if [ -d "${LEROBOT_DATASET_PATH}" ]; then
     echo "LeRobot dataset already exists at ${LEROBOT_DATASET_PATH}"
     echo "Skipping conversion..."
@@ -136,7 +144,7 @@ NORM_STATS_PATH="${OUTPUT_DIR}/norm_stats"
 mkdir -p "${NORM_STATS_PATH}"
 
 if [ -f "${NORM_STATS_PATH}/action_stats.json" ]; then
-    echo "Normalization statistics already exist"
+    echo "Normalization statistics already exist at ${NORM_STATS_PATH}"
     echo "Skipping computation..."
 else
     echo "Computing normalization statistics..."
@@ -164,16 +172,16 @@ python -c "import jax; print(f'JAX devices: {jax.devices()}')" || echo "JAX not 
 
 echo ""
 echo "Starting OpenPI training..."
+echo "  Model type: ${MODEL_TYPE}"
+echo "  Batch size: ${BATCH_SIZE}"
+echo "  Learning rate: ${LEARNING_RATE}"
+echo "  Max steps: ${MAX_STEPS}"
+echo "  Action horizon: ${ACTION_HORIZON}"
+echo "  LoRA rank: ${LORA_RANK}"
+echo ""
 
-# Singularityコンテナで実行する場合
-# singularity exec --nv \
-#     --bind $PWD:/workspace \
-#     --pwd /workspace \
-#     containers/openpi.sif \
-#     python -m crane_x7_vla.training.cli train openpi ...
-
-# 直接実行
-# OpenPIはLeRobot形式を使用するため、変換済みデータを指定
+# OpenPIトレーニングを実行
+# OpenPIはLeRobot形式を使用
 python -m crane_x7_vla.training.cli train openpi \
     --data-root "${LEROBOT_DATASET_PATH}" \
     --output-dir "${OUTPUT_DIR}/checkpoints" \
@@ -191,11 +199,11 @@ python -m crane_x7_vla.training.cli train openpi \
 TRAIN_EXIT_CODE=$?
 
 # =============================================================================
-# Summary
+# Cleanup and Summary
 # =============================================================================
 echo ""
 echo "=========================================="
-echo "Training Completed"
+echo "Training Pipeline Completed"
 echo "=========================================="
 echo "Exit code: ${TRAIN_EXIT_CODE}"
 echo "End time: $(date)"

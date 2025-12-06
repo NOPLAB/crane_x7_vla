@@ -72,8 +72,11 @@
 5. **Slurmジョブ投下ツール** (`slurm/`)
    - SSH経由でSlurmクラスターにトレーニングジョブを投下
    - OpenVLA/OpenPI両方のトレーニングジョブに対応
+   - W&B Sweepによるハイパーパラメータ自動探索
+   - ジョブ完了待機とリアルタイムログ表示
    - パスワード認証と公開鍵認証をサポート
    - `.env`ファイルでSSH接続情報とSlurm設定を管理
+   - pydanticによる設定バリデーション、richによるCLI出力
 
 ### Gazeboシミュレーション環境
 
@@ -241,25 +244,18 @@ OpenPI用Dockerイメージでトレーニング（JAXベース）。
 
 ### 5. Slurmクラスターでのトレーニング
 
-SSH経由でSlurmクラスターにジョブを投下するツールを提供：
+SSH経由でSlurmクラスターにジョブを投下するPythonツール（`slurm-submit`）を提供。
 
-```bash
-# セットアップ
-cd slurm
-cp .env.template .env
-# .env を編集してSSH接続情報を設定
+**主な機能：**
+- ジョブ投下（`submit`）、状態確認（`status`）、キャンセル（`cancel`）
+- ジョブ完了待機とリアルタイムログ表示（`wait`）
+- W&B Sweepによるハイパーパラメータ自動探索（`sweep start/resume/status`）
 
-# ジョブの投下
-./submit.sh jobs/train_openvla.sh          # OpenVLAトレーニング
-./submit.sh jobs/train_openpi.sh           # OpenPIトレーニング
-./submit.sh jobs/train_openvla.sh --dry-run # ドライラン
+**セットアップ：**
+1. `cd slurm && pip install -e .`
+2. `.env.template`から`.env`を作成し、SSH接続情報を設定
+3. `examples/jobs/`からジョブスクリプトを`jobs/`にコピーしてカスタマイズ
 
-# ジョブ管理
-./submit.sh --status                        # キュー状態確認
-./submit.sh --cancel <job_id>               # ジョブキャンセル
-```
-
-`example_jobs/`からジョブスクリプトを`jobs/`にコピーしてカスタマイズ。
 詳細は [slurm/README.md](slurm/README.md) を参照。
 
 ## ライセンスに関する注記

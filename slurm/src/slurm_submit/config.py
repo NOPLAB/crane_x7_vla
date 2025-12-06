@@ -58,6 +58,9 @@ class SlurmConfig(BaseModel):
     poll_interval: int = Field(default=60, ge=1, description="状態ポーリング間隔 (秒)")
     log_poll_interval: int = Field(default=5, ge=1, description="ログポーリング間隔 (秒)")
 
+    # 並列実行設定
+    max_concurrent_jobs: int = Field(default=1, ge=1, description="同時実行ジョブ数の上限")
+
     @field_validator("remote_workdir", mode="before")
     @classmethod
     def expand_home_workdir(cls, v: str | Path) -> Path:
@@ -147,6 +150,7 @@ class Settings(BaseSettings):
     slurm_container: str | None = Field(default=None, alias="SLURM_CONTAINER")
     slurm_poll_interval: int = Field(default=60, alias="SLURM_POLL_INTERVAL")
     slurm_log_poll_interval: int = Field(default=5, alias="SLURM_LOG_POLL_INTERVAL")
+    slurm_max_concurrent_jobs: int = Field(default=1, alias="SLURM_MAX_CONCURRENT_JOBS")
 
     # W&B設定
     wandb_api_key: str | None = Field(default=None, alias="WANDB_API_KEY")
@@ -202,6 +206,7 @@ class Settings(BaseSettings):
             container=self.slurm_container if self.slurm_container else None,
             poll_interval=self.slurm_poll_interval,
             log_poll_interval=self.slurm_log_poll_interval,
+            max_concurrent_jobs=self.slurm_max_concurrent_jobs,
         )
 
     @property

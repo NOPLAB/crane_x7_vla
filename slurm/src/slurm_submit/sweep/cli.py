@@ -50,6 +50,14 @@ def sweep_start(
             help="最大実行数",
         ),
     ] = 10,
+    max_concurrent: Annotated[
+        Optional[int],
+        typer.Option(
+            "--max-concurrent",
+            "-c",
+            help="同時実行ジョブ数の上限 [default: SLURM_MAX_CONCURRENT_JOBS]",
+        ),
+    ] = None,
     poll_interval: Annotated[
         Optional[int],
         typer.Option(
@@ -101,6 +109,7 @@ def sweep_start(
     # 設定からデフォルト値を取得
     actual_poll_interval = poll_interval if poll_interval is not None else settings.slurm.poll_interval
     actual_log_interval = log_interval if log_interval is not None else settings.slurm.log_poll_interval
+    actual_max_concurrent = max_concurrent if max_concurrent is not None else settings.slurm.max_concurrent_jobs
 
     # W&Bクライアントを作成してSweepを作成
     wandb_client = WandbSweepClient(settings.wandb)
@@ -152,6 +161,7 @@ def sweep_start(
         engine.run(
             sweep_id=sweep_id,
             max_runs=max_runs,
+            max_concurrent_jobs=actual_max_concurrent,
             poll_interval=actual_poll_interval,
             log_poll_interval=actual_log_interval,
             dry_run=dry_run,
@@ -183,6 +193,14 @@ def sweep_resume(
             help="最大実行数",
         ),
     ] = 10,
+    max_concurrent: Annotated[
+        Optional[int],
+        typer.Option(
+            "--max-concurrent",
+            "-c",
+            help="同時実行ジョブ数の上限 [default: SLURM_MAX_CONCURRENT_JOBS]",
+        ),
+    ] = None,
     poll_interval: Annotated[
         Optional[int],
         typer.Option(
@@ -234,6 +252,7 @@ def sweep_resume(
     # 設定からデフォルト値を取得
     actual_poll_interval = poll_interval if poll_interval is not None else settings.slurm.poll_interval
     actual_log_interval = log_interval if log_interval is not None else settings.slurm.log_poll_interval
+    actual_max_concurrent = max_concurrent if max_concurrent is not None else settings.slurm.max_concurrent_jobs
 
     # W&Bクライアントを作成
     wandb_client = WandbSweepClient(settings.wandb)
@@ -286,6 +305,7 @@ def sweep_resume(
         engine.run(
             sweep_id=sweep_id,
             max_runs=max_runs,
+            max_concurrent_jobs=actual_max_concurrent,
             poll_interval=actual_poll_interval,
             log_poll_interval=actual_log_interval,
             dry_run=dry_run,

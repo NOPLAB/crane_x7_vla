@@ -12,6 +12,7 @@ RunがSweepに正しく関連付けられます。
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -151,6 +152,7 @@ class SweepEngine:
         self,
         sweep_id: str,
         max_runs: int = 10,
+        max_concurrent_jobs: int = 1,
         poll_interval: int = 60,
         log_poll_interval: int = 5,
         dry_run: bool = False,
@@ -163,6 +165,7 @@ class SweepEngine:
         Args:
             sweep_id: SweepのID
             max_runs: 最大実行数
+            max_concurrent_jobs: 同時実行ジョブ数の上限 (1の場合は逐次実行)
             poll_interval: 状態ポーリング間隔 (秒)
             log_poll_interval: ログポーリング間隔 (秒)
             dry_run: ドライランモード
@@ -171,6 +174,7 @@ class SweepEngine:
             Panel(
                 f"Sweep: {sweep_id}\n"
                 f"最大実行数: {max_runs}\n"
+                f"同時実行数: {max_concurrent_jobs}\n"
                 f"ポーリング間隔: {poll_interval}秒\n"
                 f"URL: {self.wandb.get_sweep_url(sweep_id)}",
                 title="Sweep実行開始",
@@ -181,6 +185,34 @@ class SweepEngine:
         if dry_run:
             console.print("[yellow]ドライランモード: 実際にはジョブを投下しません[/yellow]")
 
+        if max_concurrent_jobs == 1:
+            # 逐次実行モード（リアルタイムログ表示あり）
+            self._run_sequential(
+                sweep_id=sweep_id,
+                max_runs=max_runs,
+                poll_interval=poll_interval,
+                log_poll_interval=log_poll_interval,
+                dry_run=dry_run,
+            )
+        else:
+            # 並列実行モード（リアルタイムログ表示なし）
+            self._run_parallel(
+                sweep_id=sweep_id,
+                max_runs=max_runs,
+                max_concurrent_jobs=max_concurrent_jobs,
+                poll_interval=poll_interval,
+                dry_run=dry_run,
+            )
+
+    def _run_sequential(
+        self,
+        sweep_id: str,
+        max_runs: int,
+        poll_interval: int,
+        log_poll_interval: int,
+        dry_run: bool,
+    ) -> None:
+        """逐次実行モード（リアルタイムログ表示あり）."""
         completed_runs = 0
 
         while completed_runs < max_runs:
@@ -194,7 +226,6 @@ class SweepEngine:
                 break
 
             # ジョブスクリプトを生成
-            # 新しいアーキテクチャではsweep_idのみ渡す（パラメータはジョブ内で取得）
             console.print("[dim]ジョブスクリプトを生成中...[/dim]")
             script_content = self.job_generator(sweep_id, run_number)
 
@@ -236,6 +267,110 @@ class SweepEngine:
                 console.print(f"[red]ジョブ待機に失敗しました: {e}[/red]")
 
             completed_runs += 1
+
+        console.print(f"\n[bold green]Sweep完了: {completed_runs}回実行しました[/bold green]")
+
+    def _run_parallel(
+        self,
+        sweep_id: str,
+        max_runs: int,
+        max_concurrent_jobs: int,
+        poll_interval: int,
+        dry_run: bool,
+    ) -> None:
+        """並列実行モード（リアルタイムログ表示なし）."""
+        running_jobs: dict[str, int] = {}  # {job_id: run_number}
+        completed_runs = 0
+        submitted_runs = 0
+
+        console.print(f"[cyan]並列実行モード: 最大{max_concurrent_jobs}ジョブ同時実行[/cyan]")
+
+        while completed_runs < max_runs:
+            # Sweepの状態を確認
+            sweep_state = self.wandb.get_sweep_state(sweep_id)
+            if sweep_state == "FINISHED":
+                console.print("[green]Sweepが終了しました[/green]")
+                break
+
+            # 完了したジョブを確認
+            for job_id in list(running_jobs.keys()):
+                state = self.slurm.get_job_state(job_id)
+                if state not in ("RUNNING", "PENDING", "R", "PD"):
+                    run_number = running_jobs[job_id]
+                    del running_jobs[job_id]
+                    completed_runs += 1
+                    # 結果をログ
+                    if state == "COMPLETED":
+                        console.print(
+                            f"[green]✓ Run {run_number} (Job {job_id}) 完了[/green]"
+                        )
+                    else:
+                        console.print(
+                            f"[red]✗ Run {run_number} (Job {job_id}) 失敗: {state}[/red]"
+                        )
+
+            # 新しいジョブを投下（上限まで）
+            while (
+                len(running_jobs) < max_concurrent_jobs
+                and submitted_runs < max_runs
+            ):
+                submitted_runs += 1
+                run_number = submitted_runs
+
+                console.print(f"\n[bold]Run {run_number}/{max_runs} 投下中...[/bold]")
+
+                script_content = self.job_generator(sweep_id, run_number)
+
+                if dry_run:
+                    console.print(f"[yellow]ドライラン: Run {run_number}[/yellow]")
+                    completed_runs += 1
+                    continue
+
+                try:
+                    script_name = (
+                        f"sweep_{sweep_id[:8]}_{run_number:03d}_{generate_timestamp()}.sh"
+                    )
+                    job_id = self.slurm.submit_script_content(script_content, script_name)
+                    running_jobs[job_id] = run_number
+                    self._save_state(sweep_id, run_number, job_id)
+                    console.print(
+                        f"[dim]Run {run_number}: Job {job_id} を投下しました[/dim]"
+                    )
+                except SlurmError as e:
+                    console.print(f"[red]Run {run_number} の投下に失敗: {e}[/red]")
+
+            # 実行中ジョブの状態を表示
+            if running_jobs and not dry_run:
+                console.print(
+                    f"[dim]実行中: {len(running_jobs)}件, "
+                    f"完了: {completed_runs}/{max_runs}件[/dim]"
+                )
+                time.sleep(poll_interval)
+
+        # 残りのジョブを待機
+        if running_jobs:
+            console.print(f"\n[cyan]残り{len(running_jobs)}件のジョブの完了を待機中...[/cyan]")
+
+        while running_jobs:
+            for job_id in list(running_jobs.keys()):
+                state = self.slurm.get_job_state(job_id)
+                if state not in ("RUNNING", "PENDING", "R", "PD"):
+                    run_number = running_jobs[job_id]
+                    del running_jobs[job_id]
+                    completed_runs += 1
+                    if state == "COMPLETED":
+                        console.print(
+                            f"[green]✓ Run {run_number} (Job {job_id}) 完了[/green]"
+                        )
+                    else:
+                        console.print(
+                            f"[red]✗ Run {run_number} (Job {job_id}) 失敗: {state}[/red]"
+                        )
+            if running_jobs:
+                console.print(
+                    f"[dim]残り: {len(running_jobs)}件[/dim]"
+                )
+                time.sleep(poll_interval)
 
         console.print(f"\n[bold green]Sweep完了: {completed_runs}回実行しました[/bold green]")
 

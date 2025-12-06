@@ -8,6 +8,8 @@ Integrates OpenPI's JAX training pipeline with the unified VLA backend interface
 Supports π₀-FAST model with action chunking for CRANE-X7 robot.
 """
 
+from __future__ import annotations
+
 import dataclasses
 import functools
 import logging

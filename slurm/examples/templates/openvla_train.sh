@@ -3,18 +3,15 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # =============================================================================
-# OpenVLA Sweep Job Template for Slurm
+# OpenVLA Training Template for Slurm
 # =============================================================================
 #
-# このテンプレートはW&B Sweep統合用のSlurmジョブスクリプトです。
-# crane_x7_vla.training.cli の agent コマンドを使用して
-# Sweepからパラメータを取得し、RunをSweepに正しく関連付けます。
+# このテンプレートはOpenVLAトレーニングを実行します。
 #
 # 注: OpenVLAはTFRecordを直接読み込むため、LeRobot変換は不要です。
 #
 # 使用方法:
-#   slurm-submit sweep start examples/sweeps/sweep_openvla.yaml \
-#     --template examples/templates/openvla_sweep.sh --max-runs 10
+#   slurm-submit submit jobs/openvla_train.sh
 #
 # =============================================================================
 
@@ -35,87 +32,108 @@ set -euo pipefail
 # =============================================================================
 # Environment Setup
 # =============================================================================
-echo "=== Environment Information ==="
+echo "=========================================="
+echo "OpenVLA Training"
+echo "=========================================="
 echo "Date: $(date)"
 echo "Hostname: $(hostname)"
 echo "SLURM_JOB_ID: ${SLURM_JOB_ID:-N/A}"
 echo "SLURM_JOB_NODELIST: ${SLURM_JOB_NODELIST:-N/A}"
 echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-N/A}"
-cat /etc/os-release 2>/dev/null || true
-echo ""
+echo "=========================================="
 
 # 作業ディレクトリに移動
-cd "{{SLURM_CONTAINER_WORKDIR}}"
+cd "${SLURM_SUBMIT_DIR:-{{SLURM_REMOTE_WORKDIR}}}"
 echo "Working directory: $(pwd)"
 
 # ログディレクトリを作成
 mkdir -p logs
 
-# W&B Configuration
-export WANDB_MODE=online
+# 環境変数の設定
+export PYTHONUNBUFFERED=1
+export TF_CPP_MIN_LOG_LEVEL=2
+
+# W&B設定（オプション）
 export WANDB_API_KEY={{WANDB_API_KEY}}
 export WANDB_PROJECT={{WANDB_PROJECT}}
 export WANDB_ENTITY={{WANDB_ENTITY}}
-
-# Python/CUDA Configuration
-export PYTHONUNBUFFERED=1
-export TF_CPP_MIN_LOG_LEVEL=2
+export WANDB_MODE=${WANDB_MODE:-online}
 
 # データパス設定
 DATA_ROOT=${DATA_ROOT:-{{DATA_ROOT}}}
 OUTPUT_DIR=${OUTPUT_DIR:-{{OUTPUT_DIR}}}
 
 
-# トレーニング設定（Sweepでオーバーライドされない固定パラメータ）
+# トレーニング設定（Sweepでオーバーライド可能）
+BATCH_SIZE=${BATCH_SIZE:-{{batch_size}}}
+LEARNING_RATE=${LEARNING_RATE:-{{learning_rate}}}
 MAX_STEPS=${MAX_STEPS:-{{MAX_STEPS}}}
 SAVE_INTERVAL=${SAVE_INTERVAL:-{{SAVE_INTERVAL}}}
 EVAL_INTERVAL=${EVAL_INTERVAL:-{{EVAL_INTERVAL}}}
-OVERFIT_CHECK_INTERVAL=${OVERFIT_CHECK_INTERVAL:-{{OVERFIT_CHECK_INTERVAL}}}
 
-# デフォルト値
+# デフォルト値（テンプレートプレースホルダが未置換の場合）
+BATCH_SIZE=${BATCH_SIZE:-4}
+LEARNING_RATE=${LEARNING_RATE:-2e-5}
 MAX_STEPS=${MAX_STEPS:-10000}
 SAVE_INTERVAL=${SAVE_INTERVAL:-500}
 EVAL_INTERVAL=${EVAL_INTERVAL:-100}
-OVERFIT_CHECK_INTERVAL=${OVERFIT_CHECK_INTERVAL:-500}
 
-echo "=== Sweep Configuration ==="
-echo "SWEEP_ID: {{SWEEP_ID}}"
-echo "WANDB_ENTITY: {{WANDB_ENTITY}}"
-echo "WANDB_PROJECT: {{WANDB_PROJECT}}"
 echo ""
-echo "=== Data Configuration ==="
+echo "=== Configuration ==="
 echo "DATA_ROOT: ${DATA_ROOT}"
 echo "OUTPUT_DIR: ${OUTPUT_DIR}"
+echo "BATCH_SIZE: ${BATCH_SIZE}"
+echo "LEARNING_RATE: ${LEARNING_RATE}"
+echo "MAX_STEPS: ${MAX_STEPS}"
 echo ""
 
 # =============================================================================
-# Sweep Agent Execution
+# OpenVLA Training
 # =============================================================================
-echo "=== Starting W&B Sweep Agent ==="
-echo "Sweep ID: {{SWEEP_ID}}"
-echo "Entity: {{WANDB_ENTITY}}"
-echo "Project: {{WANDB_PROJECT}}"
-echo ""
+echo "=========================================="
+echo "OpenVLA Training"
+echo "=========================================="
 
 # GPUメモリ情報を表示
 nvidia-smi || true
 
-# crane_x7_vla の agent コマンドを使用してSweepからパラメータを取得し、トレーニングを実行
-# wandb.agent()が内部で呼ばれ、RunがSweepに正しく関連付けられる
-# OpenVLAはTFRecordを直接読み込む
-python -m crane_x7_vla.training.cli agent openvla \
-    --sweep-id "{{SWEEP_ID}}" \
-    --entity "{{WANDB_ENTITY}}" \
-    --project "{{WANDB_PROJECT}}" \
+echo ""
+echo "Starting OpenVLA training..."
+echo "  Batch size: ${BATCH_SIZE}"
+echo "  Learning rate: ${LEARNING_RATE}"
+echo "  Max steps: ${MAX_STEPS}"
+echo "  Save interval: ${SAVE_INTERVAL}"
+echo "  Eval interval: ${EVAL_INTERVAL}"
+echo ""
+
+# OpenVLAトレーニングを実行
+# OpenVLAはTFRecord形式を直接読み込む
+python -m crane_x7_vla.training.cli train openvla \
     --data-root "${DATA_ROOT}" \
     --output-dir "${OUTPUT_DIR}/checkpoints" \
-    --experiment-name "crane_x7_sweep" \
+    --experiment-name "crane_x7_openvla" \
+    --training-batch-size "${BATCH_SIZE}" \
+    --training-learning-rate "${LEARNING_RATE}" \
     --training-max-steps "${MAX_STEPS}" \
     --training-save-interval "${SAVE_INTERVAL}" \
     --training-eval-interval "${EVAL_INTERVAL}" \
-    --overfitting-overfit-check-interval "${OVERFIT_CHECK_INTERVAL}" \
     --training-gradient-checkpointing \
     --use-lora
 
-echo "=== Job Completed ==="
+TRAIN_EXIT_CODE=$?
+
+# =============================================================================
+# Summary
+# =============================================================================
+echo ""
+echo "=========================================="
+echo "Training Completed"
+echo "=========================================="
+echo "Exit code: ${TRAIN_EXIT_CODE}"
 echo "End time: $(date)"
+echo ""
+echo "Outputs:"
+echo "  Checkpoints: ${OUTPUT_DIR}/checkpoints"
+echo "=========================================="
+
+exit ${TRAIN_EXIT_CODE}
