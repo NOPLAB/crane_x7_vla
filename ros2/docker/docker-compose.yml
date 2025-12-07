@@ -44,7 +44,7 @@ x-real-groups: &real-groups
 
 # Base service configuration
 x-base: &base
-  env_file: ../.env
+  env_file: .env
   build:
     <<: *build-base
     target: base
