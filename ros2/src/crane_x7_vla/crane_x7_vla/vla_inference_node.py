@@ -390,51 +390,46 @@ class VLAInferenceNode(Node):
                             (attention_mask, torch.ones((1, 1), dtype=attention_mask.dtype, device=attention_mask.device)), dim=1
                         )
 
-                # Debug: log input shapes and dtypes before generate
-                self.get_logger().info(
-                    f'Before generate: input_ids.shape={list(input_ids.shape)}, '
-                    f'attention_mask.shape={list(attention_mask.shape)}, '
-                    f'pixel_values.shape={list(pixel_values.shape)}, '
-                    f'pixel_values.dtype={pixel_values.dtype}, '
-                    f'pixel_values.device={pixel_values.device}'
-                )
+                # Use forward() directly for autoregressive generation
+                # (generate() has issues with pixel_values not being used properly)
+                generated_tokens = []
+                current_input_ids = input_ids.clone()
+                current_attention_mask = attention_mask.clone()
 
-                # Debug: check if pixel_values has valid data
-                pv_min = pixel_values.float().min().item()
-                pv_max = pixel_values.float().max().item()
-                self.get_logger().info(
-                    f'pixel_values stats: min={pv_min:.4f}, max={pv_max:.4f}'
-                )
+                for step in range(action_dim):
+                    # Run forward pass
+                    if step == 0:
+                        # First step: include pixel_values
+                        forward_output = self.model(
+                            input_ids=current_input_ids,
+                            attention_mask=current_attention_mask,
+                            pixel_values=pixel_values,
+                        )
+                    else:
+                        # Subsequent steps: use cached key-values (no pixel_values needed)
+                        forward_output = self.model(
+                            input_ids=current_input_ids[:, -1:],
+                            attention_mask=current_attention_mask,
+                            past_key_values=past_key_values,
+                        )
 
-                # Debug: call forward() directly to check logits
-                # This helps diagnose if the issue is with generate() or the model itself
-                forward_output = self.model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    pixel_values=pixel_values,
-                )
-                logits = forward_output.logits
-                # Get the logits for the last token (next token prediction)
-                last_token_logits = logits[0, -1, :]
-                # Find top-5 predicted tokens
-                top5_values, top5_indices = torch.topk(last_token_logits, 5)
-                self.get_logger().info(
-                    f'Forward logits shape: {list(logits.shape)}, '
-                    f'top5_tokens: {top5_indices.cpu().tolist()}, '
-                    f'top5_probs: {torch.softmax(top5_values, dim=0).cpu().tolist()}'
-                )
+                    logits = forward_output.logits
+                    past_key_values = forward_output.past_key_values
 
-                # Run generate once and decode tokens manually
-                generated_ids = self.model.generate(
-                    input_ids,
-                    max_new_tokens=action_dim,
-                    do_sample=False,
-                    pixel_values=pixel_values,
-                    attention_mask=attention_mask,
-                )
+                    # Get the next token (greedy decoding)
+                    next_token_logits = logits[0, -1, :]
+                    next_token = torch.argmax(next_token_logits).unsqueeze(0).unsqueeze(0)
+                    generated_tokens.append(next_token.item())
 
-                # Extract predicted action tokens
-                predicted_token_ids = generated_ids[0, -action_dim:].cpu().numpy()
+                    # Update input_ids and attention_mask for next iteration
+                    current_input_ids = torch.cat([current_input_ids, next_token], dim=1)
+                    current_attention_mask = torch.cat(
+                        [current_attention_mask, torch.ones((1, 1), dtype=current_attention_mask.dtype, device=current_attention_mask.device)],
+                        dim=1
+                    )
+
+                # Convert to numpy array
+                predicted_token_ids = np.array(generated_tokens)
                 self.get_logger().info(f'Generated token IDs: {predicted_token_ids}')
 
                 # Debug: decode tokens to show bin indices
