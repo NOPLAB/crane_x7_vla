@@ -263,6 +263,22 @@ class VLAInferenceNode(Node):
                     f'Using unnorm_key: {self.unnorm_key} (action_dim={action_dim})'
                 )
 
+            # Debug: log model configuration
+            self.get_logger().info(
+                f'Model config: vocab_size={self.model.config.text_config.vocab_size}, '
+                f'pad_to_multiple_of={self.model.config.pad_to_multiple_of}, '
+                f'n_action_bins={self.model.config.n_action_bins}'
+            )
+            if hasattr(self.model, 'norm_stats') and self.model.norm_stats:
+                for key in self.model.norm_stats:
+                    stats = self.model.norm_stats[key]
+                    if 'action' in stats:
+                        action_stats = stats['action']
+                        self.get_logger().info(
+                            f'norm_stats[{key}]: q01={action_stats.get("q01")}, '
+                            f'q99={action_stats.get("q99")}'
+                        )
+
             self.get_logger().info('VLA model loaded successfully')
 
         except Exception as e:
@@ -374,6 +390,40 @@ class VLAInferenceNode(Node):
                             (attention_mask, torch.ones((1, 1), dtype=attention_mask.dtype, device=attention_mask.device)), dim=1
                         )
 
+                # Debug: log input shapes and dtypes before generate
+                self.get_logger().info(
+                    f'Before generate: input_ids.shape={list(input_ids.shape)}, '
+                    f'attention_mask.shape={list(attention_mask.shape)}, '
+                    f'pixel_values.shape={list(pixel_values.shape)}, '
+                    f'pixel_values.dtype={pixel_values.dtype}, '
+                    f'pixel_values.device={pixel_values.device}'
+                )
+
+                # Debug: check if pixel_values has valid data
+                pv_min = pixel_values.float().min().item()
+                pv_max = pixel_values.float().max().item()
+                self.get_logger().info(
+                    f'pixel_values stats: min={pv_min:.4f}, max={pv_max:.4f}'
+                )
+
+                # Debug: call forward() directly to check logits
+                # This helps diagnose if the issue is with generate() or the model itself
+                forward_output = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    pixel_values=pixel_values,
+                )
+                logits = forward_output.logits
+                # Get the logits for the last token (next token prediction)
+                last_token_logits = logits[0, -1, :]
+                # Find top-5 predicted tokens
+                top5_values, top5_indices = torch.topk(last_token_logits, 5)
+                self.get_logger().info(
+                    f'Forward logits shape: {list(logits.shape)}, '
+                    f'top5_tokens: {top5_indices.cpu().tolist()}, '
+                    f'top5_probs: {torch.softmax(top5_values, dim=0).cpu().tolist()}'
+                )
+
                 # Run generate once and decode tokens manually
                 generated_ids = self.model.generate(
                     input_ids,
@@ -386,6 +436,11 @@ class VLAInferenceNode(Node):
                 # Extract predicted action tokens
                 predicted_token_ids = generated_ids[0, -action_dim:].cpu().numpy()
                 self.get_logger().info(f'Generated token IDs: {predicted_token_ids}')
+
+                # Debug: decode tokens to show bin indices
+                vocab_size = self.model.config.text_config.vocab_size - self.model.config.pad_to_multiple_of
+                bin_indices = vocab_size - predicted_token_ids - 1
+                self.get_logger().info(f'Bin indices: {bin_indices} (vocab_size={vocab_size})')
 
                 # Decode tokens to actions (same logic as predict_action)
                 # vocab_size - token_id gives the bin index
