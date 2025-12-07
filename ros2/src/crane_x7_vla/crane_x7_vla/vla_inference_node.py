@@ -320,6 +320,28 @@ class VLAInferenceNode(Node):
             # Run inference using predict_action method
             # predict_action expects input_ids and passes other kwargs to generate()
             with torch.no_grad():
+                # Debug: manually run generate to see token IDs
+                action_dim = self.model.get_action_dim(self.unnorm_key)
+
+                # Add special empty token if needed (same as predict_action)
+                if not torch.all(input_ids[:, -1] == 29871):
+                    input_ids = torch.cat(
+                        (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1
+                    )
+
+                generated_ids = self.model.generate(
+                    input_ids,
+                    max_new_tokens=action_dim,
+                    do_sample=False,
+                    pixel_values=pixel_values,
+                    attention_mask=attention_mask,
+                )
+
+                # Extract and log token IDs
+                predicted_token_ids = generated_ids[0, -action_dim:].cpu().numpy()
+                self.get_logger().info(f'Generated token IDs: {predicted_token_ids}')
+
+                # Now get the action through predict_action
                 action = self.model.predict_action(
                     input_ids=input_ids,
                     unnorm_key=self.unnorm_key,
