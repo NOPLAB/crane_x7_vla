@@ -14,6 +14,7 @@ from launch_ros.substitutions import FindPackageShare
 def launch_setup(context, *args, **kwargs):
     """Setup launch configuration."""
     # Get launch arguments
+    model_path = LaunchConfiguration('model_path')
     task_instruction = LaunchConfiguration('task_instruction')
     config_file = LaunchConfiguration('config_file')
     use_flash_attention = LaunchConfiguration('use_flash_attention')
@@ -29,6 +30,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             config_file,
             {
+                'model_path': model_path,
                 'task_instruction': task_instruction,
                 'use_flash_attention': use_flash_attention,
                 'device': device,
@@ -56,6 +58,12 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     """Generate launch description."""
     # Declare launch arguments
+    declare_model_path = DeclareLaunchArgument(
+        'model_path',
+        default_value='',
+        description='Path to VLA model (e.g., /workspace/vla/outputs/<model_dir>/checkpoint-1500)'
+    )
+
     declare_task_instruction = DeclareLaunchArgument(
         'task_instruction',
         default_value='pick up the object',
@@ -91,6 +99,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        declare_model_path,
         declare_task_instruction,
         declare_config_file,
         declare_use_flash_attention,

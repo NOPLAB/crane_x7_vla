@@ -175,6 +175,7 @@ services:
       <<: *gpu-deploy
     command: >
       ros2 launch crane_x7_vla real_with_vla.launch.py
+        model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
         use_d435:=true
@@ -190,6 +191,7 @@ services:
       <<: *gpu-deploy
     command: >
       ros2 launch crane_x7_vla sim_with_vla.launch.py
+        model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
 

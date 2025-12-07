@@ -14,6 +14,12 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     """Generate launch description."""
     # Declare launch arguments
+    declare_model_path = DeclareLaunchArgument(
+        'model_path',
+        default_value='',
+        description='Path to VLA model (e.g., /workspace/vla/outputs/<model_dir>/checkpoint-1500)'
+    )
+
     declare_port_name = DeclareLaunchArgument(
         'port_name',
         default_value='/dev/ttyUSB0',
@@ -63,12 +69,14 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
+            'model_path': LaunchConfiguration('model_path'),
             'task_instruction': LaunchConfiguration('task_instruction'),
             'device': LaunchConfiguration('device'),
         }.items()
     )
 
     return LaunchDescription([
+        declare_model_path,
         declare_port_name,
         declare_use_d435,
         declare_task_instruction,
