@@ -3,14 +3,22 @@
 # Licensed under the MIT License
 
 """
-Launch file for CRANE-X7 teleoperation Follower mode.
-The Follower robot receives and follows Leader's joint angles (torque ON).
+CRANE-X7テレオペ・フォロワーモードの統合launchファイル。
+
+フォロワーロボットはトルクONでリーダーの動きを追従。
+
+引数:
+  - port_name (default: /dev/ttyUSB0): CRANE-X7 FollowerロボットのUSBポート名
+  - use_d435 (default: false): RealSense D435カメラを使用
+  - use_viewer (default: false): カメラビューア(rviz2)を表示
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -21,7 +29,19 @@ def generate_launch_description():
     declare_port_name = DeclareLaunchArgument(
         'port_name',
         default_value='/dev/ttyUSB0',
-        description='USB port name for CRANE-X7'
+        description='USB port name for CRANE-X7 Follower robot'
+    )
+
+    declare_use_d435 = DeclareLaunchArgument(
+        'use_d435',
+        default_value='false',
+        description='Use RealSense D435 camera'
+    )
+
+    declare_use_viewer = DeclareLaunchArgument(
+        'use_viewer',
+        default_value='false',
+        description='Display camera viewer (rviz2)'
     )
 
     # Config files
@@ -48,7 +68,42 @@ def generate_launch_description():
         ]
     )
 
+    # RealSense D435 camera node (conditional)
+    realsense_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('realsense2_camera'),
+                'launch', 'rs_launch.py'
+            ])
+        ]),
+        condition=IfCondition(LaunchConfiguration('use_d435')),
+        launch_arguments={
+            'camera_namespace': '',
+            'device_type': 'd435',
+            'pointcloud.enable': 'true',
+            'align_depth.enable': 'true',
+        }.items()
+    )
+
+    # Camera viewer (conditional)
+    rviz_config_path = PathJoinSubstitution([
+        FindPackageShare('crane_x7_log'),
+        'config', 'camera_viewer.rviz'
+    ])
+    camera_viewer = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config_path],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_viewer'))
+    )
+
     return LaunchDescription([
         declare_port_name,
-        teleop_hardware
+        declare_use_d435,
+        declare_use_viewer,
+        teleop_hardware,
+        realsense_node,
+        camera_viewer,
     ])

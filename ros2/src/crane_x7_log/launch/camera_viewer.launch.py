@@ -4,13 +4,14 @@
 
 """
 Launch file for RealSense camera viewer.
-Displays camera image streams using rqt_image_view.
+Displays camera image streams using rviz2.
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
-from launch.substitutions import LaunchConfiguration
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -23,21 +24,20 @@ def generate_launch_description():
         description='Image topic to display'
     )
 
-    declare_use_rqt = DeclareLaunchArgument(
-        'use_rqt',
-        default_value='true',
-        description='Use rqt_image_view (true) or image_view (false)'
-    )
-
-    # rqt_image_view (GUI tool with topic selection)
-    rqt_image_view = ExecuteProcess(
-        cmd=['rqt_image_view', LaunchConfiguration('image_topic')],
-        output='screen',
-        name='rqt_image_view'
+    # rviz2 camera viewer
+    rviz_config_path = PathJoinSubstitution([
+        FindPackageShare('crane_x7_log'),
+        'config', 'camera_viewer.rviz'
+    ])
+    rviz_viewer = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config_path],
+        output='screen'
     )
 
     return LaunchDescription([
         declare_image_topic,
-        declare_use_rqt,
-        rqt_image_view,
+        rviz_viewer,
     ])

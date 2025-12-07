@@ -1,19 +1,18 @@
-# Common build configuration with cache settings
+# ============================================================================
+# Common Configuration Anchors
+# ============================================================================
+
+# Build configuration
 x-build-base: &build-base
   context: ..
   dockerfile: ros2/Dockerfile
-  cache_from:
-    - type=local,src=../.cache/ros2/docker
-  cache_to:
-    - type=local,dest=../.cache/ros2/docker,mode=max
 
-# Common X11/WSLg volumes for GUI applications + source for dev
+# Volume configurations
 x-x11-volumes: &x11-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
   - ./src:/workspace/ros2/src:ro
 
-# Common volumes for VLA services (includes X11 + VLA models + source for dev)
 x-vla-volumes: &vla-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
@@ -21,321 +20,182 @@ x-vla-volumes: &vla-volumes
   - ../data:/workspace/data:ro
   - ./src:/workspace/ros2/src:ro
 
+# Environment configurations
+x-base-env: &base-env
+  DISPLAY: ${DISPLAY}
+  PULSE_SERVER: unix:/run/user/1000/pulse/native
+  TF_CPP_MIN_LOG_LEVEL: "2"
+  CUDA_VISIBLE_DEVICES: ""
+
+x-vla-env: &vla-env
+  DISPLAY: ${DISPLAY}
+  PULSE_SERVER: unix:/run/user/1000/pulse/native
+  TF_CPP_MIN_LOG_LEVEL: "2"
+  HF_TOKEN: ${HF_TOKEN:-}
+  VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION:-pick up the object}
+  VLA_DEVICE: ${VLA_DEVICE:-cuda}
+
+# Group configurations
+x-real-groups: &real-groups
+  - dialout
+  - audio
+  - "984"  # video group GID on Arch Linux
+  - "985"  # uucp group GID on Arch Linux
+
+# Base service configuration
+x-base: &base
+  env_file: .env
+  build:
+    <<: *build-base
+    target: base
+  devices:
+    - "/dev/snd:/dev/snd"
+  volumes: *x11-volumes
+  group_add:
+    - audio
+  environment:
+    <<: *base-env
+
+# GPU deployment configuration
+x-gpu-deploy: &gpu-deploy
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+
+# ============================================================================
+# Services
+# ============================================================================
+
 services:
-  crane_x7_ros2_real:
-    profiles:
-      - real
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  # --------------------------------------------------------------------------
+  # Real Robot Services
+  # --------------------------------------------------------------------------
+  real:
+    <<: *base
+    profiles: [real]
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-    command: ros2 launch crane_x7_log real_with_logger.launch.py
+    privileged: true
+    group_add: *real-groups
+    command: ros2 launch crane_x7_log real.launch.py use_d435:=${USE_D435:-false} use_viewer:=${USE_VIEWER:-false}
 
-  crane_x7_ros2_sim:
-    profiles:
-      - sim
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    group_add:
-      - audio
+  # --------------------------------------------------------------------------
+  # Simulation Services
+  # --------------------------------------------------------------------------
+  sim:
+    <<: *base
+    profiles: [sim]
     environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - SIMULATION_MODE=true
-    command: ros2 launch crane_x7_log demo_with_logger.launch.py
+      <<: *base-env
+      SIMULATION_MODE: "true"
+    command: ros2 launch crane_x7_log sim.launch.py use_viewer:=${USE_VIEWER:-false}
 
-  crane_x7_teleop_leader:
-    profiles:
-      - teleop-leader
-      - teleop
-      - teleop-logger
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  # --------------------------------------------------------------------------
+  # Teleoperation Services
+  # --------------------------------------------------------------------------
+  teleop-leader:
+    <<: *base
+    profiles: [teleop, teleop-viewer]
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    privileged: true
+    group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: ros2 launch crane_x7_log teleop_leader_with_logger.launch.py use_d435:=true
+    command: ros2 launch crane_x7_log teleop_leader.launch.py use_d435:=${USE_D435:-false} use_viewer:=false
 
-  crane_x7_teleop_leader_viewer:
-    profiles:
-      - teleop-leader-viewer
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "$USB_DEVICE:/dev/ttyUSB0"
-      - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-    stop_grace_period: 5s
-    stop_signal: SIGINT
-    command: ros2 launch crane_x7_log teleop_leader_with_logger_and_viewer.launch.py use_d435:=true
-
-  crane_x7_teleop_follower:
-    profiles:
-      - teleop-follower
-      - teleop
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  teleop-follower:
+    <<: *base
+    profiles: [teleop]
     devices:
       - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
     command: ros2 launch crane_x7_teleop teleop_follower.launch.py
 
-  crane_x7_teleop_follower_viewer:
-    profiles:
-      - teleop-follower-viewer
-      - teleop-viewer
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  teleop-follower-viewer:
+    <<: *base
+    profiles: [teleop-viewer]
     devices:
       - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    privileged: true
+    group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: ros2 launch crane_x7_teleop teleop_follower_with_viewer.launch.py use_d435:=true
+    command: ros2 launch crane_x7_teleop teleop_follower.launch.py use_d435:=true use_viewer:=true
 
-  crane_x7_gemini:
-    profiles:
-      - gemini
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  # --------------------------------------------------------------------------
+  # Gemini Services
+  # --------------------------------------------------------------------------
+  gemini:
+    <<: *base
+    profiles: [gemini]
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
+    privileged: true
+    group_add: *real-groups
     environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      <<: *base-env
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     command: ros2 launch crane_x7_gemini gemini_with_robot.launch.py
 
-  crane_x7_gemini_sim:
-    profiles:
-      - gemini-sim
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "/dev/snd:/dev/snd"
-    volumes: *x11-volumes
-    group_add:
-      - audio
+  gemini-sim:
+    <<: *base
+    profiles: [gemini-sim]
     environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - SIMULATION_MODE=true
+      <<: *base-env
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SIMULATION_MODE: "true"
     command: ros2 launch crane_x7_gemini gemini_pick_and_place_sim.launch.py
 
-  # VLA inference services
-  crane_x7_vla_real:
-    profiles:
-      - vla
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
+  # --------------------------------------------------------------------------
+  # VLA Inference Services
+  # --------------------------------------------------------------------------
+  vla:
+    <<: *base
+    profiles: [vla]
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
     volumes: *vla-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
+    privileged: true
+    group_add: *real-groups
     environment:
-      - DISPLAY=${DISPLAY}
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - HF_TOKEN=${HF_TOKEN:-}
-      - VLA_TASK_INSTRUCTION=${VLA_TASK_INSTRUCTION:-pick up the object}
+      <<: *vla-env
     deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      <<: *gpu-deploy
     command: >
       ros2 launch crane_x7_vla real_with_vla.launch.py
         task_instruction:='${VLA_TASK_INSTRUCTION}'
+        device:='${VLA_DEVICE:-cuda}'
         use_d435:=true
 
-  crane_x7_vla_sim:
-    profiles:
-      - vla-sim
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "/dev/snd:/dev/snd"
+  vla-sim:
+    <<: *base
+    profiles: [vla-sim]
     volumes: *vla-volumes
-    group_add:
-      - audio
     environment:
-      - DISPLAY=${DISPLAY}
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - SIMULATION_MODE=true
-      - HF_TOKEN=${HF_TOKEN:-}
-      - VLA_TASK_INSTRUCTION=${VLA_TASK_INSTRUCTION:-pick up the object}
+      <<: *vla-env
+      SIMULATION_MODE: "true"
     deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      <<: *gpu-deploy
     command: >
       ros2 launch crane_x7_vla sim_with_vla.launch.py
         task_instruction:='${VLA_TASK_INSTRUCTION}'
+        device:='${VLA_DEVICE:-cuda}'
 
-  # VLA inference services (CPU mode - slower but no GPU required)
-  crane_x7_vla_real_cpu:
-    profiles:
-      - vla-cpu
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "$USB_DEVICE:/dev/ttyUSB0"
-      - "/dev/snd:/dev/snd"
-    volumes: *vla-volumes
-    privileged: true  # Required for RealSense camera USB access
-    group_add:
-      - dialout
-      - audio
-      - "984"  # video group GID on Arch Linux
-      - "985"  # uucp group GID on Arch Linux
-    environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - HF_TOKEN=${HF_TOKEN:-}
-      - VLA_TASK_INSTRUCTION=${VLA_TASK_INSTRUCTION:-pick up the object}
-    command: >
-      ros2 launch crane_x7_vla real_with_vla.launch.py
-        task_instruction:='${VLA_TASK_INSTRUCTION}'
-        device:=cpu
-        use_d435:=true
-
-  crane_x7_vla_sim_cpu:
-    profiles:
-      - vla-sim-cpu
-    env_file: .env
-    build:
-      <<: *build-base
-      target: base
-    devices:
-      - "/dev/snd:/dev/snd"
-    volumes: *vla-volumes
-    group_add:
-      - audio
-    environment:
-      - DISPLAY=${DISPLAY}
-      - CUDA_VISIBLE_DEVICES=""
-      - TF_CPP_MIN_LOG_LEVEL=2
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - SIMULATION_MODE=true
-      - HF_TOKEN=${HF_TOKEN:-}
-      - VLA_TASK_INSTRUCTION=${VLA_TASK_INSTRUCTION:-pick up the object}
-    command: >
-      ros2 launch crane_x7_vla sim_with_vla.launch.py
-        task_instruction:='${VLA_TASK_INSTRUCTION}'
-        device:=cpu
+# ============================================================================
+# Networks
+# ============================================================================
 
 networks:
   default:

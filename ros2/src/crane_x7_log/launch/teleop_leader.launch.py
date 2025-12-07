@@ -3,18 +3,24 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-Launch file for CRANE-X7 teleoperation Leader mode with data logger and camera viewer.
-This launches the Leader hardware node (for manual teaching), data logger, and camera viewer.
+CRANE-X7テレオペ・リーダーモードの統合launchファイル。
 
-The Leader robot can be manually moved (torque OFF) and publishes joint angles.
-The data logger subscribes to the Leader's joint state topic for demonstration recording.
-The camera viewer displays RealSense D435 stream in a separate window.
+リーダーロボットはトルクOFFで手動教示が可能。
+データロガーでデモンストレーションを記録。
+
+引数:
+  - port_name (default: /dev/ttyUSB0): CRANE-X7 LeaderロボットのUSBポート名
+  - use_d435 (default: false): RealSense D435カメラを使用
+  - use_logger (default: true): データロガーを有効化
+  - use_viewer (default: false): カメラビューア(rviz2)を表示
+  - output_dir: ログデータの保存先
+  - config_file: ロガー設定ファイルのパス
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -23,7 +29,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Launch teleop leader with data logger and camera viewer."""
+    """Launch teleop leader with optional logger and viewer."""
 
     # Get package directories
     crane_x7_log_dir = get_package_share_directory('crane_x7_log')
@@ -40,8 +46,20 @@ def generate_launch_description():
 
     declare_use_d435 = DeclareLaunchArgument(
         'use_d435',
-        default_value='true',
+        default_value='false',
         description='Use RealSense D435 camera for visual observations'
+    )
+
+    declare_use_logger = DeclareLaunchArgument(
+        'use_logger',
+        default_value='true',
+        description='Enable data logger'
+    )
+
+    declare_use_viewer = DeclareLaunchArgument(
+        'use_viewer',
+        default_value='false',
+        description='Display camera viewer (rviz2)'
     )
 
     declare_output_dir = DeclareLaunchArgument(
@@ -54,12 +72,6 @@ def generate_launch_description():
         'config_file',
         default_value=logger_config,
         description='Path to data logger config file'
-    )
-
-    declare_image_topic = DeclareLaunchArgument(
-        'image_topic',
-        default_value='/camera/color/image_raw',
-        description='Image topic to display'
     )
 
     # Include teleop_leader.launch.py from crane_x7_teleop package
@@ -75,7 +87,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # RealSense D435 camera node
+    # RealSense D435 camera node (conditional)
     realsense_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -92,39 +104,45 @@ def generate_launch_description():
         }.items()
     )
 
-    # Data logger node - subscribes to /joint_states published by leader
+    # Data logger node (conditional)
     data_logger = Node(
         package='crane_x7_log',
         executable='data_logger',
         name='data_logger',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_logger')),
         parameters=[
             LaunchConfiguration('config_file'),
             {
                 'output_dir': LaunchConfiguration('output_dir'),
-                # Override joint_states topic to use leader's topic
-                # Leader publishes to both /joint_states and /teleop/leader/state
                 'joint_states_topic': '/joint_states'
             }
         ]
     )
 
-    # Camera viewer (rqt_image_view)
-    camera_viewer = ExecuteProcess(
-        cmd=['rqt_image_view', LaunchConfiguration('image_topic')],
+    # Camera viewer (conditional)
+    rviz_config_path = PathJoinSubstitution([
+        FindPackageShare('crane_x7_log'),
+        'config', 'camera_viewer.rviz'
+    ])
+    camera_viewer = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config_path],
         output='screen',
-        name='camera_viewer',
-        condition=IfCondition(LaunchConfiguration('use_d435'))
+        condition=IfCondition(LaunchConfiguration('use_viewer'))
     )
 
     return LaunchDescription([
         declare_port_name,
         declare_use_d435,
+        declare_use_logger,
+        declare_use_viewer,
         declare_output_dir,
         declare_config_file,
-        declare_image_topic,
         teleop_leader,
         realsense_node,
         data_logger,
-        camera_viewer
+        camera_viewer,
     ])

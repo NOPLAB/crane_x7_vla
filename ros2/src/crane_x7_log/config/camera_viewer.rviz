@@ -1,0 +1,41 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Image
+      Name: Camera Image
+      Topic:
+        Value: /camera/color/image_raw
+        Depth: 5
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+      Queue Size: 2
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: camera_link
+    Frame Rate: 30
+  Name: root
+  Tools: []
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Target Frame: <Fixed Frame>
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 600
+  Width: 800
+  X: 0
+  Y: 0

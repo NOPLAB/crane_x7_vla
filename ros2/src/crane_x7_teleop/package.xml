@@ -17,6 +17,9 @@
   <depend>std_srvs</depend>
   <depend>rt_manipulators_cpp</depend>
 
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>crane_x7_log</exec_depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
