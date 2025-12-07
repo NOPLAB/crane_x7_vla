@@ -19,6 +19,7 @@ x-vla-volumes: &vla-volumes
   - ../../vla/outputs:/workspace/vla/outputs:ro
   - ../../data:/workspace/data:ro
   - ../src:/workspace/ros2/src:ro
+  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
 
 # Environment configurations
 x-base-env: &base-env
@@ -32,6 +33,7 @@ x-vla-env: &vla-env
   PULSE_SERVER: unix:/run/user/1000/pulse/native
   TF_CPP_MIN_LOG_LEVEL: "2"
   HF_TOKEN: ${HF_TOKEN:-}
+  HF_HOME: /home/${USERNAME:-ros2}/.cache/huggingface
   VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION:-pick up the object}
   VLA_DEVICE: ${VLA_DEVICE:-cuda}
 
