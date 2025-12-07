@@ -53,12 +53,15 @@ WORKDIR /workspace/ros2/src
 # Copy ROS source packages
 COPY ros2/src /workspace/ros2/src
 
-# Install ROS dependencies
+# Install ROS dependencies (extract rosdep packages and install via apt directly)
 WORKDIR /workspace/ros2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    rosdep install -r -y --from-paths src --ignore-src
+    apt-get install -y --no-install-recommends \
+    $(rosdep keys --from-paths src --ignore-src 2>/dev/null | \
+      xargs -I {} sh -c 'rosdep resolve {} 2>/dev/null || true' | \
+      grep -v '^#' | sort -u)
 
 # Build the workspace
 RUN . /opt/ros/humble/setup.sh && \
