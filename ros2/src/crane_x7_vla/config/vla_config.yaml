@@ -5,7 +5,7 @@ vla_inference_node:
     # Model configuration
     # For fine-tuned model: /workspace/vla/outputs/<your_model_dir>
     # For base model testing: openvla/openvla-7b (from HuggingFace)
-    model_path: '/workspace/vla/outputs/openvla-7b+crane_x7+b1+lr-0.0005+lora-r32+dropout-0.05--crane_x7_vla'
+    model_path: '/workspace/vla/outputs/openvla-7b+crane_x7+b1+lr-0.00032313519750851795+lora-r32+dropout-0.038347908258855416--crane_x7_sweep/checkpoint-1500'
     model_base_name: 'openvla'  # Base model name ('openvla' or 'openvla-v01')
 
     # Task instruction
