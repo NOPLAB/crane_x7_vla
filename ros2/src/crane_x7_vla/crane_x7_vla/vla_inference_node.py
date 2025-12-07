@@ -220,25 +220,28 @@ class VLAInferenceNode(Node):
             self.model = self.model.to(self.device)
             self.model.eval()
 
-            # Load normalization statistics if available
-            # First check if model already has norm_stats from config
-            if hasattr(self.model, 'norm_stats') and self.model.norm_stats:
+            # Load normalization statistics
+            # Always try to load from checkpoint's dataset_statistics.json first
+            # This contains the fine-tuned dataset statistics (e.g., crane_x7)
+            norm_stats_path = model_path / "dataset_statistics.json"
+            if norm_stats_path.exists():
+                with open(norm_stats_path, 'r') as f:
+                    checkpoint_stats = json.load(f)
+                # Merge with existing norm_stats or create new
+                if not hasattr(self.model, 'norm_stats') or self.model.norm_stats is None:
+                    self.model.norm_stats = {}
+                self.model.norm_stats.update(checkpoint_stats)
                 self.get_logger().info(
-                    f'Model has norm_stats from config: {list(self.model.norm_stats.keys())}'
+                    f'Loaded checkpoint statistics: {list(checkpoint_stats.keys())}'
+                )
+            elif hasattr(self.model, 'norm_stats') and self.model.norm_stats:
+                self.get_logger().info(
+                    f'Using model norm_stats: {list(self.model.norm_stats.keys())}'
                 )
             else:
-                # Try to load from dataset_statistics.json
-                norm_stats_path = model_path / "dataset_statistics.json"
-                if norm_stats_path.exists():
-                    with open(norm_stats_path, 'r') as f:
-                        self.model.norm_stats = json.load(f)
-                    self.get_logger().info(
-                        f'Loaded dataset normalization statistics: {list(self.model.norm_stats.keys())}'
-                    )
-                else:
-                    self.get_logger().warn(
-                        'No dataset_statistics.json found - using default normalization'
-                    )
+                self.get_logger().warn(
+                    'No dataset_statistics.json found - using default normalization'
+                )
 
             # Verify unnorm_key is available
             if hasattr(self.model, 'norm_stats') and self.model.norm_stats:
