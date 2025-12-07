@@ -162,6 +162,10 @@ class VLAInferenceNode(Node):
             )
             self.get_logger().info('Processor loaded successfully')
 
+            # Check if this is a LoRA checkpoint (has lora_adapters subdirectory)
+            lora_adapter_path = model_path / "lora_adapters"
+            is_lora_checkpoint = lora_adapter_path.exists()
+
             # Load model
             model_kwargs = {
                 "trust_remote_code": True,
@@ -174,10 +178,43 @@ class VLAInferenceNode(Node):
                 model_kwargs["attn_implementation"] = "flash_attention_2"
                 self.get_logger().info('Using Flash Attention 2')
 
-            self.model = AutoModelForVision2Seq.from_pretrained(
-                str(model_path),
-                **model_kwargs
-            )
+            if is_lora_checkpoint:
+                # Load base model first, then apply LoRA adapter
+                self.get_logger().info('Detected LoRA checkpoint, loading base model + adapter...')
+
+                # Read adapter config to get base model path
+                import json
+                adapter_config_path = lora_adapter_path / "adapter_config.json"
+                with open(adapter_config_path, 'r') as f:
+                    adapter_config = json.load(f)
+                base_model_path = adapter_config.get("base_model_name_or_path", "openvla/openvla-7b")
+                self.get_logger().info(f'Base model: {base_model_path}')
+
+                # Load base model
+                base_model = AutoModelForVision2Seq.from_pretrained(
+                    base_model_path,
+                    **model_kwargs
+                )
+                self.get_logger().info('Base model loaded')
+
+                # Load and apply LoRA adapter using PEFT
+                from peft import PeftModel
+                self.model = PeftModel.from_pretrained(
+                    base_model,
+                    str(lora_adapter_path),
+                    is_trainable=False,
+                )
+                self.get_logger().info('LoRA adapter applied')
+
+                # Merge LoRA weights for faster inference
+                self.model = self.model.merge_and_unload()
+                self.get_logger().info('LoRA weights merged')
+            else:
+                # Load merged model directly
+                self.model = AutoModelForVision2Seq.from_pretrained(
+                    str(model_path),
+                    **model_kwargs
+                )
 
             # Move to device
             self.model = self.model.to(self.device)
