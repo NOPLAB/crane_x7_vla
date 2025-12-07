@@ -360,15 +360,21 @@ class VLAInferenceNode(Node):
             # Run inference using predict_action method
             # predict_action expects input_ids and passes other kwargs to generate()
             with torch.no_grad():
-                # Debug: manually run generate to see token IDs
                 action_dim = self.model.get_action_dim(self.unnorm_key)
 
                 # Add special empty token if needed (same as predict_action)
+                # IMPORTANT: Also update attention_mask to match input_ids length
                 if not torch.all(input_ids[:, -1] == 29871):
                     input_ids = torch.cat(
                         (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1
                     )
+                    # Update attention_mask to include the new token
+                    if attention_mask is not None:
+                        attention_mask = torch.cat(
+                            (attention_mask, torch.ones((1, 1), dtype=attention_mask.dtype, device=attention_mask.device)), dim=1
+                        )
 
+                # Run generate once and decode tokens manually
                 generated_ids = self.model.generate(
                     input_ids,
                     max_new_tokens=action_dim,
@@ -377,18 +383,25 @@ class VLAInferenceNode(Node):
                     attention_mask=attention_mask,
                 )
 
-                # Extract and log token IDs
+                # Extract predicted action tokens
                 predicted_token_ids = generated_ids[0, -action_dim:].cpu().numpy()
                 self.get_logger().info(f'Generated token IDs: {predicted_token_ids}')
 
-                # Now get the action through predict_action
-                action = self.model.predict_action(
-                    input_ids=input_ids,
-                    unnorm_key=self.unnorm_key,
-                    do_sample=False,
-                    # Pass additional inputs for multimodal forward
-                    pixel_values=pixel_values,
-                    attention_mask=attention_mask,
+                # Decode tokens to actions (same logic as predict_action)
+                # vocab_size - token_id gives the bin index
+                vocab_size = self.model.config.text_config.vocab_size - self.model.config.pad_to_multiple_of
+                discretized_actions = vocab_size - predicted_token_ids
+                discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.model.bin_centers.shape[0] - 1)
+                normalized_actions = self.model.bin_centers[discretized_actions]
+
+                # Unnormalize actions
+                action_norm_stats = self.model.get_action_stats(self.unnorm_key)
+                mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
+                action_high, action_low = np.array(action_norm_stats["q99"]), np.array(action_norm_stats["q01"])
+                action = np.where(
+                    mask,
+                    0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
+                    normalized_actions,
                 )
 
             # Convert to numpy and publish
