@@ -5,7 +5,11 @@ FROM ros:humble-ros-base AS base
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Add Intel RealSense repository and install system dependencies
+# Copy rosdep packages list first for better caching
+# Regenerate with: ./scripts/generate_rosdep_packages.sh
+COPY ros2/rosdep_packages.txt /tmp/rosdep_packages.txt
+
+# Add Intel RealSense repository and install all apt dependencies in one layer
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y \
@@ -27,12 +31,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     pulseaudio-utils \
     iproute2 \
     x11-apps \
-    ros-humble-moveit \
-    ros-humble-realsense2-camera \
-    ros-humble-realsense2-description \
     librealsense2 \
     librealsense2-utils \
-    librealsense2-dev
+    librealsense2-dev \
+    $(grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | tr '\n' ' ') \
+    && rm /tmp/rosdep_packages.txt
 
 # Install PyTorch (CUDA 12.4 compatible)
 RUN pip3 install --no-cache-dir \
@@ -46,16 +49,6 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
 # Copy OpenVLA/prismatic source code for model loading
 COPY vla/src/openvla /workspace/vla/src/openvla
 ENV PYTHONPATH="/workspace/vla/src/openvla:${PYTHONPATH}"
-
-# Install ROS dependencies from pre-generated list (for Docker layer caching)
-# Regenerate with: ./scripts/generate_rosdep_packages.sh
-COPY ros2/rosdep_packages.txt /tmp/rosdep_packages.txt
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && \
-    grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | \
-    xargs apt-get install -y --no-install-recommends && \
-    rm /tmp/rosdep_packages.txt
 
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src
