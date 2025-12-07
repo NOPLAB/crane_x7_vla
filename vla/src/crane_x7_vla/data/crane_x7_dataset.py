@@ -169,6 +169,8 @@ class CraneX7Dataset(IterableDataset):
         overfit_split_ratio: float = 0.0,
         split: str = "train",
         split_seed: int = 42,
+        rank: int = 0,
+        world_size: int = 1,
     ) -> None:
         """
         Lightweight wrapper around TFRecord pipeline for use with PyTorch/OpenVLA Data Loaders.
@@ -187,6 +189,8 @@ class CraneX7Dataset(IterableDataset):
                                  Steps are split deterministically within each episode.
             split: Dataset split to use ("train" or "overfit")
             split_seed: Random seed for deterministic step-level splitting
+            rank: Process rank for distributed training (0-indexed)
+            world_size: Total number of processes for distributed training
         """
         super().__init__()
         self.data_root_dir = Path(data_root_dir)
@@ -199,11 +203,15 @@ class CraneX7Dataset(IterableDataset):
         self.overfit_split_ratio = overfit_split_ratio
         self.split = split
         self.split_seed = split_seed
+        self.rank = rank
+        self.world_size = world_size
 
         # Find all TFRecord files (use all files for both splits)
         self.tfrecord_files = self._find_tfrecord_files()
 
-        print(f"Found {len(self.tfrecord_files)} TFRecord files for {split} split in {self.data_root_dir}")
+        print(f"[Rank {self.rank}/{self.world_size}] Found {len(self.tfrecord_files)} TFRecord files for {split} split in {self.data_root_dir}")
+        if self.world_size > 1:
+            print(f"[Rank {self.rank}/{self.world_size}] Distributed training enabled: data will be sharded across {self.world_size} processes")
         if overfit_split_ratio > 0:
             print(f"  Using step-level splitting with {overfit_split_ratio:.1%} for overfitting detection")
 
@@ -511,6 +519,10 @@ class CraneX7Dataset(IterableDataset):
             [str(f) for f in self.tfrecord_files],
             num_parallel_reads=tf.data.AUTOTUNE,
         )
+
+        # Shard dataset for distributed training (each GPU gets different data)
+        if self.world_size > 1:
+            dataset = dataset.shard(num_shards=self.world_size, index=self.rank)
 
         # Add step index for deterministic splitting
         dataset = dataset.enumerate()

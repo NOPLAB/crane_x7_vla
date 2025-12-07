@@ -18,6 +18,7 @@ from typing import Literal, Union, get_args, get_origin, get_type_hints
 
 from crane_x7_vla.config.base import CameraConfig, DataConfig, OverfittingConfig, TrainingConfig, UnifiedVLAConfig
 from crane_x7_vla.config.openpi_config import OpenPIConfig, OpenPISpecificConfig
+from crane_x7_vla.config.openpi_pytorch_config import OpenPIPytorchConfig, OpenPIPytorchSpecificConfig
 from crane_x7_vla.config.openvla_config import OpenVLAConfig, OpenVLASpecificConfig
 from crane_x7_vla.training.trainer import VLATrainer
 
@@ -265,6 +266,15 @@ def create_default_config(backend: str, data_root: Path, output_dir: Path, exper
             experiment_name=experiment_name,
             openpi=OpenPISpecificConfig(),
         )
+    elif backend == "openpi-pytorch":
+        config = OpenPIPytorchConfig(
+            backend="openpi-pytorch",
+            data=data_config,
+            training=training_config,
+            output_dir=output_dir,
+            experiment_name=experiment_name,
+            openpi_pytorch=OpenPIPytorchSpecificConfig(),
+        )
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
@@ -299,6 +309,8 @@ def _build_config_from_args(
             config = OpenVLAConfig.from_yaml(args.config)
         elif config.backend == "openpi":
             config = OpenPIConfig.from_yaml(args.config)
+        elif config.backend == "openpi-pytorch":
+            config = OpenPIPytorchConfig.from_yaml(args.config)
 
         # Warn if config backend doesn't match CLI subcommand
         if config.backend != backend:
@@ -621,6 +633,24 @@ Examples:
         exclude_fields=["image_size"],  # Complex types
     )
 
+    # ----- OpenPI PyTorch subcommand -----
+    openpi_pytorch_parser = train_subparsers.add_parser(
+        "openpi-pytorch",
+        help="Train with OpenPI PyTorch backend (HuggingFace Pi0)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_common_train_args(openpi_pytorch_parser)
+    all_arg_mappings["openpi-pytorch"] = _add_common_config_args(openpi_pytorch_parser)
+
+    # Add OpenPI PyTorch-specific arguments (without prefix for cleaner CLI)
+    openpi_pytorch_group = openpi_pytorch_parser.add_argument_group("OpenPI PyTorch Configuration")
+    all_arg_mappings["openpi-pytorch"]["openpi_pytorch"] = add_dataclass_args_to_parser(
+        openpi_pytorch_group,
+        OpenPIPytorchSpecificConfig,
+        prefix="",  # No prefix for backend-specific args
+        exclude_fields=["image_size", "camera_names"],  # Complex types
+    )
+
     # =====================
     # Evaluate command
     # =====================
@@ -633,7 +663,7 @@ Examples:
     # Config command
     # =====================
     config_parser = subparsers.add_parser("config", help="Generate default configuration file")
-    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi"], required=True, help="VLA backend")
+    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi", "openpi-pytorch"], required=True, help="VLA backend")
     config_parser.add_argument("--output", type=str, default="config.yaml", help="Output configuration file path")
     config_parser.add_argument("--data-root", type=str, help="Path to training data directory")
     config_parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints and logs")
@@ -706,6 +736,28 @@ Examples:
         OpenPISpecificConfig,
         prefix="",
         exclude_fields=["image_size"],
+    )
+
+    # ----- Agent OpenPI PyTorch subcommand -----
+    agent_openpi_pytorch_parser = agent_subparsers.add_parser(
+        "openpi-pytorch",
+        help="Run sweep agent with OpenPI PyTorch backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    agent_openpi_pytorch_parser.add_argument("--sweep-id", type=str, required=True, help="W&B Sweep ID")
+    agent_openpi_pytorch_parser.add_argument("--entity", type=str, help="W&B entity (team/username)")
+    agent_openpi_pytorch_parser.add_argument("--project", type=str, default="crane_x7", help="W&B project name")
+    agent_openpi_pytorch_parser.add_argument("--count", type=int, default=1, help="Number of runs to execute")
+    _add_common_train_args(agent_openpi_pytorch_parser)
+    agent_arg_mappings["openpi-pytorch"] = _add_common_config_args(agent_openpi_pytorch_parser)
+
+    # Add OpenPI PyTorch-specific arguments
+    agent_openpi_pytorch_group = agent_openpi_pytorch_parser.add_argument_group("OpenPI PyTorch Configuration")
+    agent_arg_mappings["openpi-pytorch"]["openpi_pytorch"] = add_dataclass_args_to_parser(
+        agent_openpi_pytorch_group,
+        OpenPIPytorchSpecificConfig,
+        prefix="",
+        exclude_fields=["image_size", "camera_names"],
     )
 
     args = parser.parse_args()

@@ -8,17 +8,17 @@ Provides a single interface for training different VLA backends.
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional, Union
-import logging
+from typing import Any, Dict, Optional, Union
 
+from crane_x7_vla.backends import get_backend
+from crane_x7_vla.backends.base import VLABackend
 from crane_x7_vla.config.base import UnifiedVLAConfig
 from crane_x7_vla.config.openvla_config import OpenVLAConfig
 from crane_x7_vla.config.openpi_config import OpenPIConfig
-from crane_x7_vla.backends.base import VLABackend
-from crane_x7_vla.backends.openvla import OpenVLABackend
-from crane_x7_vla.backends.openpi import OpenPIBackend
+from crane_x7_vla.config.openpi_pytorch_config import OpenPIPytorchConfig
+from crane_x7_vla.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VLATrainer:
@@ -30,7 +30,7 @@ class VLATrainer:
 
     def __init__(
         self,
-        config: Union[UnifiedVLAConfig, OpenVLAConfig, OpenPIConfig]
+        config: Union[UnifiedVLAConfig, OpenVLAConfig, OpenPIConfig, OpenPIPytorchConfig]
     ):
         """
         Initialize VLA trainer.
@@ -50,29 +50,32 @@ class VLATrainer:
 
         logger.info(f"Creating {backend_type} backend...")
 
-        if backend_type == "openvla":
-            # Convert to OpenVLA config if needed
-            if not isinstance(self.config, OpenVLAConfig):
-                # Convert UnifiedVLAConfig to OpenVLAConfig
-                openvla_config = self._convert_to_openvla_config(self.config)
-            else:
-                openvla_config = self.config
+        # Get backend class using lazy loading
+        BackendClass = get_backend(backend_type)
 
-            self.backend = OpenVLABackend(openvla_config)
+        # Convert config to backend-specific config if needed
+        if backend_type == "openvla":
+            if not isinstance(self.config, OpenVLAConfig):
+                backend_config = self._convert_to_openvla_config(self.config)
+            else:
+                backend_config = self.config
 
         elif backend_type == "openpi":
-            # Convert to OpenPI config if needed
             if not isinstance(self.config, OpenPIConfig):
-                # Convert UnifiedVLAConfig to OpenPIConfig
-                openpi_config = self._convert_to_openpi_config(self.config)
+                backend_config = self._convert_to_openpi_config(self.config)
             else:
-                openpi_config = self.config
+                backend_config = self.config
 
-            self.backend = OpenPIBackend(openpi_config)
+        elif backend_type == "openpi-pytorch":
+            if not isinstance(self.config, OpenPIPytorchConfig):
+                backend_config = self._convert_to_openpi_pytorch_config(self.config)
+            else:
+                backend_config = self.config
 
         else:
             raise ValueError(f"Unknown backend type: {backend_type}")
 
+        self.backend = BackendClass(backend_config)
         logger.info(f"Backend created: {self.backend}")
 
     def _convert_to_openvla_config(self, config: UnifiedVLAConfig) -> OpenVLAConfig:
@@ -124,6 +127,31 @@ class VLATrainer:
         )
 
         return openpi_config
+
+    def _convert_to_openpi_pytorch_config(self, config: UnifiedVLAConfig) -> OpenPIPytorchConfig:
+        """Convert UnifiedVLAConfig to OpenPIPytorchConfig."""
+        from crane_x7_vla.config.openpi_pytorch_config import OpenPIPytorchSpecificConfig
+
+        # Create OpenPI PyTorch-specific config from backend_config if available
+        openpi_pytorch_specific = OpenPIPytorchSpecificConfig()
+        if config.backend_config:
+            for key, value in config.backend_config.items():
+                if hasattr(openpi_pytorch_specific, key):
+                    setattr(openpi_pytorch_specific, key, value)
+
+        # Create OpenPIPytorchConfig
+        openpi_pytorch_config = OpenPIPytorchConfig(
+            backend="openpi-pytorch",
+            data=config.data,
+            training=config.training,
+            output_dir=config.output_dir,
+            experiment_name=config.experiment_name,
+            seed=config.seed,
+            resume_from_checkpoint=config.resume_from_checkpoint,
+            openpi_pytorch=openpi_pytorch_specific
+        )
+
+        return openpi_pytorch_config
 
     def train(self) -> Dict[str, Any]:
         """

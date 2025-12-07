@@ -11,7 +11,10 @@ must implement.
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+
 import numpy as np
+
+from crane_x7_vla.types import EvaluationResult, Observation, TrainingResult
 
 
 class VLABackend(ABC):
@@ -34,12 +37,12 @@ class VLABackend(ABC):
         self.processor = None
 
     @abstractmethod
-    def train(self) -> Dict[str, Any]:
+    def train(self) -> TrainingResult:
         """
         Execute the training loop.
 
         Returns:
-            Dictionary containing training metrics and results
+            TrainingResult containing training metrics and checkpoint paths
         """
         pass
 
@@ -48,7 +51,7 @@ class VLABackend(ABC):
         self,
         checkpoint_path: Optional[Union[str, Path]] = None,
         test_data_path: Optional[Union[str, Path]] = None
-    ) -> Dict[str, float]:
+    ) -> EvaluationResult:
         """
         Evaluate the model on test data.
 
@@ -57,21 +60,21 @@ class VLABackend(ABC):
             test_data_path: Path to test dataset (optional)
 
         Returns:
-            Dictionary containing evaluation metrics
+            EvaluationResult containing evaluation metrics
         """
         pass
 
     @abstractmethod
     def infer(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: Union[Observation, Dict[str, np.ndarray]],
         language_instruction: Optional[str] = None
     ) -> np.ndarray:
         """
         Perform inference on a single observation.
 
         Args:
-            observation: Dictionary containing:
+            observation: Observation object or dictionary containing:
                 - 'state': Robot state (joint positions, etc.)
                 - 'image': RGB image(s)
                 - 'depth': Depth image(s) (optional)

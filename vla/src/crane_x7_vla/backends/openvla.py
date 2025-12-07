@@ -8,7 +8,6 @@ This module implements OpenVLA-style fine-tuning using the CRANE-X7 dataset,
 directly based on the OpenVLA finetune.py implementation.
 """
 
-import logging
 import os
 import sys
 from collections import deque
@@ -18,7 +17,9 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from crane_x7_vla.utils.logging import get_logger
+
+logger = get_logger(__name__)
 import torch
 import torch.distributed as dist
 import tqdm
@@ -133,7 +134,7 @@ class CraneX7Trainer:
 
         This method exactly matches the finetune() function in openvla/vla-scripts/finetune.py.
         """
-        print(f"Fine-tuning OpenVLA Model `{self.cfg.vla_path}` on `{self.cfg.dataset_name}`")
+        logger.info(f"Fine-tuning OpenVLA Model `{self.cfg.vla_path}` on `{self.cfg.dataset_name}`")
 
         # [Validate] Ensure GPU Available & Set Device / Distributed Context
         assert torch.cuda.is_available(), "Fine-tuning assumes at least one GPU is available!"
@@ -228,6 +229,8 @@ class CraneX7Trainer:
             # This prevents "Expected to mark a variable ready only once" errors
             if self.cfg.gradient_checkpointing:
                 vla._set_static_graph()
+            # Synchronize all processes after DDP initialization
+            dist.barrier()
 
         # Get unwrapped model for accessing config/internals
         unwrapped_vla = vla.module if is_distributed else vla
@@ -257,6 +260,8 @@ class CraneX7Trainer:
             image_aug=self.cfg.image_aug,
             overfit_split_ratio=self.cfg.overfit_split_ratio,
             split="train",
+            rank=distributed_state.process_index,
+            world_size=distributed_state.num_processes,
         )
 
         # Create overfitting detection dataset if overfit_split_ratio > 0
@@ -274,6 +279,8 @@ class CraneX7Trainer:
                 overfit_split_ratio=self.cfg.overfit_split_ratio,
                 split="overfit",
                 train=False,  # Don't repeat overfitting check data
+                rank=distributed_state.process_index,
+                world_size=distributed_state.num_processes,
             )
 
         # [Important] Save Dataset Statistics =>> used to de-normalize actions for inference!
@@ -424,7 +431,7 @@ class CraneX7Trainer:
                                 },
                                 step=gradient_step_idx,
                             )
-                            print(
+                            logger.info(
                                 f"[Step {gradient_step_idx}] Overfit Loss: {overfit_metrics['overfit_loss']:.4f}, "
                                 f"Overfit Accuracy: {overfit_metrics['overfit_action_accuracy']:.4f}, "
                                 f"Overfit L1: {overfit_metrics['overfit_l1_loss']:.4f}"
@@ -436,7 +443,7 @@ class CraneX7Trainer:
                 # Save Model Checkpoint
                 if gradient_step_idx > 0 and gradient_step_idx % self.cfg.save_steps == 0:
                     if distributed_state.is_main_process:
-                        print(f"Saving Model Checkpoint for Step {gradient_step_idx}")
+                        logger.info(f"Saving Model Checkpoint for Step {gradient_step_idx}")
 
                         # Create checkpoint directory with step number
                         checkpoint_dir = run_dir / f"checkpoint-{gradient_step_idx}"
@@ -453,7 +460,7 @@ class CraneX7Trainer:
                             lora_save_dir = checkpoint_dir / "lora_adapters"
                             os.makedirs(lora_save_dir, exist_ok=True)
                             unwrapped_vla.save_pretrained(lora_save_dir)
-                            print(f"Saved LoRA adapters at: {lora_save_dir}")
+                            logger.info(f"Saved LoRA adapters at: {lora_save_dir}")
 
                             if not self.cfg.skip_merge_on_save:
                                 # Merge LoRA weights into model backbone for faster inference
@@ -461,7 +468,7 @@ class CraneX7Trainer:
                                 #       Consider setting skip_merge_on_save=True and merging post-training
                                 import gc
 
-                                print("Merging LoRA weights (this may take several minutes)...")
+                                logger.info("Merging LoRA weights (this may take several minutes)...")
 
                                 # Load base model on CPU and merge with adapters
                                 base_vla = AutoModelForVision2Seq.from_pretrained(
@@ -477,19 +484,19 @@ class CraneX7Trainer:
 
                                 # Save merged model to checkpoint directory
                                 merged_vla.save_pretrained(checkpoint_dir)
-                                print(f"Saved merged model at: {checkpoint_dir}")
+                                logger.info(f"Saved merged model at: {checkpoint_dir}")
 
                                 # Clean up
                                 del base_vla, merged_vla
                                 gc.collect()
                                 torch.cuda.empty_cache()
                             else:
-                                print(f"Skipping LoRA merge (skip_merge_on_save=True). Run merge_lora.py post-training.")
+                                logger.info("Skipping LoRA merge (skip_merge_on_save=True). Run merge_lora.py post-training.")
                         else:
                             # Full model (no LoRA) - save directly
                             unwrapped_vla.save_pretrained(checkpoint_dir)
 
-                        print(f"Checkpoint saved at: {checkpoint_dir}")
+                        logger.info(f"Checkpoint saved at: {checkpoint_dir}")
 
                     # Synchronize all processes after checkpoint saving
                     # This barrier is lightweight since only file I/O is performed (no heavy merge)
@@ -498,7 +505,7 @@ class CraneX7Trainer:
 
                 # Stop training when max_steps is reached
                 if gradient_step_idx == self.cfg.max_steps:
-                    print(f"Max step {self.cfg.max_steps} reached! Stopping training...")
+                    logger.info(f"Max step {self.cfg.max_steps} reached! Stopping training...")
                     break
 
         # Update tracking variables
@@ -781,7 +788,7 @@ class OpenVLABackend(VLABackend):
         if self.processor is not None:
             self.processor.save_pretrained(path)
 
-        print(f"Checkpoint saved to {path}")
+        logger.info(f"Checkpoint saved to {path}")
 
     def load_checkpoint(self, path: Union[str, Path]) -> None:
         """
@@ -795,7 +802,7 @@ class OpenVLABackend(VLABackend):
         if not path.exists():
             raise ValueError(f"Checkpoint path does not exist: {path}")
 
-        print(f"Loading model from {path}")
+        logger.info(f"Loading model from {path}")
 
         # Load processor
         self.processor = AutoProcessor.from_pretrained(
@@ -824,7 +831,7 @@ class OpenVLABackend(VLABackend):
         self.model = self.model.to(device)
         self.model.eval()
 
-        print(f"Model loaded successfully")
+        logger.info("Model loaded successfully")
 
     @property
     def action_dim(self) -> int:
