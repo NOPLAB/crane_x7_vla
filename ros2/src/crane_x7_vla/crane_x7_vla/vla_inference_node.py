@@ -236,6 +236,13 @@ class VLAInferenceNode(Node):
             # Convert ROS Image to numpy array
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
             self.latest_image = cv_image
+            # Debug: log image info periodically
+            self.get_logger().debug(
+                f'Image received: shape={cv_image.shape}, '
+                f'dtype={cv_image.dtype}, '
+                f'mean={cv_image.mean():.2f}',
+                throttle_duration_sec=2.0
+            )
         except Exception as e:
             self.get_logger().error(f'Failed to convert image: {e}')
 
@@ -262,6 +269,14 @@ class VLAInferenceNode(Node):
             image = PILImage.fromarray(self.latest_image)
             image = image.convert("RGB")
 
+            # Debug: log image hash to detect if image is changing
+            image_hash = hash(self.latest_image.tobytes())
+            self.get_logger().info(
+                f'Inference input: image_size={image.size}, '
+                f'image_hash={image_hash % 10000:04d}, '
+                f'mean_pixel={self.latest_image.mean():.2f}'
+            )
+
             # Build prompt based on model version
             if "openvla-v01" in self.model_base_name or "v01" in self.model_base_name:
                 # OpenVLA v0.1 format (VicunaV15ChatPromptBuilder)
@@ -285,6 +300,15 @@ class VLAInferenceNode(Node):
             input_ids = inputs["input_ids"]
             attention_mask = inputs["attention_mask"]
             pixel_values = inputs["pixel_values"]
+
+            # Debug: log pixel_values statistics
+            if isinstance(pixel_values, torch.Tensor):
+                pv_mean = pixel_values.float().mean().item()
+                pv_std = pixel_values.float().std().item()
+                self.get_logger().info(
+                    f'pixel_values: shape={list(pixel_values.shape)}, '
+                    f'mean={pv_mean:.4f}, std={pv_std:.4f}'
+                )
 
             if isinstance(input_ids, torch.Tensor):
                 input_ids = input_ids.to(self.device)

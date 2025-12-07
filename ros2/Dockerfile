@@ -47,21 +47,21 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
 COPY vla/src/openvla /workspace/vla/src/openvla
 ENV PYTHONPATH="/workspace/vla/src/openvla:${PYTHONPATH}"
 
-# Create ROS workspace
-WORKDIR /workspace/ros2/src
-
-# Copy ROS source packages
-COPY ros2/src /workspace/ros2/src
-
-# Install ROS dependencies (extract rosdep packages and install via apt directly)
-WORKDIR /workspace/ros2
+# Install ROS dependencies from pre-generated list (for Docker layer caching)
+# Regenerate with: ./scripts/generate_rosdep_packages.sh
+COPY ros2/rosdep_packages.txt /tmp/rosdep_packages.txt
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    apt-get install -y --no-install-recommends \
-    $(rosdep keys --from-paths src --ignore-src 2>/dev/null | \
-      xargs -I {} sh -c 'rosdep resolve {} 2>/dev/null || true' | \
-      grep -v '^#' | sort -u)
+    grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | \
+    xargs apt-get install -y --no-install-recommends && \
+    rm /tmp/rosdep_packages.txt
+
+# Create ROS workspace and copy source packages
+WORKDIR /workspace/ros2/src
+COPY ros2/src /workspace/ros2/src
+
+WORKDIR /workspace/ros2
 
 # Build the workspace
 RUN . /opt/ros/humble/setup.sh && \

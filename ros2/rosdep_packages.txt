@@ -1,0 +1,26 @@
+# Auto-generated rosdep packages list for Docker caching
+# Regenerate with: docker run --rm -v ./ros2:/workspace/ros2 ros:humble-ros-base bash -c "..."
+# Or run inside ROS 2 container: ./scripts/generate_rosdep_packages.sh
+
+libopencv-dev
+python3-pytest
+ros-humble-angles
+ros-humble-control-msgs
+ros-humble-controller-manager
+ros-humble-cv-bridge
+ros-humble-example-interfaces
+ros-humble-gripper-controllers
+ros-humble-hardware-interface
+ros-humble-ign-ros2-control
+ros-humble-image-geometry
+ros-humble-joint-state-publisher-gui
+ros-humble-moveit
+ros-humble-moveit-ros-planning-interface
+ros-humble-pcl-ros
+ros-humble-realsense2-camera
+ros-humble-realsense2-description
+ros-humble-ros-gz
+ros-humble-ros2-controllers
+ros-humble-rt-manipulators-cpp
+ros-humble-rviz2
+ros-humble-xacro
