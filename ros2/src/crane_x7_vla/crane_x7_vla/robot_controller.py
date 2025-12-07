@@ -213,6 +213,10 @@ class RobotController(Node):
         else:
             self.get_logger().error(f'Arm action failed with error code: {result.error_code}')
 
+        # Execute next action if available (continuous execution)
+        if self.auto_execute and self.latest_action is not None:
+            self._execute_action(self.latest_action)
+
     def _gripper_result_callback(self, future) -> None:
         """Callback when gripper execution is complete."""
         result = future.result().result
