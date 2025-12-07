@@ -215,6 +215,7 @@ class RobotController(Node):
 
         # Execute next action if available (continuous execution)
         if self.auto_execute and self.latest_action is not None:
+            self.get_logger().info('Arm completed, executing next action...')
             self._execute_action(self.latest_action)
 
     def _gripper_result_callback(self, future) -> None:

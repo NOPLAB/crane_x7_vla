@@ -317,7 +317,7 @@ class VLAInferenceNode(Node):
             action_msg.data = action.tolist()
             self.action_pub.publish(action_msg)
 
-            self.get_logger().debug(f'Published action: {action}')
+            self.get_logger().info(f'Published action: {action}')
 
         except Exception as e:
             self.get_logger().error(f'Inference failed: {e}')
