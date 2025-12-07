@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2025 nop
+# SPDX-License-Identifier: MIT
+
+# ACT (Action Chunking with Transformers) Policy Configuration for CRANE-X7
+# Reference: https://github.com/huggingface/lerobot
+
+defaults:
+  - _self_
+  - policy: act
+
+# Environment
+env:
+  name: crane_x7
+  state_dim: 8        # 7 arm joints + 1 gripper
+  action_dim: 8
+  fps: 30
+
+# Policy configuration
+policy:
+  name: act
+
+  # Transformer architecture
+  dim_model: 512
+  n_heads: 8
+  n_encoder_layers: 4
+  n_decoder_layers: 4
+  feedforward_dim: 2048
+  dropout: 0.1
+
+  # Action chunking
+  chunk_size: 50        # Number of actions to predict at once
+  n_action_steps: 50    # How many steps to execute per chunk
+
+  # Input configuration
+  input_shapes:
+    observation.state: [8]
+    observation.image: [480, 640, 3]
+
+  # Vision backbone
+  vision_backbone: resnet18
+  pretrained_backbone: true
+  freeze_backbone: false
+
+  # Normalization
+  normalize_input: true
+  normalize_output: true
+
+  # Action space
+  action_space: continuous
+
+# Training configuration
+training:
+  # Optimizer
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  lr_scheduler: cosine
+  warmup_steps: 1000
+
+  # Batch and steps
+  batch_size: 64
+  offline_steps: 100000
+  online_steps: 0
+
+  # Gradient clipping
+  grad_clip_norm: 10.0
+
+  # Mixed precision
+  use_amp: true
+  amp_dtype: bfloat16
+
+  # Checkpointing
+  save_freq: 10000
+  eval_freq: 10000
+
+  # Data loading
+  num_workers: 4
+  prefetch_factor: 2
+
+# Evaluation
+eval:
+  batch_size: 32
+  use_async_envs: false
+
+# Logging
+wandb:
+  enable: true
+  project: crane_x7_lerobot
+  entity: null
+  name: act_crane_x7
+  mode: online
+
+# Output
+hydra:
+  run:
+    dir: outputs/act_${env.name}
+  sweep:
+    dir: outputs/act_sweep
+    subdir: ${hydra.job.num}

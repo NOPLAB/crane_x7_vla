@@ -1,0 +1,199 @@
+# SPDX-FileCopyrightText: 2025 nop
+# SPDX-License-Identifier: MIT
+
+# ============================================================================
+# LeRobot CRANE-X7 Docker Compose
+# ============================================================================
+#
+# Profiles:
+#   - calibrate: Calibrate robot/teleoperator
+#   - teleop: Teleoperation + Data collection
+#   - train: Train ACT policy
+#   - train-diffusion: Train Diffusion policy
+#   - inference: Run trained policy on robot
+#   - dev: Development shell
+#
+# Usage:
+#   docker compose --profile teleop up
+#   docker compose --profile train up
+#   docker compose --profile inference up
+#
+
+x-build-base: &build-base
+  context: .
+  dockerfile: Dockerfile
+  target: dev
+  args:
+    USER_ID: ${USER_ID:-1000}
+    GROUP_ID: ${GROUP_ID:-1000}
+    USERNAME: ${USERNAME:-lerobot}
+
+x-base: &base
+  env_file: .env
+  build:
+    <<: *build-base
+  environment:
+    DISPLAY: ${DISPLAY:-:0}
+    HF_TOKEN: ${HF_TOKEN:-}
+    HF_HOME: /home/lerobot/.cache/huggingface
+    WANDB_API_KEY: ${WANDB_API_KEY:-}
+
+x-volumes: &volumes
+  volumes:
+    # X11 display
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # WSL support
+    - ${WSLG_PATH:-/dev/null}:/mnt/wslg:ro
+    # Data directories
+    - ../data/lerobot_datasets:/workspace/data:rw
+    - ./calibration:/workspace/lerobot/calibration:rw
+    - ./outputs:/workspace/outputs:rw
+    # Hugging Face cache
+    - ~/.cache/huggingface:/home/lerobot/.cache/huggingface:rw
+    # Source code (for development)
+    - ./lerobot_robot_crane_x7:/workspace/lerobot/lerobot_robot_crane_x7:rw
+    - ./lerobot_teleoperator_crane_x7:/workspace/lerobot/lerobot_teleoperator_crane_x7:rw
+    - ./configs:/workspace/lerobot/configs:rw
+    - ./scripts:/workspace/lerobot/scripts:rw
+
+x-real-devices: &real-devices
+  privileged: true
+  group_add:
+    - dialout
+    - video
+
+x-gpu-deploy: &gpu-deploy
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+services:
+  # --------------------------------------------------------------------------
+  # Calibration
+  # --------------------------------------------------------------------------
+  calibrate:
+    <<: [*base, *volumes]
+    profiles: [calibrate]
+    <<: *real-devices
+    devices:
+      - "${USB_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB0"
+    command: >
+      python /workspace/lerobot/scripts/calibrate.py
+        --port /dev/ttyUSB0
+        --type ${CALIBRATE_TYPE:-robot}
+    stdin_open: true
+    tty: true
+
+  # --------------------------------------------------------------------------
+  # Teleoperation + Data Collection
+  # --------------------------------------------------------------------------
+  teleop-record:
+    <<: [*base, *volumes]
+    profiles: [teleop]
+    <<: *real-devices
+    devices:
+      - "${USB_DEVICE_LEADER:-/dev/ttyUSB0}:/dev/ttyUSB0"
+      - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB1"
+      - "/dev/snd:/dev/snd"
+    command: >
+      lerobot-record
+        --robot.type=crane_x7
+        --robot.port=/dev/ttyUSB1
+        --robot.cameras='{"cam_wrist": {"type": "realsense", "fps": 30, "width": 640, "height": 480, "use_depth": true}}'
+        --teleop.type=crane_x7_teleop
+        --teleop.port=/dev/ttyUSB0
+        --display_data=${DISPLAY_DATA:-true}
+        --dataset.repo_id=${HF_USER:-local}/${DATASET_NAME:-crane_x7_dataset}
+        --dataset.num_episodes=${NUM_EPISODES:-10}
+        --dataset.single_task="${TASK_INSTRUCTION:-pick up the object}"
+        --control.fps=${CONTROL_FPS:-30}
+        --control.push_to_hub=${PUSH_TO_HUB:-false}
+    stdin_open: true
+    tty: true
+
+  # --------------------------------------------------------------------------
+  # Training - ACT Policy
+  # --------------------------------------------------------------------------
+  train-act:
+    <<: [*base, *volumes]
+    profiles: [train]
+    <<: *gpu-deploy
+    command: >
+      python -m lerobot.scripts.train
+        policy=act
+        env=crane_x7
+        dataset_repo_id=${HF_USER:-local}/${DATASET_NAME:-crane_x7_dataset}
+        training.num_workers=4
+        training.batch_size=${BATCH_SIZE:-64}
+        training.lr=${LEARNING_RATE:-1e-4}
+        training.offline_steps=${TRAIN_STEPS:-100000}
+        training.save_freq=${SAVE_FREQ:-10000}
+        training.eval_freq=${EVAL_FREQ:-10000}
+        wandb.enable=${WANDB_ENABLE:-true}
+        wandb.project=crane_x7_lerobot
+        hydra.run.dir=/workspace/outputs/act_${DATASET_NAME:-crane_x7_dataset}
+
+  # --------------------------------------------------------------------------
+  # Training - Diffusion Policy
+  # --------------------------------------------------------------------------
+  train-diffusion:
+    <<: [*base, *volumes]
+    profiles: [train-diffusion]
+    <<: *gpu-deploy
+    command: >
+      python -m lerobot.scripts.train
+        policy=diffusion
+        env=crane_x7
+        dataset_repo_id=${HF_USER:-local}/${DATASET_NAME:-crane_x7_dataset}
+        training.num_workers=4
+        training.batch_size=${BATCH_SIZE:-64}
+        training.lr=${LEARNING_RATE:-1e-4}
+        training.offline_steps=${TRAIN_STEPS:-200000}
+        training.save_freq=${SAVE_FREQ:-25000}
+        training.eval_freq=${EVAL_FREQ:-25000}
+        wandb.enable=${WANDB_ENABLE:-true}
+        wandb.project=crane_x7_lerobot
+        hydra.run.dir=/workspace/outputs/diffusion_${DATASET_NAME:-crane_x7_dataset}
+
+  # --------------------------------------------------------------------------
+  # Inference
+  # --------------------------------------------------------------------------
+  inference:
+    <<: [*base, *volumes]
+    profiles: [inference]
+    <<: [*real-devices, *gpu-deploy]
+    devices:
+      - "${USB_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB0"
+    command: >
+      python /workspace/lerobot/scripts/inference.py
+        --robot.type=crane_x7
+        --robot.port=/dev/ttyUSB0
+        --policy.path=${POLICY_PATH:-/workspace/outputs/act_crane_x7_dataset/checkpoints/last/pretrained_model}
+        --task="${TASK_INSTRUCTION:-pick up the object}"
+        --max-steps=${MAX_STEPS:-1000}
+        --control-freq=${CONTROL_FPS:-30}
+    stdin_open: true
+    tty: true
+
+  # --------------------------------------------------------------------------
+  # Development Shell
+  # --------------------------------------------------------------------------
+  dev:
+    <<: [*base, *volumes]
+    profiles: [dev]
+    <<: *real-devices
+    devices:
+      - "${USB_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB0"
+      - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB1"
+    <<: *gpu-deploy
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+networks:
+  default:
+    name: crane_x7_lerobot

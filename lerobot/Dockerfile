@@ -1,0 +1,115 @@
+# SPDX-FileCopyrightText: 2025 nop
+# SPDX-License-Identifier: MIT
+
+# syntax=docker/dockerfile:1
+# LeRobot CRANE-X7 Environment
+# Supports: Teleoperation, Data Collection, Training (ACT/Diffusion), Inference
+
+ARG CUDA_VERSION=12.4.1
+ARG PYTHON_VERSION=3.11
+
+# ============================================================================
+# Base Stage
+# ============================================================================
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
+
+ARG PYTHON_VERSION
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Basic tools
+    git wget curl vim \
+    ca-certificates sudo \
+    software-properties-common \
+    build-essential cmake pkg-config \
+    # Python
+    python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv python3-pip \
+    # OpenCV dependencies
+    libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1-mesa-glx \
+    # USB/Serial communication
+    usbutils udev libusb-1.0-0-dev \
+    # V4L2 (cameras)
+    v4l-utils libv4l-dev \
+    # Audio (for voice notifications)
+    espeak-ng alsa-utils pulseaudio-utils \
+    # X11 for visualization
+    libxcb-xinerama0 libxcb-cursor0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Intel RealSense SDK
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null && \
+    echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    librealsense2 librealsense2-utils librealsense2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python configuration
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
+    python3 -m pip install --upgrade pip setuptools wheel
+
+WORKDIR /workspace
+
+# ============================================================================
+# Dependencies Stage
+# ============================================================================
+FROM base AS deps
+
+# Install PyTorch with CUDA support
+RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+
+# Install LeRobot with Dynamixel and RealSense support
+RUN pip3 install "lerobot[dynamixel,realsense]"
+
+# Additional dependencies
+COPY requirements.txt /workspace/
+RUN pip3 install -r requirements.txt
+
+# ============================================================================
+# Development Stage
+# ============================================================================
+FROM deps AS dev
+
+# Development tools
+RUN pip3 install \
+    jupyter \
+    tensorboard \
+    pytest pytest-cov \
+    ruff mypy \
+    ipython
+
+# Install CRANE-X7 packages in editable mode
+COPY pyproject.toml /workspace/lerobot/
+COPY lerobot_robot_crane_x7/ /workspace/lerobot/lerobot_robot_crane_x7/
+COPY lerobot_teleoperator_crane_x7/ /workspace/lerobot/lerobot_teleoperator_crane_x7/
+
+RUN pip3 install -e /workspace/lerobot
+
+# Copy configs and scripts
+COPY configs/ /workspace/lerobot/configs/
+COPY scripts/ /workspace/lerobot/scripts/
+
+# udev rules for Dynamixel USB access
+COPY 99-dynamixel.rules /etc/udev/rules.d/ 2>/dev/null || true
+
+# Create user with matching host UID/GID
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USERNAME=lerobot
+
+RUN groupadd -g ${GROUP_ID} ${USERNAME} 2>/dev/null || true && \
+    useradd -l -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USERNAME} && \
+    usermod -aG sudo,dialout,video ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R ${USER_ID}:${GROUP_ID} /workspace
+
+USER ${USERNAME}
+
+ENV PYTHONPATH="/workspace/lerobot:${PYTHONPATH}"
+
+CMD ["/bin/bash"]

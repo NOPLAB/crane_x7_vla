@@ -1,0 +1,113 @@
+# SPDX-FileCopyrightText: 2025 nop
+# SPDX-License-Identifier: MIT
+
+# Diffusion Policy Configuration for CRANE-X7
+# Reference: https://github.com/huggingface/lerobot
+
+defaults:
+  - _self_
+  - policy: diffusion
+
+# Environment
+env:
+  name: crane_x7
+  state_dim: 8        # 7 arm joints + 1 gripper
+  action_dim: 8
+  fps: 30
+
+# Policy configuration
+policy:
+  name: diffusion
+
+  # Diffusion settings
+  num_train_timesteps: 100
+  num_inference_steps: 10
+  beta_schedule: squaredcos_cap_v2
+  beta_start: 0.0001
+  beta_end: 0.02
+  clip_sample: true
+  prediction_type: epsilon
+
+  # U-Net architecture
+  down_dims: [256, 512, 1024]
+  kernel_size: 5
+  n_groups: 8
+  diffusion_step_embed_dim: 256
+  cond_predict_scale: true
+
+  # Observation encoder
+  obs_encoder:
+    type: resnet18
+    pretrained: true
+    output_dim: 512
+    freeze: false
+
+  # Input configuration
+  input_shapes:
+    observation.state: [8]
+    observation.image: [480, 640, 3]
+
+  # Temporal settings
+  horizon: 16           # Prediction horizon
+  n_obs_steps: 2        # Number of observation history steps
+  n_action_steps: 8     # Number of actions to execute
+
+  # Normalization
+  normalize_input: true
+  normalize_output: true
+
+  # Action space
+  action_space: continuous
+
+# Training configuration
+training:
+  # Optimizer
+  lr: 1.0e-4
+  weight_decay: 1.0e-6
+  lr_scheduler: cosine
+  warmup_steps: 500
+
+  # Batch and steps
+  batch_size: 64
+  offline_steps: 200000
+  online_steps: 0
+
+  # EMA (Exponential Moving Average)
+  use_ema: true
+  ema_decay: 0.9999
+
+  # Gradient clipping
+  grad_clip_norm: 1.0
+
+  # Mixed precision
+  use_amp: true
+  amp_dtype: bfloat16
+
+  # Checkpointing
+  save_freq: 25000
+  eval_freq: 25000
+
+  # Data loading
+  num_workers: 4
+  prefetch_factor: 2
+
+# Evaluation
+eval:
+  batch_size: 32
+  use_async_envs: false
+
+# Logging
+wandb:
+  enable: true
+  project: crane_x7_lerobot
+  entity: null
+  name: diffusion_crane_x7
+  mode: online
+
+# Output
+hydra:
+  run:
+    dir: outputs/diffusion_${env.name}
+  sweep:
+    dir: outputs/diffusion_sweep
+    subdir: ${hydra.job.num}
