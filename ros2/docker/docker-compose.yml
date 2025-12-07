@@ -4,21 +4,21 @@
 
 # Build configuration
 x-build-base: &build-base
-  context: ..
-  dockerfile: ros2/Dockerfile
+  context: ../..
+  dockerfile: ros2/docker/Dockerfile
 
 # Volume configurations
 x-x11-volumes: &x11-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
-  - ./src:/workspace/ros2/src:ro
+  - ../src:/workspace/ros2/src:ro
 
 x-vla-volumes: &vla-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
-  - ../vla/outputs:/workspace/vla/outputs:ro
-  - ../data:/workspace/data:ro
-  - ./src:/workspace/ros2/src:ro
+  - ../../vla/outputs:/workspace/vla/outputs:ro
+  - ../../data:/workspace/data:ro
+  - ../src:/workspace/ros2/src:ro
 
 # Environment configurations
 x-base-env: &base-env
@@ -44,7 +44,7 @@ x-real-groups: &real-groups
 
 # Base service configuration
 x-base: &base
-  env_file: .env
+  env_file: ../.env
   build:
     <<: *build-base
     target: base

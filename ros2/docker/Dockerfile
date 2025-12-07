@@ -61,7 +61,7 @@ RUN . /opt/ros/humble/setup.sh && \
     colcon build --symlink-install
 
 # Setup entrypoint
-COPY ros2/scripts/docker/entrypoint.sh /entrypoint.sh
+COPY ros2/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create user matching host (UID/GID passed at build time)
