@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 
-from crane_x7_vla.types import OverfitMetrics
+from crane_x7_vla.data_types import OverfitMetrics
 
 
 def compute_overfit_metrics(

@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
-from crane_x7_vla.types import EvaluationResult, Observation, TrainingResult
+from crane_x7_vla.data_types import EvaluationResult, Observation, TrainingResult
 
 
 class VLABackend(ABC):

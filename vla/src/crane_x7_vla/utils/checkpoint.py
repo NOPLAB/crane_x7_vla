@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from crane_x7_vla.types import CheckpointInfo
+from crane_x7_vla.data_types import CheckpointInfo
 from crane_x7_vla.utils.logging import get_logger
 
 logger = get_logger(__name__)

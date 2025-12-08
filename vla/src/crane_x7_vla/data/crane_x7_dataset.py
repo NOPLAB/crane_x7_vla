@@ -157,6 +157,9 @@ class CraneX7Dataset(IterableDataset):
         "dataset_name": tf.io.FixedLenFeature([], tf.string),
     }
 
+    # Optional image keys for multi-camera support (RLDS naming convention)
+    OPTIONAL_IMAGE_KEYS = ["observation/image_secondary", "observation/image_wrist"]
+
     def __init__(
         self,
         data_root_dir: Path,
@@ -388,6 +391,18 @@ class CraneX7Dataset(IterableDataset):
             parsed["dataset_name"] = tf.constant(b"crane_x7")
             parsed["observation/timestep"] = tf.constant([0], dtype=tf.int64)
 
+        # Try to parse optional image keys (multi-camera support)
+        for image_key in self.OPTIONAL_IMAGE_KEYS:
+            try:
+                optional_parsed = tf.io.parse_single_example(
+                    example_proto,
+                    {image_key: tf.io.FixedLenFeature([], tf.string)}
+                )
+                parsed[image_key] = optional_parsed[image_key]
+            except tf.errors.InvalidArgumentError:
+                # Optional key not present, skip silently
+                pass
+
         return parsed
 
     def _normalize_action(self, action: tf.Tensor) -> tf.Tensor:
@@ -456,22 +471,34 @@ class CraneX7Dataset(IterableDataset):
 
     def _process_example(self, example):
         """Process a single example: decode image, normalize action, apply augmentation."""
-        # Decode and resize image
-        image = self._decode_and_resize_image(example["observation/image_primary"])
+        # Decode and resize primary image
+        image_primary = self._decode_and_resize_image(example["observation/image_primary"])
 
         # Apply image augmentation if enabled
         if self.image_aug:
-            image = self._apply_image_augmentation(image)
+            image_primary = self._apply_image_augmentation(image_primary)
 
         # Normalize action using BOUNDS_Q99
         action = self._normalize_action(example["action"])
 
         # Restructure to RLDS batch format (with window_size=1, so add batch dim)
+        observation = {
+            "image_primary": tf.expand_dims(image_primary, 0),  # [1, H, W, 3]
+            "proprio": tf.expand_dims(example["observation/proprio"], 0),  # [1, 8]
+        }
+
+        # Process optional images (multi-camera support)
+        for image_key in self.OPTIONAL_IMAGE_KEYS:
+            if image_key in example:
+                image = self._decode_and_resize_image(example[image_key])
+                if self.image_aug:
+                    image = self._apply_image_augmentation(image)
+                # Extract key name without "observation/" prefix
+                key_name = image_key.replace("observation/", "")
+                observation[key_name] = tf.expand_dims(image, 0)  # [1, H, W, 3]
+
         return {
-            "observation": {
-                "image_primary": tf.expand_dims(image, 0),  # [1, H, W, 3]
-                "proprio": tf.expand_dims(example["observation/proprio"], 0),  # [1, 8]
-            },
+            "observation": observation,
             "task": {
                 "language_instruction": example["task/language_instruction"],
             },

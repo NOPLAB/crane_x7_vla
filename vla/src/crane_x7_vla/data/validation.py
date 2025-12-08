@@ -6,7 +6,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from crane_x7_vla.types import DatasetInfo
+from crane_x7_vla.data_types import DatasetInfo
 from crane_x7_vla.utils.logging import get_logger
 
 logger = get_logger(__name__)
