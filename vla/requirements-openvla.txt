@@ -10,7 +10,7 @@
 # Transformers stack (pinned to tested versions)
 transformers==4.57.3
 tokenizers==0.22.1
-timm==0.9.10
+timm==0.9.16
 sentencepiece==0.2.1
 
 # Training and fine-tuning
