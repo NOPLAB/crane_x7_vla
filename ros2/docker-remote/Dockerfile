@@ -120,8 +120,8 @@ RUN . /opt/ros/humble/setup.sh && \
 # ----------------------------------------------------------------------------
 # Copy configuration and entrypoint
 # ----------------------------------------------------------------------------
-COPY ros2/docker/cyclonedds.xml /etc/cyclonedds.xml
-COPY ros2/docker/entrypoint-vla-inference.sh /entrypoint.sh
+COPY ros2/docker-remote/cyclonedds.xml /etc/cyclonedds.xml
+COPY ros2/docker-remote/entrypoint-vla-inference.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create directories for model checkpoints and Tailscale state
