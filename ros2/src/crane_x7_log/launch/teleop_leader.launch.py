@@ -16,18 +16,48 @@ CRANE-X7テレオペ・リーダーモードの統合launchファイル。
   - output_dir: ログデータの保存先
   - config_file: ロガー設定ファイルのパス
   - camera_serial (default: ''): プライマリカメラのシリアル番号（空の場合は自動選択）
-  - camera2_serial (default: ''): セカンダリカメラのシリアル番号（空の場合は無効）
+  - camera2_serial (default: ''): セカンダリカメラのシリアル番号（空の場合は1カメラモード）
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, AndSubstitution, NotEqualsSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def _create_data_logger(context, *args, **kwargs):
+    """Create data logger node with dynamic camera configuration."""
+    camera2_serial = LaunchConfiguration('camera2_serial').perform(context)
+    use_dual_camera = camera2_serial.strip() != ''
+
+    # Determine camera_names based on camera2_serial
+    if use_dual_camera:
+        camera_names = ['primary', 'secondary']
+    else:
+        camera_names = ['primary']
+
+    return [
+        Node(
+            package='crane_x7_log',
+            executable='data_logger',
+            name='data_logger',
+            output='screen',
+            condition=IfCondition(LaunchConfiguration('use_logger')),
+            parameters=[
+                LaunchConfiguration('config_file'),
+                {
+                    'output_dir': LaunchConfiguration('output_dir'),
+                    'joint_states_topic': '/joint_states',
+                    'camera_names': camera_names,
+                }
+            ]
+        )
+    ]
 
 
 def generate_launch_description():
@@ -146,21 +176,8 @@ def generate_launch_description():
         }.items()
     )
 
-    # Data logger node (conditional)
-    data_logger = Node(
-        package='crane_x7_log',
-        executable='data_logger',
-        name='data_logger',
-        output='screen',
-        condition=IfCondition(LaunchConfiguration('use_logger')),
-        parameters=[
-            LaunchConfiguration('config_file'),
-            {
-                'output_dir': LaunchConfiguration('output_dir'),
-                'joint_states_topic': '/joint_states'
-            }
-        ]
-    )
+    # Data logger node (conditional) - uses OpaqueFunction for dynamic camera config
+    data_logger = OpaqueFunction(function=_create_data_logger)
 
     # Camera viewer (conditional)
     rviz_config_path = PathJoinSubstitution([

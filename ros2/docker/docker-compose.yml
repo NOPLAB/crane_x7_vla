@@ -120,12 +120,18 @@ services:
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: >
-      ros2 launch crane_x7_log teleop_leader.launch.py
-        use_d435:=${USE_D435:-false}
-        use_viewer:=false
-        camera_serial:='${CAMERA_SERIAL:-}'
-        camera2_serial:='${CAMERA2_SERIAL:-}'
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CAMERA_ARGS="camera_serial:='${CAMERA_SERIAL:-}'"
+        if [ -n "${CAMERA2_SERIAL:-}" ]; then
+          CAMERA_ARGS="$$CAMERA_ARGS camera2_serial:='${CAMERA2_SERIAL}'"
+        fi
+        ros2 launch crane_x7_log teleop_leader.launch.py \
+          use_d435:=${USE_D435:-false} \
+          use_viewer:=false \
+          $$CAMERA_ARGS
 
   teleop-follower:
     <<: *base
@@ -148,12 +154,18 @@ services:
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: >
-      ros2 launch crane_x7_teleop teleop_follower.launch.py
-        use_d435:=true
-        use_viewer:=true
-        camera_serial:='${CAMERA_SERIAL:-}'
-        camera2_serial:='${CAMERA2_SERIAL:-}'
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CAMERA_ARGS="camera_serial:='${CAMERA_SERIAL:-}'"
+        if [ -n "${CAMERA2_SERIAL:-}" ]; then
+          CAMERA_ARGS="$$CAMERA_ARGS camera2_serial:='${CAMERA2_SERIAL}'"
+        fi
+        ros2 launch crane_x7_teleop teleop_follower.launch.py \
+          use_d435:=true \
+          use_viewer:=true \
+          $$CAMERA_ARGS
 
   # --------------------------------------------------------------------------
   # Gemini Services
