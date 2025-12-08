@@ -113,28 +113,52 @@ class VLAInferenceNode(Node):
         self.get_logger().info(f'Task: {self.task_instruction}')
         self.get_logger().info(f'Inference rate: {self.inference_rate} Hz')
 
+    def _is_huggingface_hub_id(self, path: str) -> bool:
+        """Check if path looks like a HuggingFace Hub model ID (e.g., 'username/model-name')."""
+        # HF Hub IDs have format: org/model or user/model
+        # Local paths start with / or ./ or contain backslashes on Windows
+        if not path:
+            return False
+        if path.startswith('/') or path.startswith('./') or path.startswith('..'):
+            return False
+        if '\\' in path:  # Windows path
+            return False
+        # Check if it looks like a HF Hub ID (contains exactly one /)
+        parts = path.split('/')
+        return len(parts) == 2 and all(p for p in parts)
+
     def _load_model(self) -> None:
         """Load VLA model and processor."""
         if not self.model_path:
             self.get_logger().error(
                 'Model path not specified! '
                 'Set VLA_MODEL_PATH in ros2/.env file. '
-                'Example: VLA_MODEL_PATH=/workspace/vla/outputs/<your_model_dir>'
+                'Example: VLA_MODEL_PATH=/workspace/vla/outputs/<your_model_dir> '
+                'or VLA_MODEL_PATH=your-username/crane_x7_openvla (HuggingFace Hub)'
             )
             return
 
-        model_path = Path(self.model_path)
-        if not model_path.exists():
-            self.get_logger().error(f'Model path does not exist: {model_path}')
-            # List available models in outputs directory
-            outputs_dir = Path('/workspace/vla/outputs')
-            if outputs_dir.exists():
-                available = [d.name for d in outputs_dir.iterdir() if d.is_dir()]
-                if available:
-                    self.get_logger().info(f'Available models in {outputs_dir}: {available}')
-            return
+        # Check if this is a HuggingFace Hub ID or local path
+        is_hf_hub = self._is_huggingface_hub_id(self.model_path)
 
-        self.get_logger().info(f'Loading VLA model from {model_path}...')
+        if is_hf_hub:
+            self.get_logger().info(f'Loading model from HuggingFace Hub: {self.model_path}')
+            model_path_str = self.model_path
+            model_path = None  # Will use string directly for HF Hub
+        else:
+            model_path = Path(self.model_path)
+            model_path_str = str(model_path)
+            if not model_path.exists():
+                self.get_logger().error(f'Model path does not exist: {model_path}')
+                # List available models in outputs directory
+                outputs_dir = Path('/workspace/vla/outputs')
+                if outputs_dir.exists():
+                    available = [d.name for d in outputs_dir.iterdir() if d.is_dir()]
+                    if available:
+                        self.get_logger().info(f'Available models in {outputs_dir}: {available}')
+                return
+
+        self.get_logger().info(f'Loading VLA model from {model_path_str}...')
 
         try:
             # Register custom OpenVLA classes for HuggingFace Auto classes
@@ -157,14 +181,37 @@ class VLAInferenceNode(Node):
 
             # Load processor
             self.processor = AutoProcessor.from_pretrained(
-                str(model_path),
+                model_path_str,
                 trust_remote_code=True
             )
             self.get_logger().info('Processor loaded successfully')
 
             # Check if this is a LoRA checkpoint (has lora_adapters subdirectory)
-            lora_adapter_path = model_path / "lora_adapters"
-            is_lora_checkpoint = lora_adapter_path.exists()
+            is_lora_checkpoint = False
+            lora_adapter_path = None
+
+            if is_hf_hub:
+                # For HF Hub, check if lora_adapters exists using huggingface_hub
+                try:
+                    from huggingface_hub import hf_hub_download, HfFileSystem
+                    fs = HfFileSystem()
+                    lora_config_path = f"{model_path_str}/lora_adapters/adapter_config.json"
+                    if fs.exists(lora_config_path):
+                        is_lora_checkpoint = True
+                        # Download lora_adapters directory
+                        from huggingface_hub import snapshot_download
+                        local_dir = snapshot_download(
+                            model_path_str,
+                            allow_patterns=["lora_adapters/*"],
+                            local_dir="/tmp/vla_model"
+                        )
+                        lora_adapter_path = Path(local_dir) / "lora_adapters"
+                        self.get_logger().info(f'Downloaded LoRA adapter to {lora_adapter_path}')
+                except Exception as e:
+                    self.get_logger().debug(f'LoRA check for HF Hub failed: {e}')
+            else:
+                lora_adapter_path = model_path / "lora_adapters"
+                is_lora_checkpoint = lora_adapter_path.exists()
 
             # Load model
             model_kwargs = {
@@ -178,12 +225,11 @@ class VLAInferenceNode(Node):
                 model_kwargs["attn_implementation"] = "flash_attention_2"
                 self.get_logger().info('Using Flash Attention 2')
 
-            if is_lora_checkpoint:
+            if is_lora_checkpoint and lora_adapter_path:
                 # Load base model first, then apply LoRA adapter
                 self.get_logger().info('Detected LoRA checkpoint, loading base model + adapter...')
 
                 # Read adapter config to get base model path
-                import json
                 adapter_config_path = lora_adapter_path / "adapter_config.json"
                 with open(adapter_config_path, 'r') as f:
                     adapter_config = json.load(f)
@@ -212,7 +258,7 @@ class VLAInferenceNode(Node):
             else:
                 # Load merged model directly
                 self.model = AutoModelForVision2Seq.from_pretrained(
-                    str(model_path),
+                    model_path_str,
                     **model_kwargs
                 )
 
@@ -223,10 +269,25 @@ class VLAInferenceNode(Node):
             # Load normalization statistics
             # Always try to load from checkpoint's dataset_statistics.json first
             # This contains the fine-tuned dataset statistics (e.g., crane_x7)
-            norm_stats_path = model_path / "dataset_statistics.json"
-            if norm_stats_path.exists():
-                with open(norm_stats_path, 'r') as f:
-                    checkpoint_stats = json.load(f)
+            checkpoint_stats = None
+            if is_hf_hub:
+                try:
+                    from huggingface_hub import hf_hub_download
+                    stats_file = hf_hub_download(
+                        model_path_str,
+                        filename="dataset_statistics.json"
+                    )
+                    with open(stats_file, 'r') as f:
+                        checkpoint_stats = json.load(f)
+                except Exception as e:
+                    self.get_logger().debug(f'Could not download dataset_statistics.json: {e}')
+            else:
+                norm_stats_path = model_path / "dataset_statistics.json"
+                if norm_stats_path.exists():
+                    with open(norm_stats_path, 'r') as f:
+                        checkpoint_stats = json.load(f)
+
+            if checkpoint_stats:
                 # Merge with existing norm_stats or create new
                 if not hasattr(self.model, 'norm_stats') or self.model.norm_stats is None:
                     self.model.norm_stats = {}
