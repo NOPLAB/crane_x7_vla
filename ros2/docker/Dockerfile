@@ -34,6 +34,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     librealsense2 \
     librealsense2-utils \
     librealsense2-dev \
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-rosbridge-server \
+    ros-humble-image-transport-plugins \
+    gettext-base \
     $(grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | tr '\n' ' ') \
     && rm /tmp/rosdep_packages.txt
 
@@ -47,10 +51,13 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
 
 # Install ManiSkill and SAPIEN dependencies
+# Note: These may try to install numpy>=2.0, so we force reinstall numpy<2.0 afterwards
+# for cv_bridge compatibility (cv_bridge is compiled with NumPy 1.x)
 RUN pip3 install --no-cache-dir \
     mani-skill>=3.0.0 \
     sapien \
-    gymnasium>=0.26.0
+    gymnasium>=0.26.0 && \
+    pip3 install --no-cache-dir --force-reinstall "numpy>=1.24.0,<2.0.0"
 
 # Copy OpenVLA/prismatic source code for model loading
 COPY vla/src/openvla /workspace/vla/src/openvla

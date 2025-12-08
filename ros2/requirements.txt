@@ -16,6 +16,7 @@ tokenizers==0.22.1
 timm==0.9.16
 sentencepiece==0.2.1
 peft>=0.8.0
+huggingface_hub>=0.20.0
 
 # Image processing
 Pillow>=10.0.0

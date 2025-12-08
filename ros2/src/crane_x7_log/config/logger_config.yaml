@@ -11,15 +11,6 @@ data_logger:
     # Data collection rate
     collection_rate: 30.0  # Hz (data collection frequency)
 
-    # Camera settings
-    use_camera: true  # Enable RGB camera logging (set to true for real robot with D435)
-    use_depth: false  # Enable depth image logging
-
-    # Image settings
-    image_width: 640  # Camera image width (0 = use original)
-    image_height: 480  # Camera image height (0 = use original)
-    image_quality: 90  # JPEG quality (1-100)
-
     # Joint configuration
     arm_joint_names:
       - "crane_x7_shoulder_fixed_part_pan_joint"
@@ -35,9 +26,6 @@ data_logger:
 
     # Topic names
     joint_states_topic: "/joint_states"
-    rgb_image_topic: "/camera/color/image_raw"
-    depth_image_topic: "/camera/aligned_depth_to_color/image_raw"
-    camera_info_topic: "/camera/color/camera_info"
 
     # Data format
     save_format: "tfrecord"  # npz or tfrecord
@@ -59,3 +47,22 @@ data_logger:
     notify_on_episode_complete: true  # Announce episode completion
     notify_time_remaining: true  # Announce remaining time at intervals
     time_notification_intervals: [20, 10]  # Notify at these seconds before episode end
+
+    # Multiple camera settings
+    # Camera names define which cameras to use (primary, secondary, wrist)
+    camera_names: ["primary"]
+
+    # Per-camera settings (prefix: camera.<name>.)
+    camera.primary.rgb_topic: "/camera/color/image_raw"
+    camera.primary.camera_info_topic: "/camera/color/camera_info"
+    camera.primary.width: 640
+    camera.primary.height: 480
+    camera.primary.quality: 90
+
+    # Example: Add a second camera
+    # camera_names: ["primary", "secondary"]
+    # camera.secondary.rgb_topic: "/camera2/color/image_raw"
+    # camera.secondary.camera_info_topic: "/camera2/color/camera_info"
+    # camera.secondary.width: 640
+    # camera.secondary.height: 480
+    # camera.secondary.quality: 90

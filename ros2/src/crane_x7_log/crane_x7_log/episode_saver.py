@@ -154,14 +154,28 @@ class EpisodeSaver:
             'timestamps': timestamps,
         }
 
-        # Add optional data
-        if 'image' in episode_data[0]['observation']:
-            images = np.array([step['observation']['image'] for step in episode_data])
-            save_dict['images'] = images
+        # Collect all image keys from the first step
+        obs_keys = episode_data[0]['observation'].keys()
 
-        if 'depth' in episode_data[0]['observation']:
-            depths = np.array([step['observation']['depth'] for step in episode_data])
-            save_dict['depths'] = depths
+        # Handle multiple image keys (image_primary, image_secondary, image_wrist, etc.)
+        image_keys = [k for k in obs_keys if k.startswith('image_')]
+        for image_key in image_keys:
+            images = np.array([
+                step['observation'][image_key] for step in episode_data
+            ])
+            # Save as images_primary, images_secondary, etc.
+            save_key = image_key.replace('image_', 'images_')
+            save_dict[save_key] = images
+
+        # Handle multiple depth keys (depth_primary, depth_secondary, depth_wrist, etc.)
+        depth_keys = [k for k in obs_keys if k.startswith('depth_')]
+        for depth_key in depth_keys:
+            depths = np.array([
+                step['observation'][depth_key] for step in episode_data
+            ])
+            # Save as depths_primary, depths_secondary, etc.
+            save_key = depth_key.replace('depth_', 'depths_')
+            save_dict[save_key] = depths
 
         np.savez_compressed(episode_path, **save_dict)
 

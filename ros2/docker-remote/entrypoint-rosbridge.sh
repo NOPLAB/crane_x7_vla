@@ -2,19 +2,18 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
-# Entrypoint for VLA inference container with Tailscale VPN
+# Entrypoint for VLA inference container using rosbridge (WebSocket)
 #
 # This script:
 # 1. Starts Tailscale in userspace networking mode
-# 2. Configures CycloneDDS for unicast communication
-# 3. Sets up ROS 2 workspace
-# 4. Validates VLA model configuration
-# 5. Executes the launch command
+# 2. Waits for local peer (rosbridge server) to become reachable
+# 3. Validates VLA model configuration
+# 4. Executes the VLA inference rosbridge client
 
 set -e
 
 echo "=========================================="
-echo "  VLA Inference Container Startup"
+echo "  VLA Inference Container (rosbridge)"
 echo "=========================================="
 echo ""
 
@@ -28,6 +27,8 @@ if [ -z "$TS_AUTHKEY" ]; then
     echo "Set TS_AUTHKEY environment variable to enable VPN connectivity."
     echo "Get an auth key from: https://login.tailscale.com/admin/settings/keys"
     echo ""
+    # If no Tailscale, use ROSBRIDGE_HOST as-is (might be an IP or hostname)
+    RESOLVED_HOST="$ROSBRIDGE_HOST"
 else
     echo "Starting Tailscale in userspace networking mode..."
 
@@ -35,7 +36,6 @@ else
     mkdir -p "$TS_STATE_DIR"
 
     # Start tailscaled in background with userspace networking
-    # userspace-networking is required for containers without /dev/net/tun access
     tailscaled \
         --state="$TS_STATE_DIR/tailscaled.state" \
         --socket="$TS_STATE_DIR/tailscaled.sock" \
@@ -57,80 +57,71 @@ else
     echo "Tailscale connected!"
     tailscale --socket="$TS_STATE_DIR/tailscaled.sock" status
 
-    # Get our Tailscale IP
-    TS_IP=$(tailscale --socket="$TS_STATE_DIR/tailscaled.sock" ip -4 2>/dev/null || echo "unknown")
+    # Get Tailscale IP
+    ACTUAL_TS_IP=$(tailscale --socket="$TS_STATE_DIR/tailscaled.sock" ip -4 2>/dev/null || echo "")
+
     echo ""
-    echo "This machine's Tailscale IP: $TS_IP"
-    echo "Share this IP with the local robot for CycloneDDS configuration."
-fi
-echo ""
+    echo "=========================================="
+    echo "  Tailscale Connection Info"
+    echo "=========================================="
+    echo "  Hostname: ${TS_HOSTNAME:-crane-x7-inference}"
+    echo "  Tailscale IP: $ACTUAL_TS_IP"
+    echo "=========================================="
+    echo ""
 
-# ----------------------------------------------------------------------------
-# CycloneDDS Configuration
-# ----------------------------------------------------------------------------
-echo "=== CycloneDDS Configuration ==="
+    # Wait for local peer to become reachable
+    echo "=== Waiting for Local Peer ==="
 
-CYCLONEDDS_CONFIG="/etc/cyclonedds.xml"
+    LOCAL_PEER_HOSTNAME="${ROSBRIDGE_HOST:-crane-x7-local}"
+    PEER_WAIT_TIMEOUT="${PEER_WAIT_TIMEOUT:-300}"
 
-if [ -n "$LOCAL_PEER_IP" ]; then
-    echo "Configuring CycloneDDS unicast with peer: $LOCAL_PEER_IP"
+    RESOLVED_HOST=$(/usr/local/bin/wait-for-peer.sh "$LOCAL_PEER_HOSTNAME" \
+        --timeout "$PEER_WAIT_TIMEOUT" --no-ping \
+        --socket "$TS_STATE_DIR/tailscaled.sock")
 
-    # Generate CycloneDDS config with the peer IP
-    cat > "$CYCLONEDDS_CONFIG" << EOF
-<?xml version="1.0" encoding="UTF-8" ?>
-<CycloneDDS xmlns="https://cdds.io/config"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-  <Domain Id="any">
-    <General>
-      <Interfaces>
-        <NetworkInterface autodetermine="true" priority="default" multicast="false" />
-      </Interfaces>
-      <AllowMulticast>false</AllowMulticast>
-      <MaxMessageSize>65500B</MaxMessageSize>
-    </General>
-    <Discovery>
-      <Peers>
-        <Peer Address="$LOCAL_PEER_IP" />
-      </Peers>
-      <ParticipantIndex>auto</ParticipantIndex>
-    </Discovery>
-    <Internal>
-      <SocketReceiveBufferSize min="1MB" max="32MB"/>
-      <SocketSendBufferSize min="1MB" max="32MB"/>
-    </Internal>
-  </Domain>
-</CycloneDDS>
-EOF
+    if [ -z "$RESOLVED_HOST" ]; then
+        echo "ERROR: Failed to resolve local peer '$LOCAL_PEER_HOSTNAME'"
+        echo ""
+        echo "Please ensure the local robot is running with Tailscale connected."
+        exit 1
+    fi
 
-    echo "CycloneDDS config generated at: $CYCLONEDDS_CONFIG"
-else
-    echo "WARNING: LOCAL_PEER_IP not set."
-    echo "Set LOCAL_PEER_IP to the Tailscale IP of the local robot machine."
-    echo "Using default CycloneDDS config (may not work for VPN communication)."
-fi
-echo ""
+    echo "Local peer resolved: $LOCAL_PEER_HOSTNAME -> $RESOLVED_HOST"
 
-# ----------------------------------------------------------------------------
-# ROS 2 Workspace Setup
-# ----------------------------------------------------------------------------
-echo "=== ROS 2 Workspace Setup ==="
+    # Save the peer IP for display
+    PEER_IP="$RESOLVED_HOST"
 
-ROS2_WORKSPACE=/workspace/ros2
+    # In userspace networking mode, we need to use tailscale nc for TCP connections
+    # Set up a local port forward using socat + tailscale nc
+    echo ""
+    echo "=== Setting up TCP Port Forward ==="
+    LOCAL_FORWARD_PORT="${ROSBRIDGE_PORT:-9090}"
 
-if [ -f "$ROS2_WORKSPACE/install/setup.bash" ]; then
-    source /opt/ros/humble/setup.bash
-    source "$ROS2_WORKSPACE/install/setup.bash"
-    echo "ROS 2 workspace sourced successfully."
-else
-    echo "ERROR: ROS 2 workspace not found at $ROS2_WORKSPACE"
-    echo "Make sure the workspace was built during Docker image creation."
-    exit 1
+    # Kill any existing socat processes
+    pkill -f "socat.*LISTEN:$LOCAL_FORWARD_PORT" 2>/dev/null || true
+
+    # Start socat to forward local port to remote via tailscale nc
+    # This creates: localhost:9090 -> tailscale nc -> crane-x7-local:9090
+    echo "Starting TCP forward: localhost:$LOCAL_FORWARD_PORT -> $PEER_IP:$LOCAL_FORWARD_PORT"
+    socat TCP-LISTEN:$LOCAL_FORWARD_PORT,reuseaddr,fork \
+        EXEC:"tailscale --socket=$TS_STATE_DIR/tailscaled.sock nc $PEER_IP $LOCAL_FORWARD_PORT" &
+    SOCAT_PID=$!
+    echo "Port forward started (PID: $SOCAT_PID)"
+
+    # Give socat a moment to start
+    sleep 1
+
+    # Verify socat is running
+    if kill -0 $SOCAT_PID 2>/dev/null; then
+        echo "Port forward is active"
+    else
+        echo "WARNING: Port forward may not have started correctly"
+    fi
+
+    # Use localhost for the rosbridge connection (goes through socat -> tailscale nc)
+    RESOLVED_HOST="127.0.0.1"
 fi
 
-echo "ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}"
-echo "RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-echo "CYCLONEDDS_URI: ${CYCLONEDDS_URI:-not set}"
 echo ""
 
 # ----------------------------------------------------------------------------
@@ -161,9 +152,6 @@ if [ -z "$VLA_MODEL_PATH" ]; then
     echo ""
     echo "Available models in /workspace/models (if mounted):"
     ls -la /workspace/models 2>/dev/null || echo "  (no models found)"
-    echo ""
-    echo "Available models in /workspace/vla/outputs (if mounted):"
-    ls -la /workspace/vla/outputs 2>/dev/null || echo "  (no models found)"
     exit 1
 fi
 
@@ -183,26 +171,14 @@ else
     if [ ! -d "$VLA_MODEL_PATH" ]; then
         echo "ERROR: Model path does not exist: $VLA_MODEL_PATH"
         echo "Make sure to mount the model directory to the container."
-        echo ""
-        echo "Example docker run:"
-        echo "  docker run -v /path/to/models:/workspace/models:ro ..."
         exit 1
     fi
     echo "Local model path: $VLA_MODEL_PATH"
-
-    # Check for LoRA adapter
-    if [ -f "$VLA_MODEL_PATH/lora_adapters/adapter_config.json" ]; then
-        echo "LoRA adapter detected: $VLA_MODEL_PATH/lora_adapters/"
-    fi
-
-    # Check for dataset statistics
-    if [ -f "$VLA_MODEL_PATH/dataset_statistics.json" ]; then
-        echo "Dataset statistics found: $VLA_MODEL_PATH/dataset_statistics.json"
-    fi
 fi
 
 echo "Task instruction: ${VLA_TASK_INSTRUCTION:-pick up the object}"
 echo "Device: ${VLA_DEVICE:-cuda}"
+echo "Inference rate: ${VLA_INFERENCE_RATE:-10.0} Hz"
 echo ""
 
 # ----------------------------------------------------------------------------
@@ -211,12 +187,14 @@ echo ""
 echo "=========================================="
 echo "  Configuration Summary"
 echo "=========================================="
-echo "  Tailscale: ${TS_IP:-not connected}"
-echo "  Peer IP:   ${LOCAL_PEER_IP:-not set}"
-echo "  Domain ID: ${ROS_DOMAIN_ID:-0}"
-echo "  Model:     ${VLA_MODEL_PATH}"
-echo "  Task:      ${VLA_TASK_INSTRUCTION:-pick up the object}"
-echo "  Device:    ${VLA_DEVICE:-cuda}"
+echo "  Rosbridge:      ${RESOLVED_HOST}:${ROSBRIDGE_PORT:-9090}"
+if [ -n "$PEER_IP" ]; then
+echo "  (via socat -> tailscale nc -> ${PEER_IP}:${ROSBRIDGE_PORT:-9090})"
+fi
+echo "  Model:          ${VLA_MODEL_PATH}"
+echo "  Task:           ${VLA_TASK_INSTRUCTION:-pick up the object}"
+echo "  Device:         ${VLA_DEVICE:-cuda}"
+echo "  Rate:           ${VLA_INFERENCE_RATE:-10.0} Hz"
 echo "=========================================="
 echo ""
 
@@ -225,8 +203,17 @@ echo ""
 # ----------------------------------------------------------------------------
 if [ $# -gt 0 ]; then
     echo "Executing: $@"
+    # Pass rosbridge host as environment variable
+    export ROSBRIDGE_HOST="$RESOLVED_HOST"
     exec "$@"
 else
-    echo "No command specified. Starting default launch..."
-    exec ros2 launch crane_x7_vla vla_inference_only.launch.py
+    echo "Starting VLA inference rosbridge client..."
+    exec python3 /workspace/scripts/vla_inference_rosbridge.py \
+        --rosbridge-host "$RESOLVED_HOST" \
+        --rosbridge-port "${ROSBRIDGE_PORT:-9090}" \
+        --model-path "$VLA_MODEL_PATH" \
+        --task-instruction "${VLA_TASK_INSTRUCTION:-pick up the object}" \
+        --device "${VLA_DEVICE:-cuda}" \
+        --unnorm-key "${VLA_UNNORM_KEY:-crane_x7}" \
+        --inference-rate "${VLA_INFERENCE_RATE:-10.0}"
 fi

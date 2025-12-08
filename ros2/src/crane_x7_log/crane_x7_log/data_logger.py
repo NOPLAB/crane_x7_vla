@@ -12,7 +12,7 @@ import numpy as np
 from threading import Lock
 from typing import Optional, Dict, Any, List
 
-from .config_manager import ConfigManager, LoggerConfig
+from .config_manager import ConfigManager, LoggerConfig, CameraConfig
 from .image_processor import ImageProcessor
 from .episode_saver import EpisodeSaver
 from .voice_notifier import VoiceNotifier
@@ -28,11 +28,13 @@ class DataLogger(Node):
         ConfigManager.declare_parameters(self)
         self.config: LoggerConfig = ConfigManager.load_config(self)
 
-        # Initialize components
-        self.image_processor = ImageProcessor(
-            self.config.image_width,
-            self.config.image_height
-        )
+        # Initialize image processors for each camera
+        self.image_processors: Dict[str, ImageProcessor] = {}
+        for camera in self.config.cameras:
+            self.image_processors[camera.name] = ImageProcessor(
+                camera.width,
+                camera.height
+            )
         self.episode_saver = EpisodeSaver(
             self.config.output_dir,
             self.config.save_format,
@@ -62,10 +64,15 @@ class DataLogger(Node):
 
         # Latest data cache
         self.latest_joint_state: Optional[JointState] = None
-        self.latest_rgb_image: Optional[Image] = None
-        self.latest_depth_image: Optional[Image] = None
-        self.latest_camera_info: Optional[CameraInfo] = None
         self.latest_language_instruction: Optional[str] = None
+
+        # Multiple camera data cache (camera_name -> Image)
+        self.latest_rgb_images: Dict[str, Optional[Image]] = {
+            cam.name: None for cam in self.config.cameras
+        }
+        self.latest_camera_infos: Dict[str, Optional[CameraInfo]] = {
+            cam.name: None for cam in self.config.cameras
+        }
 
         # Setup subscriptions and timers
         self._setup_subscriptions()
@@ -95,25 +102,25 @@ class DataLogger(Node):
             10
         )
 
-        if self.config.use_camera:
-            self.rgb_image_sub = self.create_subscription(
+        # Multiple camera subscriptions
+        self.rgb_image_subs: Dict[str, Any] = {}
+        self.camera_info_subs: Dict[str, Any] = {}
+
+        for camera in self.config.cameras:
+            # RGB image subscription
+            self.rgb_image_subs[camera.name] = self.create_subscription(
                 Image,
-                self.config.rgb_image_topic,
-                self._rgb_image_callback,
-                10
-            )
-            self.camera_info_sub = self.create_subscription(
-                CameraInfo,
-                self.config.camera_info_topic,
-                self._camera_info_callback,
+                camera.rgb_topic,
+                lambda msg, name=camera.name: self._rgb_image_callback(msg, name),
                 10
             )
 
-            if self.config.use_depth:
-                self.depth_image_sub = self.create_subscription(
-                    Image,
-                    self.config.depth_image_topic,
-                    self._depth_image_callback,
+            # Camera info subscription (if topic is specified)
+            if camera.camera_info_topic:
+                self.camera_info_subs[camera.name] = self.create_subscription(
+                    CameraInfo,
+                    camera.camera_info_topic,
+                    lambda msg, name=camera.name: self._camera_info_callback(msg, name),
                     10
                 )
 
@@ -131,7 +138,9 @@ class DataLogger(Node):
         self.get_logger().info(f'  Episode length: {self.config.episode_length}')
         self.get_logger().info(f'  Inter-episode delay: {self.config.inter_episode_delay}s')
         self.get_logger().info(f'  Collection rate: {self.config.collection_rate} Hz')
-        self.get_logger().info(f'  Camera: {self.config.use_camera}, Depth: {self.config.use_depth}')
+        self.get_logger().info(f'  Cameras: {len(self.config.cameras)}')
+        for camera in self.config.cameras:
+            self.get_logger().info(f'    - {camera.name}: {camera.rgb_topic}')
         self.get_logger().info(f'  Auto-start: {self.config.auto_start_recording}')
         self.get_logger().info(f'  Recording: {self.is_recording}')
 
@@ -141,20 +150,15 @@ class DataLogger(Node):
         with self.lock:
             self.latest_joint_state = msg
 
-    def _rgb_image_callback(self, msg: Image) -> None:
+    def _rgb_image_callback(self, msg: Image, camera_name: str) -> None:
         """Callback for RGB image topic."""
         with self.lock:
-            self.latest_rgb_image = msg
+            self.latest_rgb_images[camera_name] = msg
 
-    def _depth_image_callback(self, msg: Image) -> None:
-        """Callback for depth image topic."""
-        with self.lock:
-            self.latest_depth_image = msg
-
-    def _camera_info_callback(self, msg: CameraInfo) -> None:
+    def _camera_info_callback(self, msg: CameraInfo, camera_name: str) -> None:
         """Callback for camera info topic."""
         with self.lock:
-            self.latest_camera_info = msg
+            self.latest_camera_infos[camera_name] = msg
 
     def _language_instruction_callback(self, msg: String) -> None:
         """Callback for language instruction topic."""
@@ -213,12 +217,11 @@ class DataLogger(Node):
             if joint_positions is None:
                 return
 
-            # Process images
-            rgb_array = self._process_rgb_image()
-            depth_array = self._process_depth_image()
+            # Process images from all cameras
+            rgb_arrays = self._process_all_rgb_images()
 
             # Create step data
-            step_data = self._create_step_data(joint_positions, rgb_array, depth_array)
+            step_data = self._create_step_data(joint_positions, rgb_arrays)
 
             # Add to episode
             self.current_episode.append(step_data)
@@ -250,33 +253,38 @@ class DataLogger(Node):
         """Check if we have minimum required data to record a step."""
         if self.latest_joint_state is None:
             return False
-        if self.config.use_camera and self.latest_rgb_image is None:
-            return False
+        # Check if all cameras have received data
+        for camera in self.config.cameras:
+            if self.latest_rgb_images.get(camera.name) is None:
+                return False
         return True
 
-    def _process_rgb_image(self) -> Optional[np.ndarray]:
-        """Process RGB image if available."""
-        if self.config.use_camera and self.latest_rgb_image is not None:
-            rgb_array = self.image_processor.process_rgb_image(self.latest_rgb_image)
-            if rgb_array is None:
-                self.get_logger().error('Failed to convert RGB image')
-            return rgb_array
-        return None
+    def _process_all_rgb_images(self) -> Dict[str, Optional[np.ndarray]]:
+        """Process RGB images from all cameras."""
+        rgb_arrays: Dict[str, Optional[np.ndarray]] = {}
 
-    def _process_depth_image(self) -> Optional[np.ndarray]:
-        """Process depth image if available."""
-        if self.config.use_depth and self.latest_depth_image is not None:
-            depth_array = self.image_processor.process_depth_image(self.latest_depth_image)
-            if depth_array is None:
-                self.get_logger().error('Failed to convert depth image')
-            return depth_array
-        return None
+        for camera in self.config.cameras:
+            image_msg = self.latest_rgb_images.get(camera.name)
+            if image_msg is not None:
+                processor = self.image_processors.get(camera.name)
+                if processor:
+                    rgb_array = processor.process_rgb_image(image_msg)
+                    if rgb_array is None:
+                        self.get_logger().error(
+                            f'Failed to convert RGB image from camera {camera.name}'
+                        )
+                    rgb_arrays[camera.name] = rgb_array
+                else:
+                    rgb_arrays[camera.name] = None
+            else:
+                rgb_arrays[camera.name] = None
+
+        return rgb_arrays
 
     def _create_step_data(
         self,
         joint_positions: np.ndarray,
-        rgb_array: Optional[np.ndarray],
-        depth_array: Optional[np.ndarray]
+        rgb_arrays: Dict[str, Optional[np.ndarray]]
     ) -> Dict[str, Any]:
         """Create step data dictionary."""
         step_data = {
@@ -290,11 +298,11 @@ class DataLogger(Node):
             'action': joint_positions,  # Placeholder, will be updated when saving
         }
 
-        if rgb_array is not None:
-            step_data['observation']['image'] = rgb_array
-
-        if depth_array is not None:
-            step_data['observation']['depth'] = depth_array
+        # Add images from each camera with RLDS naming convention
+        for camera in self.config.cameras:
+            image_key = f'image_{camera.name}'  # e.g., image_primary, image_secondary
+            if camera.name in rgb_arrays and rgb_arrays[camera.name] is not None:
+                step_data['observation'][image_key] = rgb_arrays[camera.name]
 
         return step_data
 
@@ -386,33 +394,32 @@ class DataLogger(Node):
         count = 0
         if self.latest_joint_state is not None:
             count += 1
-        if self.config.use_camera:
-            if self.latest_rgb_image is not None:
-                count += 1
-            if self.config.use_depth and self.latest_depth_image is not None:
+        # Count connected cameras
+        for camera in self.config.cameras:
+            if self.latest_rgb_images.get(camera.name) is not None:
                 count += 1
         return count
 
     def _count_total_required_topics(self) -> int:
         """Count total number of required topics."""
         count = 1  # joint_states
-        if self.config.use_camera:
-            count += 1  # rgb_image
-            if self.config.use_depth:
-                count += 1  # depth_image
+        count += len(self.config.cameras)  # One RGB topic per camera
         return count
 
     def _log_topic_publishers(self) -> None:
         """Log publisher counts for each topic."""
-        topics = [self.config.joint_states_topic]
-        if self.config.use_camera:
-            topics.append(self.config.rgb_image_topic)
-            if self.config.use_depth:
-                topics.append(self.config.depth_image_topic)
+        # Joint states topic
+        joint_count = self.count_publishers(self.config.joint_states_topic)
+        self.get_logger().info(
+            f'  {self.config.joint_states_topic}: {joint_count} publishers'
+        )
 
-        for topic in topics:
-            count = self.count_publishers(topic)
-            self.get_logger().info(f'  {topic}: {count} publishers')
+        # Camera topics
+        for camera in self.config.cameras:
+            count = self.count_publishers(camera.rgb_topic)
+            self.get_logger().info(
+                f'  {camera.rgb_topic} ({camera.name}): {count} publishers'
+            )
 
     # Shutdown
     def shutdown(self) -> None:

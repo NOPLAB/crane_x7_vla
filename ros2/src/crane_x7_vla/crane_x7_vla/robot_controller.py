@@ -54,6 +54,8 @@ class RobotController(Node):
         self.current_joint_state: Optional[JointState] = None
         self.latest_action: Optional[np.ndarray] = None
         self.is_executing = False
+        self.current_arm_goal_handle = None
+        self.current_gripper_goal_handle = None
 
         # Setup action client for arm trajectory execution
         self.arm_client = ActionClient(
@@ -100,12 +102,37 @@ class RobotController(Node):
         self.current_joint_state = msg
 
     def _action_callback(self, msg: Float32MultiArray) -> None:
-        """Callback for VLA-predicted actions."""
+        """Callback for VLA-predicted actions.
+
+        Always executes the latest action, canceling any in-progress action.
+        """
         action = np.array(msg.data)
         self.latest_action = action
 
-        if self.auto_execute and not self.is_executing:
+        if self.auto_execute:
+            # Cancel previous goals and execute new action immediately
+            self._cancel_current_goals()
             self._execute_action(action)
+
+    def _cancel_current_goals(self) -> None:
+        """Cancel any currently executing goals."""
+        if self.current_arm_goal_handle is not None:
+            try:
+                self.current_arm_goal_handle.cancel_goal_async()
+                self.get_logger().debug('Canceled previous arm goal')
+            except Exception:
+                pass
+            self.current_arm_goal_handle = None
+
+        if self.current_gripper_goal_handle is not None:
+            try:
+                self.current_gripper_goal_handle.cancel_goal_async()
+                self.get_logger().debug('Canceled previous gripper goal')
+            except Exception:
+                pass
+            self.current_gripper_goal_handle = None
+
+        self.is_executing = False
 
     def _execute_action(self, action: np.ndarray) -> None:
         """Execute the predicted action on the robot."""
@@ -183,6 +210,7 @@ class RobotController(Node):
             self.is_executing = False
             return
 
+        self.current_arm_goal_handle = goal_handle
         self.get_logger().debug('Arm goal accepted, executing...')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self._arm_result_callback)
@@ -194,6 +222,7 @@ class RobotController(Node):
             self.get_logger().error('Gripper goal rejected by action server')
             return
 
+        self.current_gripper_goal_handle = goal_handle
         self.get_logger().debug('Gripper goal accepted, executing...')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self._gripper_result_callback)
@@ -205,24 +234,34 @@ class RobotController(Node):
 
     def _arm_result_callback(self, future) -> None:
         """Callback when arm execution is complete."""
-        result = future.result().result
-        self.is_executing = False
-
-        if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
-            self.get_logger().debug('Arm action executed successfully')
-        else:
-            self.get_logger().error(f'Arm action failed with error code: {result.error_code}')
-
-        # Execute next action if available (continuous execution)
-        if self.auto_execute and self.latest_action is not None:
-            self.get_logger().info('Arm completed, executing next action...')
-            self._execute_action(self.latest_action)
+        try:
+            result = future.result().result
+            if result.error_code == FollowJointTrajectory.Result.SUCCESSFUL:
+                self.get_logger().debug('Arm action executed successfully')
+            elif result.error_code == FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED:
+                # This can happen when goal is canceled, ignore
+                pass
+            else:
+                self.get_logger().debug(f'Arm action ended with code: {result.error_code}')
+        except Exception:
+            # Goal was canceled
+            pass
+        finally:
+            self.current_arm_goal_handle = None
 
     def _gripper_result_callback(self, future) -> None:
         """Callback when gripper execution is complete."""
-        result = future.result().result
-        # GripperCommand result has different structure
-        self.get_logger().debug(f'Gripper action completed: position={result.position}, reached_goal={result.reached_goal}')
+        try:
+            result = future.result().result
+            self.get_logger().debug(
+                f'Gripper action completed: position={result.position}, '
+                f'reached_goal={result.reached_goal}'
+            )
+        except Exception:
+            # Goal was canceled
+            pass
+        finally:
+            self.current_gripper_goal_handle = None
 
     def execute_latest_action(self) -> None:
         """Manually execute the latest received action."""

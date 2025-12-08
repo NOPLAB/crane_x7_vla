@@ -1,5 +1,5 @@
 # ============================================================================
-# CRANE-X7 Remote VLA Configuration
+# CRANE-X7 Remote VLA Configuration (rosbridge WebSocket)
 # ============================================================================
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
@@ -7,28 +7,37 @@
 # This docker-compose file is for the LOCAL ROBOT side when using remote
 # VLA inference on external GPU servers (Runpod/Vast.ai).
 #
+# Uses rosbridge_server (WebSocket) instead of CycloneDDS UDP for reliable
+# communication over Tailscale VPN (including userspace networking mode).
+#
 # Architecture:
 #   [Remote GPU Server]                [Local Robot (this compose)]
 #   ┌─────────────────┐               ┌─────────────────────────┐
-#   │ vla_inference   │◄──Tailscale──►│ Tailscale sidecar      │
-#   │ _node           │      VPN      │                        │
-#   │                 │               │ demo.launch.py         │
-#   │ /vla/predicted  │───────────────│ robot_controller       │
-#   │ _action         │               │ RealSense D435         │
+#   │ vla_inference   │               │ Tailscale sidecar       │
+#   │ _rosbridge.py   │◄──Tailscale──►│                         │
+#   │ (roslibpy)      │   WebSocket   │ rosbridge_server :9090  │
+#   │                 │               │                         │
+#   │ /vla/predicted  │───────────────│ robot_controller        │
+#   │ _action         │               │ RealSense D435          │
 #   └─────────────────┘               └─────────────────────────┘
 #
 # Usage:
 #   1. Copy .env.template to .env and configure:
 #      - TS_AUTHKEY: Tailscale auth key
-#      - REMOTE_INFERENCE_IP: Tailscale IP of the remote inference server
-#      - USB_DEVICE: Robot USB port
+#      - USB_DEVICE: Robot USB port (for real robot)
 #
 #   2. Start the services:
 #      cd ros2/docker-remote
-#      docker compose --profile real-remote up
+#      docker compose --profile sim up          # Simulation
+#      docker compose --profile sim-viewer up   # Simulation + RViz
+#      docker compose --profile real up         # Real robot
 #
-#   3. On the remote GPU server, run the inference container with:
-#      - LOCAL_PEER_IP set to this machine's Tailscale IP
+#   3. On the remote GPU server, run:
+#      docker run --gpus all \
+#        -e TS_AUTHKEY=tskey-auth-xxx \
+#        -e ROSBRIDGE_HOST=crane-x7-local \
+#        -e VLA_MODEL_PATH=sikip/openvla-7b-finetuned-crane-x7 \
+#        crane_x7_vla-rosbridge
 #
 # ============================================================================
 
@@ -45,9 +54,6 @@ x-base-env: &base-env
   PULSE_SERVER: unix:/run/user/1000/pulse/native
   TF_CPP_MIN_LOG_LEVEL: "2"
   CUDA_VISIBLE_DEVICES: ""
-  # CycloneDDS unicast configuration for VPN communication
-  RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
-  CYCLONEDDS_URI: /etc/cyclonedds.xml
   ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
 
 x-real-groups: &real-groups
@@ -66,16 +72,17 @@ services:
   # --------------------------------------------------------------------------
   # This container provides VPN connectivity for the robot services.
   # Other services use network_mode: service:tailscale-local to share
-  # the Tailscale network interface.
+  # the Tailscale network interface and DNS resolution.
   tailscale-local:
     image: tailscale/tailscale:latest
-    profiles: [real-remote, real-remote-viewer, sim-remote, sim-remote-viewer]
+    profiles: [real, real-viewer, sim, sim-viewer]
     hostname: crane-x7-local
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=${TS_USERSPACE:-false}
-      - TS_EXTRA_ARGS=--accept-routes --hostname=crane-x7-local
+      - TS_EXTRA_ARGS=--accept-routes
+      - TS_HOSTNAME=crane-x7-local
     volumes:
       - tailscale-state:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
@@ -83,20 +90,27 @@ services:
       - NET_ADMIN
       - NET_RAW
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status | grep -q 'offers exit node'|| tailscale status | grep -q '^100\\.'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
   # --------------------------------------------------------------------------
-  # Real Robot with Remote VLA (No VLA Inference Node)
+  # Real Robot with rosbridge
   # --------------------------------------------------------------------------
-  # Runs robot hardware control and robot_controller.
-  # VLA inference runs on a remote GPU server and communicates via Tailscale.
-  real-remote:
+  # Runs robot hardware control, rosbridge_server, and robot_controller.
+  # VLA inference runs on a remote GPU server via rosbridge WebSocket.
+  real:
     env_file: .env
     build:
       <<: *build-base
       target: base
-    profiles: [real-remote]
+    profiles: [real]
     depends_on:
-      - tailscale-local
+      tailscale-local:
+        condition: service_healthy
     network_mode: service:tailscale-local
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
@@ -107,41 +121,33 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg:ro
       - ../src:/workspace/ros2/src:ro
-      - ./cyclonedds-local.xml:/etc/cyclonedds-template.xml:ro
     environment:
       <<: *base-env
-      REMOTE_INFERENCE_IP: ${REMOTE_INFERENCE_IP:-}
+      ROSBRIDGE_PORT: ${ROSBRIDGE_PORT:-9090}
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        # Generate CycloneDDS config with peer IP
-        if [ -n "$$REMOTE_INFERENCE_IP" ]; then
-          echo "Configuring CycloneDDS with peer: $$REMOTE_INFERENCE_IP"
-          envsubst < /etc/cyclonedds-template.xml > /etc/cyclonedds.xml
-        else
-          echo "WARNING: REMOTE_INFERENCE_IP not set"
-          cp /etc/cyclonedds-template.xml /etc/cyclonedds.xml
-        fi
-        # Source ROS 2 and run launch
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla remote_robot.launch.py \
+        ros2 launch crane_x7_vla rosbridge_robot.launch.py \
           port_name:='/dev/ttyUSB0' \
           use_d435:=true \
           use_viewer:=false \
-          auto_execute:=true
+          auto_execute:=true \
+          rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
 
   # --------------------------------------------------------------------------
-  # Real Robot with Remote VLA + Camera Viewer
+  # Real Robot with rosbridge + Camera Viewer
   # --------------------------------------------------------------------------
-  real-remote-viewer:
+  real-viewer:
     env_file: .env
     build:
       <<: *build-base
       target: base
-    profiles: [real-remote-viewer]
+    profiles: [real-viewer]
     depends_on:
-      - tailscale-local
+      tailscale-local:
+        condition: service_healthy
     network_mode: service:tailscale-local
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
@@ -152,109 +158,84 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg:ro
       - ../src:/workspace/ros2/src:ro
-      - ./cyclonedds-local.xml:/etc/cyclonedds-template.xml:ro
     environment:
       <<: *base-env
-      REMOTE_INFERENCE_IP: ${REMOTE_INFERENCE_IP:-}
+      ROSBRIDGE_PORT: ${ROSBRIDGE_PORT:-9090}
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        # Generate CycloneDDS config with peer IP
-        if [ -n "$$REMOTE_INFERENCE_IP" ]; then
-          echo "Configuring CycloneDDS with peer: $$REMOTE_INFERENCE_IP"
-          envsubst < /etc/cyclonedds-template.xml > /etc/cyclonedds.xml
-        else
-          echo "WARNING: REMOTE_INFERENCE_IP not set"
-          cp /etc/cyclonedds-template.xml /etc/cyclonedds.xml
-        fi
-        # Source ROS 2 and run launch
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla remote_robot.launch.py \
+        ros2 launch crane_x7_vla rosbridge_robot.launch.py \
           port_name:='/dev/ttyUSB0' \
           use_d435:=true \
           use_viewer:=true \
-          auto_execute:=true
+          auto_execute:=true \
+          rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
 
   # --------------------------------------------------------------------------
-  # Simulation with Remote VLA (No VLA Inference Node)
+  # Simulation with rosbridge
   # --------------------------------------------------------------------------
-  # Runs Gazebo simulation and robot_controller.
-  # VLA inference runs on a remote GPU server and communicates via Tailscale.
-  sim-remote:
+  # Runs Gazebo simulation, rosbridge_server, and robot_controller.
+  # VLA inference runs on a remote GPU server via rosbridge WebSocket.
+  sim:
     env_file: .env
     build:
       <<: *build-base
       target: base
-    profiles: [sim-remote]
+    profiles: [sim]
     depends_on:
-      - tailscale-local
+      tailscale-local:
+        condition: service_healthy
     network_mode: service:tailscale-local
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg:ro
       - ../src:/workspace/ros2/src:ro
-      - ./cyclonedds-local.xml:/etc/cyclonedds-template.xml:ro
     environment:
       <<: *base-env
       SIMULATION_MODE: "true"
-      REMOTE_INFERENCE_IP: ${REMOTE_INFERENCE_IP:-}
+      ROSBRIDGE_PORT: ${ROSBRIDGE_PORT:-9090}
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        # Generate CycloneDDS config with peer IP
-        if [ -n "$$REMOTE_INFERENCE_IP" ]; then
-          echo "Configuring CycloneDDS with peer: $$REMOTE_INFERENCE_IP"
-          envsubst < /etc/cyclonedds-template.xml > /etc/cyclonedds.xml
-        else
-          echo "WARNING: REMOTE_INFERENCE_IP not set"
-          cp /etc/cyclonedds-template.xml /etc/cyclonedds.xml
-        fi
-        # Source ROS 2 and run launch
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla remote_sim.launch.py \
+        ros2 launch crane_x7_vla rosbridge_sim.launch.py \
           use_viewer:=false \
-          auto_execute:=true
+          auto_execute:=true \
+          rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
 
   # --------------------------------------------------------------------------
-  # Simulation with Remote VLA + Viewer
+  # Simulation with rosbridge + Viewer
   # --------------------------------------------------------------------------
-  sim-remote-viewer:
+  sim-viewer:
     env_file: .env
     build:
       <<: *build-base
       target: base
-    profiles: [sim-remote-viewer]
+    profiles: [sim-viewer]
     depends_on:
-      - tailscale-local
+      tailscale-local:
+        condition: service_healthy
     network_mode: service:tailscale-local
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /mnt/wslg:/mnt/wslg:ro
       - ../src:/workspace/ros2/src:ro
-      - ./cyclonedds-local.xml:/etc/cyclonedds-template.xml:ro
     environment:
       <<: *base-env
       SIMULATION_MODE: "true"
-      REMOTE_INFERENCE_IP: ${REMOTE_INFERENCE_IP:-}
+      ROSBRIDGE_PORT: ${ROSBRIDGE_PORT:-9090}
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        # Generate CycloneDDS config with peer IP
-        if [ -n "$$REMOTE_INFERENCE_IP" ]; then
-          echo "Configuring CycloneDDS with peer: $$REMOTE_INFERENCE_IP"
-          envsubst < /etc/cyclonedds-template.xml > /etc/cyclonedds.xml
-        else
-          echo "WARNING: REMOTE_INFERENCE_IP not set"
-          cp /etc/cyclonedds-template.xml /etc/cyclonedds.xml
-        fi
-        # Source ROS 2 and run launch
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla remote_sim.launch.py \
+        ros2 launch crane_x7_vla rosbridge_sim.launch.py \
           use_viewer:=true \
-          auto_execute:=true
+          auto_execute:=true \
+          rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
 
 # ============================================================================
 # Volumes

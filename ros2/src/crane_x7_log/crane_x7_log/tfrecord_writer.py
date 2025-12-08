@@ -13,6 +13,10 @@ import os
 class TFRecordWriter:
     """Writes episode data to RLDS-compatible TFRecord format."""
 
+    # Supported image keys (RLDS naming convention)
+    IMAGE_KEYS = ['image_primary', 'image_secondary', 'image_wrist']
+    DEPTH_KEYS = ['depth_primary', 'depth_secondary', 'depth_wrist']
+
     def __init__(
         self,
         output_path: str,
@@ -82,17 +86,27 @@ class TFRecordWriter:
             action = step_data['action'].astype(np.float32).flatten()
             feature['action'] = self._float_feature(action.tolist())
 
-        # RGB Image (renamed from 'image' to 'image_primary' for RLDS)
-        if 'observation' in step_data and 'image' in step_data['observation']:
-            image = step_data['observation']['image']
-            encoded_image = self.encode_image(image)
-            feature['observation/image_primary'] = self._bytes_feature(encoded_image)
+        # Multiple camera RGB images (RLDS naming convention)
+        if 'observation' in step_data:
+            obs = step_data['observation']
 
-        # Depth Image (renamed from 'depth' to 'depth_primary' for RLDS)
-        if 'observation' in step_data and 'depth' in step_data['observation']:
-            depth = step_data['observation']['depth']
-            depth_bytes = depth.astype(np.float32).tobytes()
-            feature['observation/depth_primary'] = self._bytes_feature(depth_bytes)
+            # Handle multiple image keys (image_primary, image_secondary, image_wrist)
+            for image_key in self.IMAGE_KEYS:
+                if image_key in obs:
+                    image = obs[image_key]
+                    encoded_image = self.encode_image(image)
+                    feature[f'observation/{image_key}'] = self._bytes_feature(
+                        encoded_image
+                    )
+
+            # Handle multiple depth keys (depth_primary, depth_secondary, depth_wrist)
+            for depth_key in self.DEPTH_KEYS:
+                if depth_key in obs:
+                    depth = obs[depth_key]
+                    depth_bytes = depth.astype(np.float32).tobytes()
+                    feature[f'observation/{depth_key}'] = self._bytes_feature(
+                        depth_bytes
+                    )
 
         # Dataset name (required for RLDS)
         feature['dataset_name'] = self._bytes_feature(
@@ -144,9 +158,9 @@ def convert_npz_to_tfrecord(
     actions = data['actions']
     timestamps = data['timestamps']
 
-    # Optional data
-    images = data['images'] if 'images' in data else None
-    depths = data['depths'] if 'depths' in data else None
+    # Find image keys (images_primary, images_secondary, images_wrist)
+    image_keys = [k for k in data.files if k.startswith('images_')]
+    depth_keys = [k for k in data.files if k.startswith('depths_')]
 
     # Create episode data structure
     episode_data = []
@@ -159,11 +173,17 @@ def convert_npz_to_tfrecord(
             'action': actions[i]
         }
 
-        if images is not None:
-            step_data['observation']['image'] = images[i]
+        # Add images from all cameras
+        for image_key in image_keys:
+            # Convert images_primary -> image_primary
+            obs_key = image_key.replace('images_', 'image_')
+            step_data['observation'][obs_key] = data[image_key][i]
 
-        if depths is not None:
-            step_data['observation']['depth'] = depths[i]
+        # Add depths from all cameras
+        for depth_key in depth_keys:
+            # Convert depths_primary -> depth_primary
+            obs_key = depth_key.replace('depths_', 'depth_')
+            step_data['observation'][obs_key] = data[depth_key][i]
 
         episode_data.append(step_data)
 

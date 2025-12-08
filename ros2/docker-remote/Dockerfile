@@ -2,30 +2,31 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
-# VLA Inference Dockerfile for Remote GPU Services (Runpod/Vast.ai)
+# VLA Inference Dockerfile for Remote GPU Services using rosbridge
 #
-# This image contains:
-# - ROS 2 Humble with CycloneDDS (for unicast VPN communication)
-# - Tailscale VPN client (userspace networking mode)
-# - PyTorch with CUDA support
-# - OpenVLA inference dependencies
-# - crane_x7_vla package (inference node only)
+# This is a lightweight image (no ROS 2 required) that uses roslibpy
+# to communicate with the local robot via rosbridge WebSocket.
+#
+# Benefits over CycloneDDS approach:
+# - Works reliably over Tailscale userspace networking
+# - No UDP port requirements
+# - Smaller image size (no ROS 2 installation)
 #
 # Usage:
-#   docker build -f Dockerfile.vla-inference -t crane_x7_vla-inference ../..
+#   docker build -f Dockerfile.rosbridge -t crane_x7_vla-rosbridge ../..
 #
 #   docker run --gpus all \
 #     -e TS_AUTHKEY=tskey-auth-xxxxx \
-#     -e LOCAL_PEER_IP=100.x.x.x \
+#     -e ROSBRIDGE_HOST=crane-x7-local \
 #     -e VLA_MODEL_PATH=/workspace/models/checkpoint \
 #     -e VLA_TASK_INSTRUCTION="pick up the object" \
 #     -v /path/to/models:/workspace/models:ro \
-#     crane_x7_vla-inference
+#     crane_x7_vla-rosbridge
 
 ARG CUDA_VERSION=12.4.1
 
 # ============================================================================
-# Base Stage: CUDA + ROS 2 Humble + Tailscale
+# Base Stage: CUDA + Python + Tailscale
 # ============================================================================
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
@@ -35,51 +36,30 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CUDA_HOME=/usr/local/cuda
 
 # ----------------------------------------------------------------------------
-# Install ROS 2 Humble
+# Install system dependencies and Tailscale
 # ----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
     lsb-release \
-    software-properties-common \
-    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
-       -o /usr/share/keyrings/ros-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
-       http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
-       > /etc/apt/sources.list.d/ros2.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
-       ros-humble-ros-base \
-       ros-humble-rmw-cyclonedds-cpp \
-       python3-colcon-common-extensions \
-    && rm -rf /var/lib/apt/lists/*
-
-# ----------------------------------------------------------------------------
-# Install Tailscale
-# ----------------------------------------------------------------------------
-RUN curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg \
-    | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
-    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list \
-    | tee /etc/apt/sources.list.d/tailscale.list \
-    && apt-get update && apt-get install -y --no-install-recommends tailscale \
-    && rm -rf /var/lib/apt/lists/*
-
-# ----------------------------------------------------------------------------
-# Install Python and system dependencies
-# ----------------------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-dev \
     libgomp1 \
     libglib2.0-0 \
     libgl1 \
     iproute2 \
-    gettext-base \
+    iputils-ping \
+    socat \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg \
+       | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list \
+       | tee /etc/apt/sources.list.d/tailscale.list \
+    && apt-get update && apt-get install -y --no-install-recommends tailscale \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install compatible setuptools version
-# Note: setuptools>=78 has compatibility issues with packaging library
 RUN python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
 
 WORKDIR /workspace
@@ -94,9 +74,18 @@ RUN pip3 install \
 # ----------------------------------------------------------------------------
 # Install VLA inference dependencies
 # ----------------------------------------------------------------------------
-COPY ros2/requirements.txt /tmp/requirements.txt
-RUN pip3 install -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+# roslibpy for rosbridge communication (no ROS 2 required)
+RUN pip3 install \
+    roslibpy \
+    transformers \
+    accelerate \
+    "timm>=0.9.10,<1.0.0" \
+    peft \
+    huggingface_hub \
+    pillow \
+    numpy \
+    sentencepiece \
+    tokenizers
 
 # ----------------------------------------------------------------------------
 # Copy OpenVLA/prismatic source for model loading
@@ -104,25 +93,17 @@ RUN pip3 install -r /tmp/requirements.txt \
 COPY vla/src/openvla /workspace/vla/src/openvla
 
 # ----------------------------------------------------------------------------
-# Create ROS 2 workspace with crane_x7_vla only
+# Copy VLA inference scripts (crane_x7_vla package)
 # ----------------------------------------------------------------------------
-RUN mkdir -p /workspace/ros2/src
-
-# Copy only the crane_x7_vla package (inference node)
-COPY ros2/src/crane_x7_vla /workspace/ros2/src/crane_x7_vla
-
-# Build ROS 2 workspace
-# Note: --symlink-install is not used due to setuptools compatibility issues
-RUN . /opt/ros/humble/setup.sh && \
-    cd /workspace/ros2 && \
-    colcon build --packages-select crane_x7_vla
+COPY ros2/src/crane_x7_vla/crane_x7_vla /workspace/crane_x7_vla
+COPY ros2/src/crane_x7_vla/scripts /workspace/scripts
 
 # ----------------------------------------------------------------------------
 # Copy configuration and entrypoint
 # ----------------------------------------------------------------------------
-COPY ros2/docker-remote/cyclonedds.xml /etc/cyclonedds.xml
-COPY ros2/docker-remote/entrypoint-vla-inference.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY ros2/docker-remote/entrypoint-rosbridge.sh /entrypoint.sh
+COPY ros2/docker-remote/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 
 # Create directories for model checkpoints and Tailscale state
 RUN mkdir -p /workspace/models /var/lib/tailscale
@@ -130,13 +111,8 @@ RUN mkdir -p /workspace/models /var/lib/tailscale
 # ----------------------------------------------------------------------------
 # Environment variables
 # ----------------------------------------------------------------------------
-# ROS 2 / DDS configuration
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
-    CYCLONEDDS_URI=/etc/cyclonedds.xml \
-    ROS_DOMAIN_ID=42
-
-# Python path for OpenVLA
-ENV PYTHONPATH="/workspace/vla/src/openvla"
+# Python path for OpenVLA and crane_x7_vla
+ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace"
 
 # CUDA/PyTorch optimization
 ENV CUDA_LAUNCH_BLOCKING=0 \
@@ -150,18 +126,22 @@ ENV TS_AUTHKEY="" \
     TS_STATE_DIR="/var/lib/tailscale" \
     TS_USERSPACE="true"
 
+# rosbridge connection (override at runtime)
+# Uses Tailscale MagicDNS hostname
+ENV ROSBRIDGE_HOST="crane-x7-local" \
+    ROSBRIDGE_PORT="9090"
+
 # VLA configuration (override at runtime)
 ENV VLA_MODEL_PATH="" \
     VLA_TASK_INSTRUCTION="pick up the object" \
     VLA_DEVICE="cuda" \
+    VLA_INFERENCE_RATE="10.0" \
+    VLA_UNNORM_KEY="crane_x7" \
     HF_TOKEN="" \
     HF_HOME="/root/.cache/huggingface"
-
-# Peer IP for CycloneDDS (override at runtime)
-ENV LOCAL_PEER_IP=""
 
 # ----------------------------------------------------------------------------
 # Entrypoint and default command
 # ----------------------------------------------------------------------------
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["ros2", "launch", "crane_x7_vla", "vla_inference_only.launch.py"]
+CMD ["python3", "/workspace/scripts/vla_inference_rosbridge.py"]

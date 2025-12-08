@@ -5,8 +5,20 @@
 """Configuration management for data logger."""
 
 from typing import List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from rclpy.node import Node
+
+
+@dataclass
+class CameraConfig:
+    """Configuration for a single camera."""
+
+    name: str  # "primary", "secondary", "wrist"
+    rgb_topic: str  # RGB image topic
+    camera_info_topic: str  # Camera info topic
+    width: int = 0  # Resize width (0 = original)
+    height: int = 0  # Resize height (0 = original)
+    quality: int = 90  # JPEG quality
 
 
 @dataclass
@@ -23,22 +35,12 @@ class LoggerConfig:
     inter_episode_delay: float
     collection_rate: float
 
-    # Camera settings
-    use_camera: bool
-    use_depth: bool
-    image_width: int
-    image_height: int
-    image_quality: int
-
     # Joint configuration
     arm_joint_names: List[str]
     gripper_joint_names: List[str]
 
     # Topic names
     joint_states_topic: str
-    rgb_image_topic: str
-    depth_image_topic: str
-    camera_info_topic: str
 
     # RLDS (Open X-Embodiment) settings
     dataset_name: str
@@ -58,6 +60,9 @@ class LoggerConfig:
     notify_time_remaining: bool
     time_notification_intervals: List[int]
 
+    # Multiple camera settings
+    cameras: List[CameraConfig] = field(default_factory=list)
+
 
 class ConfigManager:
     """Manages ROS 2 parameters for DataLogger."""
@@ -70,11 +75,6 @@ class ConfigManager:
         node.declare_parameter('auto_start_recording', True)
         node.declare_parameter('inter_episode_delay', 5.0)
         node.declare_parameter('collection_rate', 10.0)
-        node.declare_parameter('use_camera', True)
-        node.declare_parameter('use_depth', False)
-        node.declare_parameter('image_width', 0)
-        node.declare_parameter('image_height', 0)
-        node.declare_parameter('image_quality', 90)
         node.declare_parameter('arm_joint_names', [
             'crane_x7_shoulder_fixed_part_pan_joint',
             'crane_x7_shoulder_revolute_part_tilt_joint',
@@ -86,9 +86,6 @@ class ConfigManager:
         ])
         node.declare_parameter('gripper_joint_names', ['crane_x7_gripper_finger_a_joint'])
         node.declare_parameter('joint_states_topic', '/joint_states')
-        node.declare_parameter('rgb_image_topic', '/camera/color/image_raw')
-        node.declare_parameter('depth_image_topic', '/camera/aligned_depth_to_color/image_raw')
-        node.declare_parameter('camera_info_topic', '/camera/color/camera_info')
         node.declare_parameter('save_format', 'tfrecord')
         # RLDS settings
         node.declare_parameter('dataset_name', 'crane_x7')
@@ -105,27 +102,24 @@ class ConfigManager:
         node.declare_parameter('notify_on_episode_complete', True)
         node.declare_parameter('notify_time_remaining', True)
         node.declare_parameter('time_notification_intervals', [60, 30, 10])
+        # Multiple camera settings
+        node.declare_parameter('camera_names', ['primary'])
 
     @staticmethod
     def load_config(node: Node) -> LoggerConfig:
         """Load configuration from ROS 2 parameters."""
+        # Load camera configurations
+        cameras = ConfigManager._load_camera_configs(node)
+
         return LoggerConfig(
             output_dir=node.get_parameter('output_dir').value,
             episode_length=node.get_parameter('episode_length').value,
             auto_start_recording=node.get_parameter('auto_start_recording').value,
             inter_episode_delay=node.get_parameter('inter_episode_delay').value,
             collection_rate=node.get_parameter('collection_rate').value,
-            use_camera=node.get_parameter('use_camera').value,
-            use_depth=node.get_parameter('use_depth').value,
-            image_width=node.get_parameter('image_width').value,
-            image_height=node.get_parameter('image_height').value,
-            image_quality=node.get_parameter('image_quality').value,
             arm_joint_names=node.get_parameter('arm_joint_names').value,
             gripper_joint_names=node.get_parameter('gripper_joint_names').value,
             joint_states_topic=node.get_parameter('joint_states_topic').value,
-            rgb_image_topic=node.get_parameter('rgb_image_topic').value,
-            depth_image_topic=node.get_parameter('depth_image_topic').value,
-            camera_info_topic=node.get_parameter('camera_info_topic').value,
             save_format=node.get_parameter('save_format').value,
             # RLDS settings
             dataset_name=node.get_parameter('dataset_name').value,
@@ -142,4 +136,41 @@ class ConfigManager:
             notify_on_episode_complete=node.get_parameter('notify_on_episode_complete').value,
             notify_time_remaining=node.get_parameter('notify_time_remaining').value,
             time_notification_intervals=node.get_parameter('time_notification_intervals').value,
+            cameras=cameras,
         )
+
+    @staticmethod
+    def _load_camera_configs(node: Node) -> List[CameraConfig]:
+        """Load camera configurations from ROS 2 parameters."""
+        camera_names = node.get_parameter('camera_names').value
+        if not camera_names:
+            node.get_logger().warning("No cameras configured (camera_names is empty)")
+            return []
+
+        cameras = []
+        for name in camera_names:
+            # Declare parameters for each camera dynamically
+            prefix = f'camera.{name}'
+            node.declare_parameter(f'{prefix}.rgb_topic', '')
+            node.declare_parameter(f'{prefix}.camera_info_topic', '')
+            node.declare_parameter(f'{prefix}.width', 0)
+            node.declare_parameter(f'{prefix}.height', 0)
+            node.declare_parameter(f'{prefix}.quality', 90)
+
+            rgb_topic = node.get_parameter(f'{prefix}.rgb_topic').value
+            if not rgb_topic:
+                node.get_logger().warning(
+                    f"Camera '{name}' has no rgb_topic configured, skipping"
+                )
+                continue
+
+            cameras.append(CameraConfig(
+                name=name,
+                rgb_topic=rgb_topic,
+                camera_info_topic=node.get_parameter(f'{prefix}.camera_info_topic').value,
+                width=node.get_parameter(f'{prefix}.width').value,
+                height=node.get_parameter(f'{prefix}.height').value,
+                quality=node.get_parameter(f'{prefix}.quality').value,
+            ))
+
+        return cameras
