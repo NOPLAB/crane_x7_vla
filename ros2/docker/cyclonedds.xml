@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  SPDX-License-Identifier: MIT
+  SPDX-FileCopyrightText: 2025 nop
+
+  CycloneDDS Unicast Configuration for Remote VLA Inference
+
+  This configuration disables multicast and uses unicast peer discovery.
+  The peer IP is dynamically configured by entrypoint-vla-inference.sh.
+
+  Usage:
+    export CYCLONEDDS_URI=/etc/cyclonedds.xml
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <!-- Use Tailscale interface (userspace networking creates a virtual interface) -->
+        <NetworkInterface autodetermine="true" priority="default" multicast="false" />
+      </Interfaces>
+      <!-- Disable multicast - required for cloud environments like Runpod/Vast.ai -->
+      <AllowMulticast>false</AllowMulticast>
+      <!-- Increase max message size for image data -->
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+    <Discovery>
+      <Peers>
+        <!-- Peer IP will be replaced by entrypoint script using LOCAL_PEER_IP env var -->
+        <Peer Address="__PEER_IP__" />
+      </Peers>
+      <!-- Use auto participant index to avoid port conflicts -->
+      <ParticipantIndex>auto</ParticipantIndex>
+    </Discovery>
+    <Internal>
+      <!-- Increase buffer sizes for image streaming over VPN -->
+      <SocketReceiveBufferSize min="1MB" max="32MB"/>
+      <SocketSendBufferSize min="1MB" max="32MB"/>
+    </Internal>
+  </Domain>
+</CycloneDDS>

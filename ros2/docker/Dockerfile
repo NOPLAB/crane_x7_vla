@@ -46,9 +46,18 @@ COPY ros2/requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
 
+# Install ManiSkill and SAPIEN dependencies
+RUN pip3 install --no-cache-dir \
+    mani-skill>=3.0.0 \
+    sapien \
+    gymnasium>=0.26.0
+
 # Copy OpenVLA/prismatic source code for model loading
 COPY vla/src/openvla /workspace/vla/src/openvla
-ENV PYTHONPATH="/workspace/vla/src/openvla:${PYTHONPATH}"
+
+# Copy ManiSkill CRANE-X7 environment
+COPY sim/src /workspace/sim/src
+ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/sim/src:${PYTHONPATH}"
 
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src
