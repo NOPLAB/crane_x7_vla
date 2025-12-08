@@ -15,6 +15,8 @@ CRANE-X7テレオペ・リーダーモードの統合launchファイル。
   - use_viewer (default: false): カメラビューア(rviz2)を表示
   - output_dir: ログデータの保存先
   - config_file: ロガー設定ファイルのパス
+  - camera_serial (default: ''): プライマリカメラのシリアル番号（空の場合は自動選択）
+  - camera2_serial (default: ''): セカンダリカメラのシリアル番号（空の場合は無効）
 """
 
 import os
@@ -23,7 +25,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, AndSubstitution, NotEqualsSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -74,6 +76,18 @@ def generate_launch_description():
         description='Path to data logger config file'
     )
 
+    declare_camera_serial = DeclareLaunchArgument(
+        'camera_serial',
+        default_value='',
+        description='Primary camera serial number (empty for auto-select)'
+    )
+
+    declare_camera2_serial = DeclareLaunchArgument(
+        'camera2_serial',
+        default_value='',
+        description='Secondary camera serial number (empty to disable)'
+    )
+
     # Include teleop_leader.launch.py from crane_x7_teleop package
     teleop_leader = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -87,7 +101,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # RealSense D435 camera node (conditional)
+    # RealSense D435 primary camera node (conditional)
     realsense_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -98,9 +112,37 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_d435')),
         launch_arguments={
             'camera_namespace': '',
+            'camera_name': 'camera',
             'device_type': 'd435',
-            'pointcloud.enable': 'true',
-            'align_depth.enable': 'true',
+            'serial_no': LaunchConfiguration('camera_serial'),
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'false',
+            'rgb_camera.profile': '640x480x30',
+        }.items()
+    )
+
+    # RealSense D435 secondary camera node (conditional - only if camera2_serial is set)
+    realsense_node2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('realsense2_camera'),
+                'launch', 'rs_launch.py'
+            ])
+        ]),
+        condition=IfCondition(
+            AndSubstitution(
+                LaunchConfiguration('use_d435'),
+                NotEqualsSubstitution(LaunchConfiguration('camera2_serial'), '')
+            )
+        ),
+        launch_arguments={
+            'camera_namespace': '',
+            'camera_name': 'camera2',
+            'device_type': 'd435',
+            'serial_no': LaunchConfiguration('camera2_serial'),
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'false',
+            'rgb_camera.profile': '640x480x30',
         }.items()
     )
 
@@ -141,8 +183,11 @@ def generate_launch_description():
         declare_use_viewer,
         declare_output_dir,
         declare_config_file,
+        declare_camera_serial,
+        declare_camera2_serial,
         teleop_leader,
         realsense_node,
+        realsense_node2,
         data_logger,
         camera_viewer,
     ])

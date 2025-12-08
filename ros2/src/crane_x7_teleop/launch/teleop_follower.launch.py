@@ -11,15 +11,17 @@ CRANE-X7テレオペ・フォロワーモードの統合launchファイル。
   - port_name (default: /dev/ttyUSB0): CRANE-X7 FollowerロボットのUSBポート名
   - use_d435 (default: false): RealSense D435カメラを使用
   - use_viewer (default: false): カメラビューア(rviz2)を表示
+  - camera_serial (default: ''): プライマリカメラのシリアル番号（空の場合は自動選択）
+  - camera2_serial (default: ''): セカンダリカメラのシリアル番号（空の場合は無効）
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, AndSubstitution, NotEqualsSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -42,6 +44,18 @@ def generate_launch_description():
         'use_viewer',
         default_value='false',
         description='Display camera viewer (rviz2)'
+    )
+
+    declare_camera_serial = DeclareLaunchArgument(
+        'camera_serial',
+        default_value='',
+        description='Primary camera serial number (empty for auto-select)'
+    )
+
+    declare_camera2_serial = DeclareLaunchArgument(
+        'camera2_serial',
+        default_value='',
+        description='Secondary camera serial number (empty to disable)'
     )
 
     # Config files
@@ -68,7 +82,7 @@ def generate_launch_description():
         ]
     )
 
-    # RealSense D435 camera node (conditional)
+    # RealSense D435 primary camera node (conditional)
     realsense_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -79,9 +93,37 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_d435')),
         launch_arguments={
             'camera_namespace': '',
+            'camera_name': 'camera',
             'device_type': 'd435',
-            'pointcloud.enable': 'true',
-            'align_depth.enable': 'true',
+            'serial_no': LaunchConfiguration('camera_serial'),
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'false',
+            'rgb_camera.profile': '640x480x30',
+        }.items()
+    )
+
+    # RealSense D435 secondary camera node (conditional - only if camera2_serial is set)
+    realsense_node2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('realsense2_camera'),
+                'launch', 'rs_launch.py'
+            ])
+        ]),
+        condition=IfCondition(
+            AndSubstitution(
+                LaunchConfiguration('use_d435'),
+                NotEqualsSubstitution(LaunchConfiguration('camera2_serial'), '')
+            )
+        ),
+        launch_arguments={
+            'camera_namespace': '',
+            'camera_name': 'camera2',
+            'device_type': 'd435',
+            'serial_no': LaunchConfiguration('camera2_serial'),
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'false',
+            'rgb_camera.profile': '640x480x30',
         }.items()
     )
 
@@ -103,7 +145,10 @@ def generate_launch_description():
         declare_port_name,
         declare_use_d435,
         declare_use_viewer,
+        declare_camera_serial,
+        declare_camera2_serial,
         teleop_hardware,
         realsense_node,
+        realsense_node2,
         camera_viewer,
     ])

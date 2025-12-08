@@ -12,6 +12,8 @@ x-x11-volumes: &x11-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
   - ../src:/workspace/ros2/src:ro
+  - ../../data:/workspace/data:rw
+  - /run/user/1000/pulse:/run/user/1000/pulse:ro
 
 x-vla-volumes: &vla-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -118,7 +120,12 @@ services:
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: ros2 launch crane_x7_log teleop_leader.launch.py use_d435:=${USE_D435:-false} use_viewer:=false
+    command: >
+      ros2 launch crane_x7_log teleop_leader.launch.py
+        use_d435:=${USE_D435:-false}
+        use_viewer:=false
+        camera_serial:='${CAMERA_SERIAL:-}'
+        camera2_serial:='${CAMERA2_SERIAL:-}'
 
   teleop-follower:
     <<: *base
@@ -141,7 +148,12 @@ services:
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command: ros2 launch crane_x7_teleop teleop_follower.launch.py use_d435:=true use_viewer:=true
+    command: >
+      ros2 launch crane_x7_teleop teleop_follower.launch.py
+        use_d435:=true
+        use_viewer:=true
+        camera_serial:='${CAMERA_SERIAL:-}'
+        camera2_serial:='${CAMERA2_SERIAL:-}'
 
   # --------------------------------------------------------------------------
   # Gemini Services

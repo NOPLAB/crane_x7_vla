@@ -4,12 +4,12 @@ data_logger:
     output_dir: "/workspace/data/tfrecord_logs"
 
     # Episode settings
-    episode_length: 600  # Number of steps per episode
+    episode_length: 200  # Number of steps per episode (200 steps @ 10Hz = 20 seconds)
     auto_start_recording: true  # Start recording automatically on launch
     inter_episode_delay: 15.0  # Delay between episodes in seconds (for resetting environment)
 
     # Data collection rate
-    collection_rate: 30.0  # Hz (data collection frequency)
+    collection_rate: 10.0  # Hz (OpenVLA recommends 5-10Hz)
 
     # Joint configuration
     arm_joint_names:
@@ -50,7 +50,7 @@ data_logger:
 
     # Multiple camera settings
     # Camera names define which cameras to use (primary, secondary, wrist)
-    camera_names: ["primary"]
+    camera_names: ["primary", "secondary"]
 
     # Per-camera settings (prefix: camera.<name>.)
     camera.primary.rgb_topic: "/camera/color/image_raw"
@@ -59,10 +59,9 @@ data_logger:
     camera.primary.height: 480
     camera.primary.quality: 90
 
-    # Example: Add a second camera
-    # camera_names: ["primary", "secondary"]
-    # camera.secondary.rgb_topic: "/camera2/color/image_raw"
-    # camera.secondary.camera_info_topic: "/camera2/color/camera_info"
-    # camera.secondary.width: 640
-    # camera.secondary.height: 480
-    # camera.secondary.quality: 90
+    # Secondary camera (e.g., wrist camera or different angle)
+    camera.secondary.rgb_topic: "/camera2/color/image_raw"
+    camera.secondary.camera_info_topic: "/camera2/color/camera_info"
+    camera.secondary.width: 640
+    camera.secondary.height: 480
+    camera.secondary.quality: 90

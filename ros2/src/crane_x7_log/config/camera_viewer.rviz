@@ -1,15 +1,31 @@
 Panels:
   - Class: rviz_common/Displays
     Name: Displays
+    collapsed: true
   - Class: rviz_common/Views
     Name: Views
+    collapsed: true
 Visualization Manager:
   Class: ""
   Displays:
     - Class: rviz_default_plugins/Image
-      Name: Camera Image
+      Name: Primary Camera
       Topic:
         Value: /camera/color/image_raw
+        Depth: 5
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+      Queue Size: 2
+    - Class: rviz_default_plugins/Image
+      Name: Secondary Camera
+      Topic:
+        Value: /camera2/color/image_raw
         Depth: 5
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -34,8 +50,17 @@ Visualization Manager:
       Target Frame: <Fixed Frame>
 Window Geometry:
   Displays:
+    collapsed: true
+  Height: 720
+  Hide Left Dock: true
+  Hide Right Dock: true
+  Primary Camera:
     collapsed: false
-  Height: 600
-  Width: 800
-  X: 0
-  Y: 0
+  Secondary Camera:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000200000000000000000000023efc0100000002fb000000100044006900730070006c006100790073000000003d00000102000000c700fffffffb0000000a00560069006500770073000000014500000138000000a400ffffff000000010000028000000236fc0200000002fc00000000000003c0000001660100001cfa000000000200000002fb000000200050007200690d6d00610072007900200043006100006d006500720061010000000000000001000000a400fffffffb000000240053006500630006f006e0064006100720079002000430061006d00650072006101000000000000000100000a400fffffffc000003c600000158000001360100001cfa000000010200000002fb0000002000500072006900006d006100720079002000430061006d0065007200610100000000ffffffff0000a400fffffffb0000002400530065006300006f006e00640061007200790020004300610006d00650072006101000000000000000100000000ffffffff00000636000002360000000400000004000000080000000800000001000000010000000200000000000000010000000100000002fc00000000000003c0000001240000012400fffffffa000000000100000002fb0000002000500072006900006d00610072007900200043001006d00650072006101000000000000000100000a400fffffffb000000240053006500630006f006e0064006100720079002000430061006d006500720061010000000000000001000000a400ffffff
+  Views:
+    collapsed: true
+  Width: 1280
+  X: 100
+  Y: 100
