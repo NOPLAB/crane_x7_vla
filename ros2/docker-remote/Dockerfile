@@ -23,7 +23,7 @@
 #     -v /path/to/models:/workspace/models:ro \
 #     crane_x7_vla-rosbridge
 
-ARG CUDA_VERSION=12.4.1
+ARG CUDA_VERSION=12.9.1
 
 # ============================================================================
 # Base Stage: CUDA + Python + Tailscale
