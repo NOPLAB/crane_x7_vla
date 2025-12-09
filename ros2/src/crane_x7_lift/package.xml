@@ -4,9 +4,9 @@
 
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>crane_x7_sim_maniskill</name>
-  <version>0.0.0</version>
-  <description>ManiSkill simulation package for CRANE-X7 VLA inference and data collection</description>
+  <name>crane_x7_lift</name>
+  <version>0.1.0</version>
+  <description>Unified simulator abstraction (lift) for CRANE-X7 VLA inference and data collection</description>
   <maintainer email="noplab90@gmail.com">nop</maintainer>
   <author email="noplab90@gmail.com">nop</author>
   <license>MIT</license>

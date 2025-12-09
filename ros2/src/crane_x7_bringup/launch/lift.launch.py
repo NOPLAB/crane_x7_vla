@@ -3,15 +3,17 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-ManiSkillシミュレーションのbringup launchファイル。
+Liftシミュレーションのbringup launchファイル。
 
-crane_x7_sim_maniskill/sim_only.launch.pyをラップする。
+crane_x7_lift/sim.launch.pyをラップする。
 
 引数:
-  - sim_backend (default: gpu): シミュレーションバックエンド
+  - simulator (default: maniskill): シミュレータバックエンド
+  - backend (default: gpu): シミュレーションバックエンド
   - sim_rate (default: 30.0): シミュレーションレート
   - env_id (default: PickPlace-CRANE-X7): 環境ID
   - auto_reset (default: true): エピソード終了時の自動リセット
+  - render_mode (default: rgb_array): レンダリングモード
 """
 
 from launch import LaunchDescription
@@ -22,9 +24,15 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Launch ManiSkill simulation."""
-    declare_sim_backend = DeclareLaunchArgument(
-        'sim_backend',
+    """Launch lift simulation."""
+    declare_simulator = DeclareLaunchArgument(
+        'simulator',
+        default_value='maniskill',
+        description='Simulator backend (maniskill, genesis, isaacsim)'
+    )
+
+    declare_backend = DeclareLaunchArgument(
+        'backend',
         default_value='gpu',
         description='Simulation backend (cpu or gpu)'
     )
@@ -38,7 +46,7 @@ def generate_launch_description():
     declare_env_id = DeclareLaunchArgument(
         'env_id',
         default_value='PickPlace-CRANE-X7',
-        description='ManiSkill environment ID'
+        description='Environment ID'
     )
 
     declare_auto_reset = DeclareLaunchArgument(
@@ -53,16 +61,17 @@ def generate_launch_description():
         description='Render mode (rgb_array, human, none)'
     )
 
-    maniskill_sim = IncludeLaunchDescription(
+    lift_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('crane_x7_sim_maniskill'),
+                FindPackageShare('crane_x7_lift'),
                 'launch',
-                'sim_only.launch.py'
+                'sim.launch.py'
             ])
         ]),
         launch_arguments={
-            'sim_backend': LaunchConfiguration('sim_backend'),
+            'simulator': LaunchConfiguration('simulator'),
+            'backend': LaunchConfiguration('backend'),
             'sim_rate': LaunchConfiguration('sim_rate'),
             'env_id': LaunchConfiguration('env_id'),
             'auto_reset': LaunchConfiguration('auto_reset'),
@@ -71,10 +80,11 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        declare_sim_backend,
+        declare_simulator,
+        declare_backend,
         declare_sim_rate,
         declare_env_id,
         declare_auto_reset,
         declare_render_mode,
-        maniskill_sim,
+        lift_sim,
     ])

@@ -3,13 +3,14 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-ManiSkillシミュレーション + VLA推論のbringup launchファイル。
+Liftシミュレーション + VLA推論のbringup launchファイル。
 
 引数:
   - model_path: VLAモデルのパス
   - task_instruction (default: 'pick up the object'): タスク指示
   - device (default: cuda): 推論デバイス
-  - sim_backend (default: gpu): シミュレーションバックエンド
+  - simulator (default: maniskill): シミュレータバックエンド
+  - backend (default: gpu): シミュレーションバックエンド
 """
 
 import os
@@ -23,10 +24,10 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch ManiSkill simulation with VLA inference."""
+    """Launch lift simulation with VLA inference."""
 
-    pkg_dir = get_package_share_directory('crane_x7_sim_maniskill')
-    config_file = os.path.join(pkg_dir, 'config', 'maniskill_config.yaml')
+    pkg_dir = get_package_share_directory('crane_x7_lift')
+    config_file = os.path.join(pkg_dir, 'config', 'lift_config.yaml')
 
     declare_model_path = DeclareLaunchArgument(
         'model_path',
@@ -46,21 +47,28 @@ def generate_launch_description():
         description='Device for VLA inference'
     )
 
-    declare_sim_backend = DeclareLaunchArgument(
-        'sim_backend',
+    declare_simulator = DeclareLaunchArgument(
+        'simulator',
+        default_value='maniskill',
+        description='Simulator backend (maniskill, genesis, isaacsim)'
+    )
+
+    declare_backend = DeclareLaunchArgument(
+        'backend',
         default_value='gpu',
         description='Simulation backend (cpu or gpu)'
     )
 
-    maniskill_sim_node = Node(
-        package='crane_x7_sim_maniskill',
-        executable='maniskill_sim_node',
-        name='maniskill_sim_node',
+    lift_sim_node = Node(
+        package='crane_x7_lift',
+        executable='lift_sim_node',
+        name='lift_sim_node',
         output='screen',
         parameters=[
             config_file,
             {
-                'sim_backend': LaunchConfiguration('sim_backend'),
+                'simulator': LaunchConfiguration('simulator'),
+                'backend': LaunchConfiguration('backend'),
             }
         ]
     )
@@ -84,7 +92,8 @@ def generate_launch_description():
         declare_model_path,
         declare_task_instruction,
         declare_device,
-        declare_sim_backend,
-        maniskill_sim_node,
+        declare_simulator,
+        declare_backend,
+        lift_sim_node,
         vla_control,
     ])

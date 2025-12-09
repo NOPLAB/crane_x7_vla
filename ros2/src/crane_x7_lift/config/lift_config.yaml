@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
+lift_sim_node:
+  ros__parameters:
+    # Simulator selection
+    simulator: "maniskill"  # "maniskill" | "genesis" | "isaacsim"
+
+    # Environment settings
+    env_id: "PickPlace-CRANE-X7"
+    backend: "gpu"  # "cpu" | "gpu"
+    render_mode: "rgb_array"  # "rgb_array" | "human" | "none"
+    control_mode: "pd_joint_pos"  # "pd_joint_pos" | "pd_joint_delta_pos"
+
+    # Simulation settings
+    sim_rate: 30.0  # Hz
+    max_episode_steps: 200
+    auto_reset: true
+    robot_init_qpos_noise: 0.02
+
+    # Topic names (backward compatible with crane_x7_sim_maniskill)
+    image_topic: "/camera/color/image_raw"
+    joint_states_topic: "/joint_states"
+    action_topic: "/vla/predicted_action"
+    episode_done_topic: "/lift/episode_done"

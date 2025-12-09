@@ -1,27 +1,30 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
+"""Pick and place environment for CRANE-X7."""
+
 from typing import Any, Dict, Union
 
 import numpy as np
 import sapien
 import torch
-import torch.random
 
-from mani_skill.agents.multi_agent import MultiAgent
-from crane_x7.crane_x7 import CraneX7
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.sensors.camera import CameraConfig
-from mani_skill.utils import common, sapien_utils
+from mani_skill.utils import sapien_utils
 from mani_skill.utils.building import actors
 from mani_skill.utils.registration import register_env
 from mani_skill.utils.scene_builder.table import TableSceneBuilder
 from mani_skill.utils.structs import Pose
 from mani_skill.utils.structs.types import GPUMemoryConfig, SimConfig
 
+from maniskill.agent import CraneX7
+
 
 @register_env("PickPlace-CRANE-X7", max_episode_steps=200)
 class PickPlace(BaseEnv):
+    """Pick and place task environment for CRANE-X7."""
+
     SUPPORTED_ROBOTS = ["CRANE-X7"]
     agent: Union[CraneX7]
 
@@ -106,7 +109,9 @@ class PickPlace(BaseEnv):
                 self.cube_spawn_center, dtype=torch.float32, device=self.device
             ).repeat(batch, 1)
             if np.any(self.cube_spawn_jitter):
-                jitter = (torch.rand((batch, 2), device=self.device) * 2 - 1) * torch.as_tensor(
+                jitter = (
+                    torch.rand((batch, 2), device=self.device) * 2 - 1
+                ) * torch.as_tensor(
                     self.cube_spawn_jitter, dtype=torch.float32, device=self.device
                 )
                 xy = xy + jitter

@@ -38,30 +38,32 @@ docker compose --profile vla up
 # VLA推論（シミュレーション）
 docker compose --profile vla-sim up
 
-# ManiSkillシミュレーション（デフォルト: CPU、レンダリングなし）
-docker compose --profile maniskill up
+# Liftシミュレーション（統一シミュレータ抽象化）
+docker compose --profile lift up
 
-# ManiSkill + VLA推論
-docker compose --profile maniskill-vla up
+# Lift + VLA推論
+docker compose --profile lift-vla up
 
-# ManiSkill + データロガー
-docker compose --profile maniskill-logger up
+# Lift + データロガー
+docker compose --profile lift-logger up
 ```
 
-### ManiSkill環境変数
+### Lift環境変数
 
 `.env`で以下を設定可能:
 
 | 変数 | 説明 | デフォルト |
 |------|------|-----------|
-| `MANISKILL_BACKEND` | シミュレーションバックエンド（`gpu`/`cpu`） | `cpu` |
-| `MANISKILL_RENDER_MODE` | レンダリングモード（`rgb_array`/`human`/`none`） | `none` |
+| `LIFT_SIMULATOR` | シミュレータ（`maniskill`/`genesis`/`isaacsim`） | `maniskill` |
+| `LIFT_BACKEND` | シミュレーションバックエンド（`gpu`/`cpu`） | `cpu` |
+| `LIFT_RENDER_MODE` | レンダリングモード（`rgb_array`/`human`/`none`） | `none` |
 
 GPU使用時:
 ```bash
 # .envに設定
-MANISKILL_BACKEND=gpu
-MANISKILL_RENDER_MODE=rgb_array
+LIFT_SIMULATOR=maniskill
+LIFT_BACKEND=gpu
+LIFT_RENDER_MODE=rgb_array
 ```
 
 **注意**: `rgb_array`と`human`モードはGPU必須。GPUなし環境では`cpu` + `none`を使用。
@@ -154,6 +156,7 @@ crane_x7_vla/
 │       ├── crane_x7_vla/          # VLA推論ノード
 │       ├── crane_x7_gemini/       # Gemini API統合
 │       ├── crane_x7_sim_gazebo/   # カスタムGazebo環境
+│       ├── crane_x7_lift/         # 統一シミュレータROS 2インターフェース
 │       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
 │   ├── Dockerfile.openvla         # OpenVLA用Docker
@@ -163,10 +166,13 @@ crane_x7_vla/
 │       ├── crane_x7_vla/          # 統一トレーニングCLI
 │       ├── openvla/               # OpenVLAサブモジュール
 │       └── openpi/                # OpenPIサブモジュール
-├── sim/                           # ManiSkillシミュレータ
+├── sim/                           # シミュレータ（lift抽象化）
 │   └── src/
-│       ├── crane_x7/              # ロボット定義（MJCF）
-│       └── environments/          # タスク環境
+│       ├── lift/                  # 統一シミュレータインターフェース
+│       ├── robot/                 # 共有ロボットアセット（MJCF、メッシュ）
+│       ├── maniskill/             # ManiSkill実装
+│       ├── genesis/               # Genesis実装（スケルトン）
+│       └── isaacsim/              # Isaac Sim実装（スケルトン）
 ├── lerobot/                       # LeRobot統合
 │   ├── lerobot_robot_crane_x7/    # Robotプラグイン
 │   ├── lerobot_teleoperator_crane_x7/  # Teleoperatorプラグイン
@@ -216,9 +222,9 @@ OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメ�
 | `vla_sim.launch.py` | VLA推論（Gazebo） |
 | `rosbridge_real.launch.py` | 実機 + rosbridge（リモートVLA用） |
 | `rosbridge_sim.launch.py` | Gazebo + rosbridge（リモートVLA用） |
-| `maniskill.launch.py` | ManiSkillシミュレーション |
-| `maniskill_vla.launch.py` | ManiSkill + VLA推論 |
-| `maniskill_logger.launch.py` | ManiSkill + データロガー |
+| `lift.launch.py` | Liftシミュレーション（統一抽象化） |
+| `lift_vla.launch.py` | Lift + VLA推論 |
+| `lift_logger.launch.py` | Lift + データロガー |
 
 使用例:
 ```bash
@@ -239,7 +245,7 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 | crane_x7_vla | `vla_inference_only.launch.py` | 推論ノードのみ（リモートGPU用） |
 | crane_x7_gemini | `trajectory_planner.launch.py` | Geminiプランナーノード |
 | crane_x7_sim_gazebo | `pick_and_place.launch.py` | Gazebo環境 |
-| crane_x7_sim_maniskill | `sim_only.launch.py` | ManiSkill環境 |
+| crane_x7_lift | `sim.launch.py` | Lift統一シミュレータ |
 
 ## ライセンス
 
@@ -250,7 +256,7 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 ## 参考資料
 
 - [vla/README.md](vla/README.md) - VLAファインチューニング詳細
-- [sim/README.md](sim/README.md) - ManiSkillシミュレータ
+- [sim/README.md](sim/README.md) - Liftシミュレータ抽象化
 - [slurm/README.md](slurm/README.md) - Slurmジョブ投下ツール
 - [lerobot/README.md](lerobot/README.md) - LeRobot統合
 - [ros2/src/crane_x7_gemini/README.md](ros2/src/crane_x7_gemini/README.md) - Gemini API統合

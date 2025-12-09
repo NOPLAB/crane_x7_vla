@@ -1,68 +1,46 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-import os
+"""CRANE-X7 ManiSkill agent definition."""
+
 import sapien
 import numpy as np
 from mani_skill.agents.base_agent import BaseAgent, Keyframe
-from mani_skill.agents.controllers import *
+from mani_skill.agents.controllers import (
+    PDJointPosControllerConfig,
+    PDJointPosMimicControllerConfig,
+    deepcopy_dict,
+)
 from mani_skill.agents.registration import register_agent
 from mani_skill.sensors.camera import CameraConfig
 
-# Get the directory containing this file
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+from robot.crane_x7 import CraneX7Config, get_mjcf_path
 
 
 @register_agent()
 class CraneX7(BaseAgent):
+    """CRANE-X7 robot agent for ManiSkill."""
+
     uid = "CRANE-X7"
-    mjcf_path = os.path.join(_THIS_DIR, "crane_x7.xml")
+    mjcf_path = get_mjcf_path()
 
     keyframes = dict(
         rest=Keyframe(
-            qpos=np.array(
-                [0.0, np.pi / 8, 0, -np.pi * 5 / 8, 0, -np.pi / 4, np.pi / 2, 0.0, 0.0]
-            ),
+            qpos=CraneX7Config.REST_QPOS,
             pose=sapien.Pose(),
         )
     )
 
-    arm_joint_names = [
-        "crane_x7_shoulder_fixed_part_pan_joint",
-        "crane_x7_shoulder_revolute_part_tilt_joint",
-        "crane_x7_upper_arm_revolute_part_twist_joint",
-        "crane_x7_upper_arm_revolute_part_rotate_joint",
-        "crane_x7_lower_arm_fixed_part_joint",
-        "crane_x7_lower_arm_revolute_part_joint",
-        "crane_x7_wrist_joint",
-    ]
-    gripper_joint_names = [
-        "crane_x7_gripper_finger_a_joint",
-        "crane_x7_gripper_finger_b_joint",
-    ]
+    arm_joint_names = CraneX7Config.ARM_JOINT_NAMES
+    gripper_joint_names = CraneX7Config.GRIPPER_JOINT_NAMES
 
-    #素材について
-    # urdf_config = dict(
-    #     _materials=dict(
-    #         gripper=dict(static_friction=2.0, dynamic_friction=2.0, restitution=0.0)
-    #     ),
-    #     link=dict(
-    #         panda_leftfinger=dict(
-    #             material="gripper", patch_radius=0.1, min_patch_radius=0.1
-    #         ),
-    #         panda_rightfinger=dict(
-    #             material="gripper", patch_radius=0.1, min_patch_radius=0.1
-    #         ),
-    #     ),
-    # )
+    arm_stiffness = CraneX7Config.ARM_STIFFNESS
+    arm_damping = CraneX7Config.ARM_DAMPING
+    arm_force_limit = CraneX7Config.ARM_FORCE_LIMIT
 
-    arm_stiffness = 1e3
-    arm_damping = 1e2
-    arm_force_limit = 10000
-
-    gripper_stiffness = 1e3
-    gripper_damping = 1e2
-    gripper_force_limit = 10000
+    gripper_stiffness = CraneX7Config.GRIPPER_STIFFNESS
+    gripper_damping = CraneX7Config.GRIPPER_DAMPING
+    gripper_force_limit = CraneX7Config.GRIPPER_FORCE_LIMIT
 
     @property
     def _controller_configs(self):
@@ -104,15 +82,12 @@ class CraneX7(BaseAgent):
             pd_joint_delta_pos=dict(
                 arm=arm_pd_joint_delta_pos, gripper=gripper_pd_joint_pos
             ),
-            pd_joint_pos=dict(
-                arm=arm_pd_joint_pos, gripper=gripper_pd_joint_pos
-            ),
+            pd_joint_pos=dict(arm=arm_pd_joint_pos, gripper=gripper_pd_joint_pos),
         )
         return deepcopy_dict(controller_configs)
 
     @property
     def _sensor_configs(self):
-
         p = [0.0, 0.0445, 0.034]
         q = [np.sqrt(0.25), -np.sqrt(0.25), -np.sqrt(0.25), -np.sqrt(0.25)]
 

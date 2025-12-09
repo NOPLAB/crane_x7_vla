@@ -23,7 +23,7 @@ x-vla-volumes: &vla-volumes
   - ../src:/workspace/ros2/src:ro
   - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
 
-x-maniskill-volumes: &maniskill-volumes
+x-lift-volumes: &lift-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
   - ../../sim/src:/workspace/sim/src:ro
@@ -48,12 +48,13 @@ x-vla-env: &vla-env
   VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION:-pick up the object}
   VLA_DEVICE: ${VLA_DEVICE:-cuda}
 
-x-maniskill-env: &maniskill-env
+x-lift-env: &lift-env
   DISPLAY: ${DISPLAY}
   PULSE_SERVER: unix:/run/user/1000/pulse/native
   TF_CPP_MIN_LOG_LEVEL: "2"
-  MANISKILL_BACKEND: ${MANISKILL_BACKEND:-cpu}
-  MANISKILL_RENDER_MODE: ${MANISKILL_RENDER_MODE:-none}
+  LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
+  LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
+  LIFT_RENDER_MODE: ${LIFT_RENDER_MODE:-none}
 
 # Group configurations
 x-real-groups: &real-groups
@@ -227,42 +228,48 @@ services:
         device:='${VLA_DEVICE:-cuda}'
 
   # --------------------------------------------------------------------------
-  # ManiSkill Simulation Services
+  # Lift Simulation Services (unified simulator abstraction)
   # --------------------------------------------------------------------------
-  maniskill:
+  lift:
     <<: *base
-    profiles: [maniskill]
-    volumes: *maniskill-volumes
+    profiles: [lift]
+    volumes: *lift-volumes
     environment:
-      <<: *maniskill-env
+      <<: *lift-env
     command: >
-      ros2 launch crane_x7_bringup maniskill.launch.py
-        sim_backend:='${MANISKILL_BACKEND:-cpu}'
-        render_mode:='${MANISKILL_RENDER_MODE:-none}'
+      ros2 launch crane_x7_bringup lift.launch.py
+        simulator:='${LIFT_SIMULATOR:-maniskill}'
+        backend:='${LIFT_BACKEND:-cpu}'
+        render_mode:='${LIFT_RENDER_MODE:-none}'
 
-  maniskill-vla:
+  lift-vla:
     <<: *base
-    profiles: [maniskill-vla]
-    volumes: *maniskill-volumes
+    profiles: [lift-vla]
+    volumes: *lift-volumes
     environment:
       <<: *vla-env
+      LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
     deploy:
       <<: *gpu-deploy
     command: >
-      ros2 launch crane_x7_bringup maniskill_vla.launch.py
+      ros2 launch crane_x7_bringup lift_vla.launch.py
+        simulator:='${LIFT_SIMULATOR:-maniskill}'
         model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
 
-  maniskill-logger:
+  lift-logger:
     <<: *base
-    profiles: [maniskill-logger]
-    volumes: *maniskill-volumes
+    profiles: [lift-logger]
+    volumes: *lift-volumes
     environment:
-      <<: *base-env
+      <<: *lift-env
     deploy:
       <<: *gpu-deploy
-    command: ros2 launch crane_x7_bringup maniskill_logger.launch.py
+    command: >
+      ros2 launch crane_x7_bringup lift_logger.launch.py
+        simulator:='${LIFT_SIMULATOR:-maniskill}'
+        backend:='${LIFT_BACKEND:-gpu}'
 
 # ============================================================================
 # Networks

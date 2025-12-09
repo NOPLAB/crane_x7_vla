@@ -3,12 +3,13 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-ManiSkillシミュレーション + データロガーのbringup launchファイル。
+Liftシミュレーション + データロガーのbringup launchファイル。
 
 引数:
   - output_dir (default: /workspace/data/tfrecord_logs): ログ保存先
   - episode_length (default: 200): エピソードあたりのステップ数
-  - sim_backend (default: gpu): シミュレーションバックエンド
+  - simulator (default: maniskill): シミュレータバックエンド
+  - backend (default: gpu): シミュレーションバックエンド
 """
 
 import os
@@ -20,12 +21,12 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch ManiSkill simulation with data logger."""
+    """Launch lift simulation with data logger."""
 
-    maniskill_pkg = get_package_share_directory('crane_x7_sim_maniskill')
+    lift_pkg = get_package_share_directory('crane_x7_lift')
     log_pkg = get_package_share_directory('crane_x7_log')
 
-    maniskill_config = os.path.join(maniskill_pkg, 'config', 'maniskill_config.yaml')
+    lift_config = os.path.join(lift_pkg, 'config', 'lift_config.yaml')
     logger_config = os.path.join(log_pkg, 'config', 'logger_config.yaml')
 
     declare_output_dir = DeclareLaunchArgument(
@@ -40,22 +41,29 @@ def generate_launch_description():
         description='Steps per episode'
     )
 
-    declare_sim_backend = DeclareLaunchArgument(
-        'sim_backend',
+    declare_simulator = DeclareLaunchArgument(
+        'simulator',
+        default_value='maniskill',
+        description='Simulator backend (maniskill, genesis, isaacsim)'
+    )
+
+    declare_backend = DeclareLaunchArgument(
+        'backend',
         default_value='gpu',
         description='Simulation backend (cpu or gpu)'
     )
 
-    maniskill_sim_node = Node(
-        package='crane_x7_sim_maniskill',
-        executable='maniskill_sim_node',
-        name='maniskill_sim_node',
+    lift_sim_node = Node(
+        package='crane_x7_lift',
+        executable='lift_sim_node',
+        name='lift_sim_node',
         output='screen',
         parameters=[
-            maniskill_config,
+            lift_config,
             {
                 'auto_reset': False,
-                'sim_backend': LaunchConfiguration('sim_backend'),
+                'simulator': LaunchConfiguration('simulator'),
+                'backend': LaunchConfiguration('backend'),
             }
         ]
     )
@@ -77,7 +85,8 @@ def generate_launch_description():
     return LaunchDescription([
         declare_output_dir,
         declare_episode_length,
-        declare_sim_backend,
-        maniskill_sim_node,
+        declare_simulator,
+        declare_backend,
+        lift_sim_node,
         data_logger_node,
     ])
