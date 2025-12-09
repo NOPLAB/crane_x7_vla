@@ -46,18 +46,11 @@ RUN pip3 install --no-cache-dir \
     torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 
 # Install Python dependencies
+# Note: numpy<2.0 constraint is specified first in requirements.txt to prevent
+# other packages from installing numpy>=2.0 (cv_bridge requires NumPy 1.x)
 COPY ros2/requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
-
-# Install ManiSkill and SAPIEN dependencies
-# Note: These may try to install numpy>=2.0, so we force reinstall numpy<2.0 afterwards
-# for cv_bridge compatibility (cv_bridge is compiled with NumPy 1.x)
-RUN pip3 install --no-cache-dir \
-    mani-skill>=3.0.0 \
-    sapien \
-    gymnasium>=0.26.0 && \
-    pip3 install --no-cache-dir --force-reinstall "numpy>=1.24.0,<2.0.0"
 
 # Copy OpenVLA/prismatic source code for model loading
 COPY vla/src/openvla /workspace/vla/src/openvla

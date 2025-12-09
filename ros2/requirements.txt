@@ -4,11 +4,12 @@
 # ROS 2 + VLA inference dependencies for CRANE-X7
 # Note: PyTorch is installed separately in Dockerfile with specific CUDA version
 
+# NumPy (must be <2.0 for cv_bridge/TensorFlow compatibility)
+# This constraint must come first to prevent other packages from installing numpy>=2.0
+numpy>=1.24.0,<2.0.0
+
 # TensorFlow (for data processing)
 tensorflow==2.20.0
-
-# NumPy (must be <2.0 for TensorFlow compatibility)
-numpy>=1.24.0,<2.0.0
 
 # Transformers stack (must match vla/requirements-openvla.txt)
 transformers==4.57.3
@@ -24,3 +25,8 @@ opencv-python-headless>=4.8.0
 
 # Tensor operations (used by some model components)
 einops
+
+# ManiSkill simulation
+mani-skill>=3.0.0
+sapien
+gymnasium>=0.26.0

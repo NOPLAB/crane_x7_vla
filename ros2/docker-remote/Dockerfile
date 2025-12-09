@@ -74,7 +74,9 @@ RUN pip3 install \
 # ----------------------------------------------------------------------------
 # Install VLA inference dependencies
 # ----------------------------------------------------------------------------
+# Uses shared requirements.txt (excludes TensorFlow, ManiSkill, etc. not needed here)
 # roslibpy for rosbridge communication (no ROS 2 required)
+COPY ros2/requirements.txt /tmp/requirements.txt
 RUN pip3 install \
     roslibpy \
     transformers \
