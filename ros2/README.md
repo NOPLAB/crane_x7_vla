@@ -1,20 +1,22 @@
 # CRANE-X7 ROS 2
 
-CRANE-X7ロボットアームのROS 2 Humbleベース制御環境。実機制御、Gazeboシミュレーション、VLA推論、Tailscale経由のリモートGPU推論をサポート。
+CRANE-X7ロボットアームのROS 2 Humbleベース制御環境。実機制御、Gazeboシミュレーション、Liftシミュレーション、VLA推論をサポート。
 
 ## 目次
 
 - [クイックスタート](#クイックスタート)
 - [環境設定](#環境設定)
-- [Docker（ローカル実行）](#dockerローカル実行)
-- [Docker-Remote（リモート推論）](#docker-remoteリモート推論)
+- [利用可能なプロファイル](#利用可能なプロファイル)
+- [使用例](#使用例)
 - [ROS 2パッケージ](#ros-2パッケージ)
+- [ディレクトリ構成](#ディレクトリ構成)
 - [トラブルシューティング](#トラブルシューティング)
 
 ## クイックスタート
 
 ```bash
-cd ros2/docker
+# プロジェクトルートから実行
+cd crane_x7_vla
 
 # 環境設定ファイルの作成
 cp .env.template .env
@@ -29,7 +31,7 @@ docker compose --profile sim up
 
 ## 環境設定
 
-### docker/.env
+### .env（プロジェクトルート）
 
 ```bash
 # ディスプレイ設定
@@ -57,30 +59,24 @@ HF_CACHE_DIR=${HOME}/.cache/huggingface  # モデルキャッシュ
 VLA_MODEL_PATH=                     # ファインチューニング済みモデルパス
 VLA_TASK_INSTRUCTION=               # タスク指示（自然言語）
 VLA_DEVICE=cuda                     # cuda / cpu
+
+# Liftシミュレーション（統一シミュレータ抽象化）
+LIFT_SIMULATOR=maniskill            # maniskill / genesis
+LIFT_BACKEND=cpu                    # gpu / cpu
+LIFT_RENDER_MODE=none               # rgb_array / human / none
 ```
 
-### docker-remote/.env（リモート推論用）
+### Lift環境変数
 
-```bash
-# Tailscale VPN
-TS_AUTHKEY=tskey-auth-xxxxx         # 必須: Tailscale認証キー
-TS_USERSPACE=false                  # TUNデバイス使用
+| 変数 | 説明 | デフォルト |
+|------|------|-----------|
+| `LIFT_SIMULATOR` | シミュレータ（`maniskill`/`genesis`） | `maniskill` |
+| `LIFT_BACKEND` | バックエンド（`gpu`/`cpu`） | `cpu` |
+| `LIFT_RENDER_MODE` | レンダリング（`rgb_array`/`human`/`none`） | `none` |
 
-# rosbridge WebSocket
-ROSBRIDGE_PORT=9090                 # WebSocketポート
-```
+**注意**: `rgb_array`と`human`モードはGPU必須。GPUなし環境では`cpu` + `none`を使用。
 
-## Docker（ローカル実行）
-
-ローカルマシンでの実行。GPUが搭載されている場合はVLA推論もローカルで実行可能。
-
-### ディレクトリ
-
-```bash
-cd ros2/docker
-```
-
-### 利用可能なプロファイル
+## 利用可能なプロファイル
 
 | プロファイル | 説明 | コマンド |
 |-------------|------|---------|
@@ -92,9 +88,16 @@ cd ros2/docker
 | `gemini-sim` | シミュレーション + Gemini | `docker compose --profile gemini-sim up` |
 | `vla` | 実機 + VLA推論（GPU） | `docker compose --profile vla up` |
 | `vla-sim` | シミュレーション + VLA推論 | `docker compose --profile vla-sim up` |
-| `maniskill` | ManiSkillシミュレーション | `docker compose --profile maniskill up` |
-| `maniskill-vla` | ManiSkill + VLA推論 | `docker compose --profile maniskill-vla up` |
-| `maniskill-logger` | ManiSkill + データロギング | `docker compose --profile maniskill-logger up` |
+| `lift` | Liftシミュレーション | `docker compose --profile lift up` |
+| `lift-vla` | Lift + VLA推論 | `docker compose --profile lift-vla up` |
+| `lift-logger` | Lift + データロギング | `docker compose --profile lift-logger up` |
+| `rosbridge` | rosbridgeサーバー（実機） | `docker compose --profile rosbridge up` |
+| `rosbridge-sim` | rosbridgeサーバー（シミュ） | `docker compose --profile rosbridge-sim up` |
+| `remote-inference` | リモートGPU推論 | `docker compose --profile remote-inference up` |
+| `lerobot` | LeRobot開発シェル | `docker compose --profile lerobot up` |
+| `lerobot-train` | LeRobotトレーニング | `docker compose --profile lerobot-train up` |
+
+## 使用例
 
 ### 実機制御
 
@@ -170,131 +173,23 @@ docker compose --profile gemini up
 docker compose --profile gemini-sim up
 ```
 
-## Docker-Remote（リモート推論）
+### Liftシミュレーション
 
-TailscaleVPN経由でリモートGPUサーバーのVLA推論を利用。ロボット側にGPUがなくても高性能な推論が可能。
-
-### アーキテクチャ
-
-```
-┌─────────────────────────────────────┐
-│         リモートGPUサーバー           │
-│  ┌─────────────────────────────┐   │
-│  │   VLA推論コンテナ            │   │
-│  │   - OpenVLA/OpenPI          │   │
-│  │   - roslibpy (WebSocket)    │   │
-│  └──────────┬──────────────────┘   │
-│             │ Tailscale VPN         │
-└─────────────┼───────────────────────┘
-              │ TCP:9090 (rosbridge)
-              │
-┌─────────────┼───────────────────────┐
-│             ▼                       │
-│  ┌─────────────────────────────┐   │
-│  │   ローカルロボット側          │   │
-│  │   - Tailscale sidecar       │   │
-│  │   - rosbridge_server        │   │
-│  │   - CRANE-X7制御             │   │
-│  │   - RealSense D435          │   │
-│  └─────────────────────────────┘   │
-│            ロボット側マシン          │
-└─────────────────────────────────────┘
-```
-
-### セットアップ
-
-#### 1. Tailscale認証キーの取得
-
-1. [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys) にアクセス
-2. "Generate auth key" をクリック
-3. "Reusable" と "Ephemeral" にチェック
-4. 生成されたキーを控える
-
-#### 2. ローカル側（ロボット）の設定
+統一シミュレータ抽象化レイヤー（ManiSkill、Genesis対応）。
 
 ```bash
-cd ros2/docker-remote
+# ManiSkill（デフォルト）
+docker compose --profile lift up
 
-# 環境設定
-cp .env.template .env
+# Genesisシミュレータ使用
+LIFT_SIMULATOR=genesis LIFT_BACKEND=gpu docker compose --profile lift up
 
-# .envを編集
-# TS_AUTHKEY=tskey-auth-xxxxx  # Tailscale認証キー
-# USB_DEVICE=/dev/ttyUSB0
-# ROSBRIDGE_PORT=9090
+# Lift + VLA推論
+docker compose --profile lift-vla up
+
+# Lift + データロギング
+docker compose --profile lift-logger up
 ```
-
-#### 3. リモートGPUサーバーの設定
-
-リモートサーバーでVLA推論コンテナを準備：
-
-```bash
-# vla/ディレクトリでDockerイメージをビルド
-cd vla
-docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
-```
-
-### 実行手順
-
-#### ステップ1: ローカル側でrosbridge起動
-
-```bash
-cd ros2/docker-remote
-
-# 実機 + rosbridge
-docker compose --profile real up
-
-# または、シミュレーション + rosbridge
-docker compose --profile sim up
-
-# RVizビューア付き
-docker compose --profile real-viewer up
-docker compose --profile sim-viewer up
-```
-
-起動後、Tailscaleネットワークに `crane-x7-local` として参加。
-
-#### ステップ2: リモートGPUサーバーでVLA推論
-
-```bash
-# リモートサーバーで実行
-docker run --gpus all -it --rm \
-  -e TS_AUTHKEY=tskey-auth-xxxxx \
-  -e ROSBRIDGE_HOST=crane-x7-local \
-  -e ROSBRIDGE_PORT=9090 \
-  -e VLA_MODEL_PATH=openvla/openvla-7b \
-  -e VLA_TASK_INSTRUCTION="pick up the red block" \
-  -e VLA_DEVICE=cuda \
-  -e HF_TOKEN=hf_xxxxx \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  --cap-add NET_ADMIN \
-  --device /dev/net/tun \
-  crane_x7_vla_openvla \
-  python -m crane_x7_vla.inference.rosbridge_client
-```
-
-### プロファイル一覧（docker-remote）
-
-| プロファイル | 説明 | コマンド |
-|-------------|------|---------|
-| `real` | 実機 + rosbridge | `docker compose --profile real up` |
-| `real-viewer` | 実機 + rosbridge + RViz | `docker compose --profile real-viewer up` |
-| `sim` | シミュレーション + rosbridge | `docker compose --profile sim up` |
-| `sim-viewer` | シミュレーション + rosbridge + RViz | `docker compose --profile sim-viewer up` |
-
-### 通信フロー
-
-1. **画像・関節状態の送信**: ローカル → rosbridge → WebSocket → リモート
-2. **VLA推論実行**: リモートGPUでモデル推論
-3. **アクション受信**: リモート → WebSocket → rosbridge → ローカル
-4. **ロボット制御**: 予測アクションに基づいて軌跡実行
-
-### Tailscaleホスト名
-
-| ホスト名 | 場所 | 役割 |
-|---------|------|------|
-| `crane-x7-local` | ローカル（ロボット側） | rosbridge_server |
-| `crane-x7-remote` | リモートGPUサーバー | VLA推論 |
 
 ## ROS 2パッケージ
 
@@ -314,9 +209,9 @@ docker run --gpus all -it --rm \
 | `vla_sim.launch.py` | VLA推論（Gazebo） |
 | `rosbridge_real.launch.py` | 実機 + rosbridge（リモートVLA用） |
 | `rosbridge_sim.launch.py` | Gazebo + rosbridge（リモートVLA用） |
-| `maniskill.launch.py` | ManiSkillシミュレーション |
-| `maniskill_vla.launch.py` | ManiSkill + VLA推論 |
-| `maniskill_logger.launch.py` | ManiSkill + データロガー |
+| `lift.launch.py` | Liftシミュレーション |
+| `lift_vla.launch.py` | Lift + VLA推論 |
+| `lift_logger.launch.py` | Lift + データロガー |
 
 ```bash
 # 使用例
@@ -390,44 +285,44 @@ Google Gemini Robotics-ER API統合パッケージ。
 |---------------|------|
 | `pick_and_place.launch.py` | Pick & Place環境 |
 
-### crane_x7_sim_maniskill
+### crane_x7_lift
 
-ManiSkillシミュレーション統合パッケージ。
+Liftシミュレーション統合パッケージ（統一シミュレータ抽象化）。
 
 | launchファイル | 説明 |
 |---------------|------|
-| `sim_only.launch.py` | ManiSkill環境単体 |
+| `sim.launch.py` | Liftシミュレータノード |
 
 ## ディレクトリ構成
 
 ```
-ros2/
-├── docker/                     # ローカル実行用Docker
-│   ├── docker-compose.yml      # メインコンポーズファイル
-│   ├── Dockerfile              # ROS 2 Humble + VLAイメージ
-│   ├── entrypoint.sh           # 起動スクリプト
-│   └── .env.template           # 環境設定テンプレート
+crane_x7_vla/
+├── docker-compose.yml             # 統一Docker Compose設定
+├── .env                           # 環境設定（.env.templateからコピー）
+├── .env.template                  # 環境設定テンプレート
+├── docker/                        # Docker環境
+│   ├── Dockerfile.ros2            # ROS 2統合環境
+│   ├── Dockerfile.inference       # リモートGPU推論
+│   ├── Dockerfile.vlarl           # VLA-RL学習
+│   ├── Dockerfile.lerobot         # LeRobot統合
+│   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
+│   ├── entrypoint-inference.sh    # 推論用エントリーポイント
+│   └── wait-for-peer.sh           # Tailscale待機スクリプト
 │
-├── docker-remote/              # リモート推論用Docker
-│   ├── docker-compose.yml      # Tailscale + rosbridge構成
-│   ├── Dockerfile              # 軽量VLA推論イメージ
-│   ├── entrypoint-rosbridge.sh # rosbridge起動スクリプト
-│   ├── wait-for-peer.sh        # Tailscaleピア待機
-│   └── .env.template           # リモート環境設定
+├── ros2/                          # ROS 2ワークスペース
+│   └── src/                       # ROS 2パッケージ
+│       ├── crane_x7_ros/          # RT Corporation公式（サブモジュール）
+│       ├── crane_x7_description/  # URDFモデル（サブモジュール）
+│       ├── crane_x7_bringup/      # 統合launchファイル
+│       ├── crane_x7_log/          # データロギング
+│       ├── crane_x7_teleop/       # テレオペレーション
+│       ├── crane_x7_vla/          # VLA推論ノード
+│       ├── crane_x7_gemini/       # Gemini API統合
+│       ├── crane_x7_sim_gazebo/   # Gazebo環境
+│       └── crane_x7_lift/         # Lift統合（統一シミュレータ）
 │
-├── src/                        # ROS 2パッケージ
-│   ├── crane_x7_ros/           # RT Corporation公式（サブモジュール）
-│   ├── crane_x7_description/   # URDFモデル（サブモジュール）
-│   ├── crane_x7_bringup/       # 統合launchファイル
-│   ├── crane_x7_log/           # データロギング
-│   ├── crane_x7_teleop/        # テレオペレーション
-│   ├── crane_x7_vla/           # VLA推論ノード
-│   ├── crane_x7_gemini/        # Gemini API統合
-│   ├── crane_x7_sim_gazebo/    # Gazebo環境
-│   └── crane_x7_sim_maniskill/ # ManiSkill統合
-│
-├── requirements.txt            # Python依存関係
-└── rosdep_packages.txt         # ROS 2パッケージ依存
+├── requirements.txt               # Python依存関係
+└── rosdep_packages.txt            # ROS 2パッケージ依存
 ```
 
 ## ワークスペースビルド
@@ -474,19 +369,6 @@ rs-enumerate-devices -s
 lsusb | grep Intel
 ```
 
-### Tailscale接続に失敗する
-
-```bash
-# 認証キーの有効期限を確認
-# https://login.tailscale.com/admin/settings/keys
-
-# コンテナ内でステータス確認
-tailscale status
-
-# ログ確認
-docker compose logs tailscale-local
-```
-
 ### VLA推論が遅い
 
 ```bash
@@ -495,21 +377,6 @@ nvidia-smi
 
 # CUDAデバイス設定
 VLA_DEVICE=cuda docker compose --profile vla up
-
-# バッチサイズ調整（モデル依存）
-```
-
-### rosbridge接続エラー
-
-```bash
-# ポート確認
-netstat -tlnp | grep 9090
-
-# Tailscale経由の接続テスト
-tailscale ping crane-x7-local
-
-# WebSocket接続テスト
-python3 -c "import roslibpy; c = roslibpy.Ros('ws://crane-x7-local:9090'); c.run()"
 ```
 
 ### X11ディスプレイエラー
@@ -520,6 +387,16 @@ xhost +local:docker
 
 # WSL2の場合
 export DISPLAY=:0
+```
+
+### Liftシミュレータエラー
+
+```bash
+# GPU使用時にレンダリングが必要な場合
+LIFT_BACKEND=gpu LIFT_RENDER_MODE=rgb_array docker compose --profile lift up
+
+# GPUなしの場合はnoneモードを使用
+LIFT_BACKEND=cpu LIFT_RENDER_MODE=none docker compose --profile lift up
 ```
 
 ## ライセンス

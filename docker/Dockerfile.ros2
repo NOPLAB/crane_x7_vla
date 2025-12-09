@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1
-# ROS Humble base image (Ubuntu 22.04)
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+#
+# ROS 2 Humble Docker image for CRANE-X7
+# Build context: project root (crane_x7_vla/)
+
 FROM ros:humble-ros-base AS base
 
 # Avoid interactive prompts during package installation
@@ -77,7 +82,7 @@ RUN . /opt/ros/humble/setup.sh && \
     colcon build --symlink-install
 
 # Setup entrypoint
-COPY ros2/docker/entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint-ros2.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create user matching host (UID/GID passed at build time)

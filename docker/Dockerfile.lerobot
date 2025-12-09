@@ -4,6 +4,7 @@
 # syntax=docker/dockerfile:1
 # LeRobot CRANE-X7 Environment
 # Supports: Teleoperation, Data Collection, Training (ACT/Diffusion), Inference
+# Build context: project root (crane_x7_vla/)
 
 ARG CUDA_VERSION=12.4.1
 ARG PYTHON_VERSION=3.11
@@ -67,7 +68,7 @@ RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/
 RUN pip3 install "lerobot[dynamixel,realsense]"
 
 # Additional dependencies
-COPY requirements.txt /workspace/
+COPY lerobot/requirements.txt /workspace/
 RUN pip3 install -r requirements.txt
 
 # ============================================================================
@@ -84,18 +85,18 @@ RUN pip3 install \
     ipython
 
 # Install CRANE-X7 packages in editable mode
-COPY pyproject.toml /workspace/lerobot/
-COPY lerobot_robot_crane_x7/ /workspace/lerobot/lerobot_robot_crane_x7/
-COPY lerobot_teleoperator_crane_x7/ /workspace/lerobot/lerobot_teleoperator_crane_x7/
+COPY lerobot/pyproject.toml /workspace/lerobot/
+COPY lerobot/lerobot_robot_crane_x7/ /workspace/lerobot/lerobot_robot_crane_x7/
+COPY lerobot/lerobot_teleoperator_crane_x7/ /workspace/lerobot/lerobot_teleoperator_crane_x7/
 
 RUN pip3 install -e /workspace/lerobot
 
 # Copy configs and scripts
-COPY configs/ /workspace/lerobot/configs/
-COPY scripts/ /workspace/lerobot/scripts/
+COPY lerobot/configs/ /workspace/lerobot/configs/
+COPY lerobot/scripts/ /workspace/lerobot/scripts/
 
 # udev rules for Dynamixel USB access
-COPY 99-dynamixel.rules /etc/udev/rules.d/ 2>/dev/null || true
+COPY lerobot/99-dynamixel.rules /etc/udev/rules.d/ 2>/dev/null || true
 
 # Create user with matching host UID/GID
 ARG USER_ID=1000

@@ -11,8 +11,8 @@ CRANE-X7ロボットアームの制御とVLAファインチューニングのた
 ### ROS 2環境（Docker）
 
 ```bash
-# docker-compose.ymlの場所: ros2/docker/docker-compose.yml
-cd ros2/docker
+# docker-compose.ymlはプロジェクトルートに配置
+# プロジェクトルートから実行
 
 # 実機制御
 docker compose --profile real up
@@ -46,11 +46,32 @@ docker compose --profile lift-vla up
 
 # Lift + データロガー
 docker compose --profile lift-logger up
+
+# VLA-RLトレーニング
+docker compose --profile vlarl up
+
+# VLA-RL開発モード（インタラクティブシェル）
+docker compose --profile vlarl-dev up
+
+# rosbridgeサーバー（実機、リモート推論用）
+docker compose --profile rosbridge up
+
+# rosbridgeサーバー（シミュレーション）
+docker compose --profile rosbridge-sim up
+
+# リモートGPU推論クライアント
+docker compose --profile remote-inference up
+
+# LeRobot開発シェル
+docker compose --profile lerobot up
+
+# LeRobotトレーニング
+docker compose --profile lerobot-train up
 ```
 
 ### Lift環境変数
 
-`.env`で以下を設定可能:
+`.env`（プロジェクトルート）で以下を設定可能:
 
 | 変数 | 説明 | デフォルト |
 |------|------|-----------|
@@ -74,10 +95,10 @@ LIFT_RENDER_MODE=rgb_array
 cd vla
 
 # OpenVLA用Dockerイメージビルド
-docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
+docker build -f Dockerfile.openvla.example -t crane_x7_vla_openvla .
 
 # OpenPI用Dockerイメージビルド
-docker build -f Dockerfile.openpi -t crane_x7_vla_openpi .
+docker build -f Dockerfile.openpi.example -t crane_x7_vla_openpi .
 
 # トレーニング実行（コンテナ内）
 python -m crane_x7_vla.training.cli train openvla \
@@ -97,6 +118,35 @@ python -m crane_x7_vla.scripts.merge_lora \
   --output_path /workspace/outputs/crane_x7_openvla_merged
 ```
 
+### VLA-RL強化学習
+
+```bash
+cd vlarl
+
+# インストール
+pip install -e .
+
+# トレーニング（SFTチェックポイントから）
+python -m crane_x7_vlarl.training.cli train \
+  --sft-checkpoint /workspace/vla/outputs/checkpoint \
+  --simulator maniskill \
+  --env-id PickPlace-CRANE-X7 \
+  --num-parallel-envs 4 \
+  --use-wandb
+
+# トレーニング（事前学習モデルから）
+python -m crane_x7_vlarl.training.cli train \
+  --pretrained openvla/openvla-7b
+
+# 評価
+python -m crane_x7_vlarl.training.cli evaluate \
+  --checkpoint outputs/crane_x7_vlarl/checkpoint_best \
+  --num-episodes 20
+
+# 設定ファイル生成
+python -m crane_x7_vlarl.training.cli config --output my_config.yaml
+```
+
 ### Slurmクラスター
 
 ```bash
@@ -113,16 +163,14 @@ slurm-submit sweep start examples/sweeps/sweep_openvla.yaml --max-runs 10
 ### LeRobot統合
 
 ```bash
-cd lerobot
+# Docker Compose経由（推奨）
+docker compose --profile lerobot up      # 開発シェル
+docker compose --profile lerobot-train up # トレーニング
 
-# キャリブレーション
-docker compose --profile calibrate up
+# または手動ビルド
+docker build -f docker/Dockerfile.lerobot -t crane_x7_lerobot .
 
-# テレオペ + データ収集
-docker compose --profile teleop up
-
-# トレーニング
-docker compose --profile train up
+# 詳細はlerobot/README.mdを参照
 ```
 
 ### ROS 2ワークスペースビルド（コンテナ内）
@@ -144,10 +192,18 @@ colcon test-result --verbose
 
 ```
 crane_x7_vla/
+├── docker-compose.yml             # 統一Docker Compose設定
+├── .env                           # 環境変数設定
+├── .env.template                  # 環境変数テンプレート
+├── docker/                        # Docker環境
+│   ├── Dockerfile.ros2            # ROS 2統合環境
+│   ├── Dockerfile.inference       # リモートGPU推論
+│   ├── Dockerfile.vlarl           # VLA-RL学習
+│   ├── Dockerfile.lerobot         # LeRobot統合
+│   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
+│   ├── entrypoint-inference.sh    # 推論用エントリーポイント
+│   └── wait-for-peer.sh           # Tailscale待機スクリプト
 ├── ros2/                          # ROS 2ワークスペース
-│   ├── docker/                    # Docker環境
-│   │   ├── Dockerfile
-│   │   └── docker-compose.yml
 │   └── src/
 │       ├── crane_x7_ros/          # RT Corporation公式パッケージ（サブモジュール）
 │       ├── crane_x7_description/  # URDFロボットモデル（サブモジュール）
@@ -159,8 +215,8 @@ crane_x7_vla/
 │       ├── crane_x7_lift/         # 統一シミュレータROS 2インターフェース
 │       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
-│   ├── Dockerfile.openvla         # OpenVLA用Docker
-│   ├── Dockerfile.openpi          # OpenPI用Docker
+│   ├── Dockerfile.openvla.example # OpenVLA用Docker
+│   ├── Dockerfile.openpi.example  # OpenPI用Docker
 │   ├── configs/                   # 設定ファイル
 │   └── src/
 │       ├── crane_x7_vla/          # 統一トレーニングCLI
@@ -173,6 +229,16 @@ crane_x7_vla/
 │       ├── maniskill/             # ManiSkill実装
 │       ├── genesis/               # Genesis実装
 │       └── isaacsim/              # Isaac Sim実装（スケルトン）
+├── vlarl/                         # VLA強化学習（SimpleVLA-RL方式）
+│   ├── Dockerfile.vlarl.example   # 参考用Dockerfile
+│   ├── configs/                   # 設定ファイル
+│   └── src/crane_x7_vlarl/
+│       ├── training/              # VLARLTrainer, CLI
+│       ├── algorithms/            # PPO独自実装, GAE
+│       ├── rollout/               # 並列ロールアウト管理
+│       ├── environments/          # liftシミュレータラッパー
+│       ├── rewards/               # バイナリ報酬関数
+│       └── vla/                   # OpenVLAアダプター
 ├── lerobot/                       # LeRobot統合
 │   ├── lerobot_robot_crane_x7/    # Robotプラグイン
 │   ├── lerobot_teleoperator_crane_x7/  # Teleoperatorプラグイン
@@ -190,10 +256,10 @@ crane_x7_vla/
 
 OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメージ**を使用：
 
-| バックエンド | Dockerfile           | Python | PyTorch | 状態     |
-| ------------ | -------------------- | ------ | ------- | -------- |
-| OpenVLA      | `Dockerfile.openvla` | 3.10   | 2.5.1   | 実装済み |
-| OpenPI       | `Dockerfile.openpi`  | 3.11   | 2.7.1   | 未実装   |
+| バックエンド | Dockerfile                   | Python | PyTorch | 状態     |
+| ------------ | ---------------------------- | ------ | ------- | -------- |
+| OpenVLA      | `Dockerfile.openvla.example` | 3.10   | 2.5.1   | 実装済み |
+| OpenPI       | `Dockerfile.openpi.example`  | 3.11   | 2.7.1   | 未実装   |
 
 ### データフォーマット
 
@@ -256,6 +322,7 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 ## 参考資料
 
 - [vla/README.md](vla/README.md) - VLAファインチューニング詳細
+- [vlarl/README.md](vlarl/README.md) - VLA強化学習（SimpleVLA-RL方式）
 - [sim/README.md](sim/README.md) - Liftシミュレータ抽象化
 - [slurm/README.md](slurm/README.md) - Slurmジョブ投下ツール
 - [lerobot/README.md](lerobot/README.md) - LeRobot統合

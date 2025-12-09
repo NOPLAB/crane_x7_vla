@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # VLA Inference Dockerfile for Remote GPU Services using rosbridge
+# Build context: project root (crane_x7_vla/)
 #
 # This is a lightweight image (no ROS 2 required) that uses roslibpy
 # to communicate with the local robot via rosbridge WebSocket.
@@ -13,7 +14,7 @@
 # - Smaller image size (no ROS 2 installation)
 #
 # Usage:
-#   docker build -f Dockerfile.rosbridge -t crane_x7_vla-rosbridge ../..
+#   docker build -f docker/Dockerfile.inference -t crane_x7_vla-inference .
 #
 #   docker run --gpus all \
 #     -e TS_AUTHKEY=tskey-auth-xxxxx \
@@ -21,7 +22,7 @@
 #     -e VLA_MODEL_PATH=/workspace/models/checkpoint \
 #     -e VLA_TASK_INSTRUCTION="pick up the object" \
 #     -v /path/to/models:/workspace/models:ro \
-#     crane_x7_vla-rosbridge
+#     crane_x7_vla-remote
 
 ARG CUDA_VERSION=12.9.1
 
@@ -104,8 +105,8 @@ COPY ros2/src/crane_x7_vla/scripts /workspace/scripts
 # ----------------------------------------------------------------------------
 # Copy configuration and entrypoint
 # ----------------------------------------------------------------------------
-COPY ros2/docker-remote/entrypoint-rosbridge.sh /entrypoint.sh
-COPY ros2/docker-remote/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
+COPY docker/entrypoint-inference.sh /entrypoint.sh
+COPY docker/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
 RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 
 # Create directories for model checkpoints and Tailscale state

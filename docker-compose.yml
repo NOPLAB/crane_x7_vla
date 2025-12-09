@@ -1,36 +1,84 @@
 # ============================================================================
+# CRANE-X7 VLA Docker Compose
+# ============================================================================
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+#
+# Unified Docker Compose configuration for ROS 2 and VLA-RL environments.
+#
+# Usage:
+#   docker compose --profile <profile> up
+#
+# ============================================================================
+
+# ============================================================================
 # Common Configuration Anchors
 # ============================================================================
 
-# Build configuration
-x-build-base: &build-base
-  context: ../..
-  dockerfile: ros2/docker/Dockerfile
+# Build configuration for ROS 2
+x-build-ros2: &build-ros2
+  context: .
+  dockerfile: docker/Dockerfile.ros2
+
+# Build configuration for VLA-RL
+x-build-vlarl: &build-vlarl
+  context: .
+  dockerfile: docker/Dockerfile.vlarl
+
+# Build configuration for Remote Inference
+x-build-inference: &build-inference
+  context: .
+  dockerfile: docker/Dockerfile.inference
+
+# Build configuration for LeRobot
+x-build-lerobot: &build-lerobot
+  context: .
+  dockerfile: docker/Dockerfile.lerobot
 
 # Volume configurations
 x-x11-volumes: &x11-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
-  - ../src:/workspace/ros2/src:ro
-  - ../../data:/workspace/data:rw
+  - ./ros2/src:/workspace/ros2/src:ro
+  - ./data:/workspace/data:rw
   - /run/user/1000/pulse:/run/user/1000/pulse:ro
 
 x-vla-volumes: &vla-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
-  - ../../vla/outputs:/workspace/vla/outputs:ro
-  - ../../data:/workspace/data:ro
-  - ../src:/workspace/ros2/src:ro
+  - ./vla/outputs:/workspace/vla/outputs:ro
+  - ./data:/workspace/data:ro
+  - ./ros2/src:/workspace/ros2/src:ro
   - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
 
 x-lift-volumes: &lift-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
   - /mnt/wslg:/mnt/wslg:ro
-  - ../../sim/src:/workspace/sim/src:ro
-  - ../../vla/outputs:/workspace/vla/outputs:ro
-  - ../../data:/workspace/data:rw
-  - ../src:/workspace/ros2/src:ro
+  - ./sim/src:/workspace/sim/src:ro
+  - ./vla/outputs:/workspace/vla/outputs:ro
+  - ./data:/workspace/data:rw
+  - ./ros2/src:/workspace/ros2/src:ro
   - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
+
+x-vlarl-volumes: &vlarl-volumes
+  - ./vlarl:/workspace/vlarl:rw
+  - ./sim:/workspace/sim:ro
+  - ./vla/outputs:/workspace/vla/outputs:ro
+  - ./data:/workspace/data:rw
+  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
+
+x-inference-volumes: &inference-volumes
+  - ./vla/outputs:/workspace/models:ro
+  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
+  - tailscale-state:/var/lib/tailscale
+
+x-lerobot-volumes: &lerobot-volumes
+  - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  - /mnt/wslg:/mnt/wslg:ro
+  - ./lerobot:/workspace/lerobot:rw
+  - ./data:/workspace/data:rw
+  - /run/user/1000/pulse:/run/user/1000/pulse:ro
+  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-lerobot}/.cache/huggingface:rw
 
 # Environment configurations
 x-base-env: &base-env
@@ -56,6 +104,31 @@ x-lift-env: &lift-env
   LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
   LIFT_RENDER_MODE: ${LIFT_RENDER_MODE:-none}
 
+x-vlarl-env: &vlarl-env
+  LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
+  LIFT_BACKEND: ${LIFT_BACKEND:-gpu}
+  WANDB_API_KEY: ${WANDB_API_KEY:-}
+  HF_TOKEN: ${HF_TOKEN:-}
+
+x-inference-env: &inference-env
+  TS_AUTHKEY: ${TS_AUTHKEY:-}
+  TS_HOSTNAME: ${TS_HOSTNAME:-crane-x7-inference}
+  TS_USERSPACE: "true"
+  ROSBRIDGE_HOST: ${ROSBRIDGE_HOST:-crane-x7-local}
+  ROSBRIDGE_PORT: ${ROSBRIDGE_PORT:-9090}
+  VLA_MODEL_PATH: ${VLA_MODEL_PATH}
+  VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION:-pick up the object}
+  VLA_DEVICE: ${VLA_DEVICE:-cuda}
+  VLA_INFERENCE_RATE: ${VLA_INFERENCE_RATE:-10.0}
+  HF_TOKEN: ${HF_TOKEN:-}
+
+x-lerobot-env: &lerobot-env
+  DISPLAY: ${DISPLAY}
+  PULSE_SERVER: unix:/run/user/1000/pulse/native
+  HF_TOKEN: ${HF_TOKEN:-}
+  HF_HOME: /home/${USERNAME:-lerobot}/.cache/huggingface
+  WANDB_API_KEY: ${WANDB_API_KEY:-}
+
 # Group configurations
 x-real-groups: &real-groups
   - dialout
@@ -63,11 +136,11 @@ x-real-groups: &real-groups
   - "984"  # video group GID on Arch Linux
   - "985"  # uucp group GID on Arch Linux
 
-# Base service configuration
+# Base service configuration for ROS 2
 x-base: &base
   env_file: .env
   build:
-    <<: *build-base
+    <<: *build-ros2
     target: base
   devices:
     - "/dev/snd:/dev/snd"
@@ -118,10 +191,6 @@ services:
   # --------------------------------------------------------------------------
   # Teleoperation Services
   # --------------------------------------------------------------------------
-  # Usage:
-  #   docker compose --profile teleop up           # Leader + Follower only
-  #   docker compose --profile teleop --profile log up  # + Camera + Logger
-  #
   teleop-leader:
     <<: *base
     profiles: [teleop, log]
@@ -270,6 +339,127 @@ services:
       ros2 launch crane_x7_bringup lift_logger.launch.py
         simulator:='${LIFT_SIMULATOR:-maniskill}'
         backend:='${LIFT_BACKEND:-gpu}'
+
+  # --------------------------------------------------------------------------
+  # VLA-RL Training Services
+  # --------------------------------------------------------------------------
+  vlarl:
+    profiles: [vlarl]
+    build:
+      <<: *build-vlarl
+      target: vlarl
+    volumes: *vlarl-volumes
+    environment:
+      <<: *vlarl-env
+    deploy:
+      <<: *gpu-deploy
+    working_dir: /workspace/vlarl
+    command: >
+      python -m crane_x7_vlarl.training.cli train
+        --simulator ${LIFT_SIMULATOR:-maniskill}
+        --env-id PickPlace-CRANE-X7
+        --backend ${LIFT_BACKEND:-gpu}
+        --num-parallel-envs ${VLARL_NUM_ENVS:-4}
+        --use-wandb
+
+  vlarl-dev:
+    profiles: [vlarl-dev]
+    build:
+      <<: *build-vlarl
+      target: dev
+    volumes:
+      - ./vlarl:/workspace/vlarl:rw
+      - ./sim:/workspace/sim:rw
+      - ./vla/outputs:/workspace/vla/outputs:ro
+      - ./data:/workspace/data:rw
+      - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
+    environment:
+      LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
+      LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+    deploy:
+      <<: *gpu-deploy
+    working_dir: /workspace/vlarl
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # --------------------------------------------------------------------------
+  # Rosbridge Services (for remote inference)
+  # --------------------------------------------------------------------------
+  rosbridge-real:
+    <<: *base
+    profiles: [rosbridge]
+    devices:
+      - "$USB_DEVICE:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
+    privileged: true
+    group_add: *real-groups
+    command: ros2 launch crane_x7_bringup rosbridge_real.launch.py use_d435:=${USE_D435:-true}
+
+  rosbridge-sim:
+    <<: *base
+    profiles: [rosbridge-sim]
+    environment:
+      <<: *base-env
+      SIMULATION_MODE: "true"
+    command: ros2 launch crane_x7_bringup rosbridge_sim.launch.py
+
+  # --------------------------------------------------------------------------
+  # Remote VLA Inference Service
+  # --------------------------------------------------------------------------
+  remote-inference:
+    profiles: [remote-inference]
+    build: *build-inference
+    volumes: *inference-volumes
+    environment:
+      <<: *inference-env
+    deploy:
+      <<: *gpu-deploy
+
+  # --------------------------------------------------------------------------
+  # LeRobot Services
+  # --------------------------------------------------------------------------
+  lerobot:
+    profiles: [lerobot]
+    build:
+      <<: *build-lerobot
+      target: dev
+    devices:
+      - "${USB_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB0"
+      - "/dev/snd:/dev/snd"
+    privileged: true
+    volumes: *lerobot-volumes
+    environment:
+      <<: *lerobot-env
+    group_add: *real-groups
+    working_dir: /workspace/lerobot
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  lerobot-train:
+    profiles: [lerobot-train]
+    build:
+      <<: *build-lerobot
+      target: dev
+    volumes: *lerobot-volumes
+    environment:
+      <<: *lerobot-env
+    deploy:
+      <<: *gpu-deploy
+    working_dir: /workspace/lerobot
+    command: >
+      python -m lerobot.train
+        --config configs/act_crane_x7.yaml
+
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes:
+  tailscale-state:
 
 # ============================================================================
 # Networks
