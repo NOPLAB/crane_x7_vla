@@ -6,7 +6,7 @@
 # Extends OpenVLA environment with RL training capabilities
 # Build context: project root (crane_x7_vla/)
 
-ARG BASE_IMAGE=crane_x7_vla_openvla:latest
+ARG BASE_IMAGE=noppdev/crane_x7_vla:openvla
 
 # ============================================================================
 # VLA-RL Stage: Add RL training dependencies
