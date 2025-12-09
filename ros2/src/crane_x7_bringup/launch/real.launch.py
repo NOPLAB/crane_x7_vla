@@ -5,7 +5,7 @@
 """
 CRANE-X7実機制御のbringup launchファイル。
 
-crane_x7_log/real.launch.pyをラップして、実機制御を起動する。
+crane_x7_control + MoveIt2 + データロガー + カメラビューアを統合して起動する。
 
 引数:
   - port_name (default: /dev/ttyUSB0): CRANE-X7のUSBポート名
@@ -17,13 +17,14 @@ crane_x7_log/real.launch.pyをラップして、実機制御を起動する。
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Launch real robot control."""
+    """Launch real robot control with optional data logging."""
     # Declare launch arguments
     declare_port_name = DeclareLaunchArgument(
         'port_name',
@@ -55,22 +56,53 @@ def generate_launch_description():
         description='Directory to save logged data'
     )
 
-    # Include crane_x7_log real.launch.py
-    real_launch = IncludeLaunchDescription(
+    # Include robot control from crane_x7_control
+    control_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('crane_x7_control'),
+                'launch',
+                'crane_x7_control.launch.py'
+            ])
+        ])
+    )
+
+    # Include MoveIt2 from crane_x7_moveit_config
+    moveit_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('crane_x7_moveit_config'),
+                'launch',
+                'run_move_group.launch.py'
+            ])
+        ])
+    )
+
+    # Include data logger from crane_x7_log (conditional)
+    data_logger_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('crane_x7_log'),
                 'launch',
-                'real.launch.py'
+                'data_logger.launch.py'
             ])
         ]),
         launch_arguments={
-            'port_name': LaunchConfiguration('port_name'),
-            'use_d435': LaunchConfiguration('use_d435'),
-            'use_logger': LaunchConfiguration('use_logger'),
-            'use_viewer': LaunchConfiguration('use_viewer'),
             'output_dir': LaunchConfiguration('output_dir'),
-        }.items()
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_logger'))
+    )
+
+    # Include camera viewer from crane_x7_log (conditional)
+    camera_viewer_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('crane_x7_log'),
+                'launch',
+                'camera_viewer.launch.py'
+            ])
+        ]),
+        condition=IfCondition(LaunchConfiguration('use_viewer'))
     )
 
     return LaunchDescription([
@@ -79,5 +111,8 @@ def generate_launch_description():
         declare_use_logger,
         declare_use_viewer,
         declare_output_dir,
-        real_launch,
+        control_launch,
+        moveit_launch,
+        data_logger_launch,
+        camera_viewer_launch,
     ])
