@@ -84,11 +84,11 @@ class LiftSimNode(Node):
 
             # Import adapters to register them
             if self.simulator_name == 'maniskill':
-                from maniskill import ManiSkillSimulator  # noqa: F401
+                from lift_maniskill import ManiSkillSimulator  # noqa: F401
             elif self.simulator_name == 'genesis':
-                from genesis import GenesisSimulator  # noqa: F401
+                from lift_genesis import GenesisSimulator  # noqa: F401
             elif self.simulator_name == 'isaacsim':
-                from isaacsim import IsaacSimSimulator  # noqa: F401
+                from lift_isaacsim import IsaacSimSimulator  # noqa: F401
 
             config = SimulatorConfig(
                 env_id=self.env_id,

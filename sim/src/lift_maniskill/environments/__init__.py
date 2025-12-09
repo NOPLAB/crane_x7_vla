@@ -3,6 +3,6 @@
 
 """ManiSkill environments for CRANE-X7."""
 
-from maniskill.environments.pick_place import PickPlace
+from lift_maniskill.environments.pick_place import PickPlace
 
 __all__ = ["PickPlace"]

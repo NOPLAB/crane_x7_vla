@@ -29,7 +29,6 @@ setup(
     maintainer_email='root@todo.todo',
     description='Data logging package for CRANE-X7 in NPZ/TFRecord format for VLA fine-tuning',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'data_logger = crane_x7_log.data_logger:main',

@@ -171,7 +171,7 @@ crane_x7_vla/
 │       ├── lift/                  # 統一シミュレータインターフェース
 │       ├── robot/                 # 共有ロボットアセット（MJCF、メッシュ）
 │       ├── maniskill/             # ManiSkill実装
-│       ├── genesis/               # Genesis実装（スケルトン）
+│       ├── genesis/               # Genesis実装
 │       └── isaacsim/              # Isaac Sim実装（スケルトン）
 ├── lerobot/                       # LeRobot統合
 │   ├── lerobot_robot_crane_x7/    # Robotプラグイン

@@ -4,6 +4,9 @@
 # ROS 2 + VLA inference dependencies for CRANE-X7
 # Note: PyTorch is installed separately in Dockerfile with specific CUDA version
 
+# Setuptools (must be <59 for ROS 2 Humble compatibility with colcon --symlink-install)
+setuptools==58.2.0
+
 # NumPy (must be <2.0 for cv_bridge/TensorFlow compatibility)
 # This constraint must come first to prevent other packages from installing numpy>=2.0
 numpy>=1.24.0,<2.0.0
@@ -30,3 +33,6 @@ einops
 mani-skill>=3.0.0b0
 sapien
 gymnasium>=0.26.0
+
+# Genesis simulation
+genesis-world

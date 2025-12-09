@@ -42,14 +42,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm /tmp/rosdep_packages.txt
 
 # Install PyTorch (CUDA 12.4 compatible)
-RUN pip3 install --no-cache-dir \
-    torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cu124
 
 # Install Python dependencies
 # Note: numpy<2.0 constraint is specified first in requirements.txt to prevent
 # other packages from installing numpy>=2.0 (cv_bridge requires NumPy 1.x)
 COPY ros2/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
 
 # Copy OpenVLA/prismatic source code for model loading
@@ -58,6 +60,11 @@ COPY vla/src/openvla /workspace/vla/src/openvla
 # Copy ManiSkill CRANE-X7 environment
 COPY sim/src /workspace/sim/src
 ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/sim/src:${PYTHONPATH}"
+# Cache directories for Genesis, Taichi, and Numba (avoid permission issues)
+ENV NUMBA_CACHE_DIR="/tmp/numba_cache"
+ENV XDG_CACHE_HOME="/tmp/cache"
+ENV GS_CACHE_FILE_PATH="/tmp/cache/genesis"
+ENV TI_OFFLINE_CACHE_FILE_PATH="/tmp/cache/taichi"
 
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src

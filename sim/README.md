@@ -15,12 +15,14 @@ sim/
     ├── robot/                # 共有ロボットアセット
     │   ├── crane_x7.py       # ロボット設定
     │   └── assets/           # MJCF、メッシュ
-    ├── maniskill/            # ManiSkill実装
+    ├── lift_maniskill/       # ManiSkill実装
     │   ├── adapter.py        # ManiSkillSimulator
     │   ├── agent.py          # CraneX7エージェント
     │   └── environments/     # タスク環境
-    ├── genesis/              # Genesis実装（スケルトン）
-    └── isaacsim/             # Isaac Sim実装（スケルトン）
+    ├── lift_genesis/         # Genesis実装
+    │   ├── adapter.py        # GenesisSimulator
+    │   └── environments/     # タスク環境
+    └── lift_isaacsim/        # Isaac Sim実装（スケルトン）
 ```
 
 ## インストール
@@ -28,6 +30,7 @@ sim/
 ```bash
 cd sim
 pip install -e ".[maniskill]"  # ManiSkill使用時
+pip install -e ".[genesis]"    # Genesis使用時
 ```
 
 ## 使用方法
@@ -67,7 +70,7 @@ ros2 launch crane_x7_lift sim.launch.py simulator:=maniskill backend:=gpu
 | シミュレータ | 状態 | 説明 |
 |-------------|------|------|
 | `maniskill` | 実装済み | ManiSkill 3.0ベース |
-| `genesis` | スケルトン | 未実装 |
+| `genesis` | 実装済み | Genesis 0.3.x ベース |
 | `isaacsim` | スケルトン | 未実装 |
 
 ## lift インターフェース

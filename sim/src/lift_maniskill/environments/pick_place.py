@@ -18,7 +18,7 @@ from mani_skill.utils.scene_builder.table import TableSceneBuilder
 from mani_skill.utils.structs import Pose
 from mani_skill.utils.structs.types import GPUMemoryConfig, SimConfig
 
-from maniskill.agent import CraneX7
+from lift_maniskill.agent import CraneX7
 
 
 @register_env("PickPlace-CRANE-X7", max_episode_steps=200)

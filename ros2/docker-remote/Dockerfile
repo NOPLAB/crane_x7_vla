@@ -32,13 +32,14 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     CUDA_HOME=/usr/local/cuda
 
 # ----------------------------------------------------------------------------
 # Install system dependencies and Tailscale
 # ----------------------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
@@ -55,20 +56,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
     && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list \
        | tee /etc/apt/sources.list.d/tailscale.list \
-    && apt-get update && apt-get install -y --no-install-recommends tailscale \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y --no-install-recommends tailscale
 
 # Upgrade pip and install compatible setuptools version
-RUN python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
 
 WORKDIR /workspace
 
 # ----------------------------------------------------------------------------
 # Install PyTorch with CUDA support
 # ----------------------------------------------------------------------------
-RUN pip3 install \
-    torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
     --index-url https://download.pytorch.org/whl/cu124
 
 # ----------------------------------------------------------------------------
@@ -77,7 +77,8 @@ RUN pip3 install \
 # Uses shared requirements.txt (excludes TensorFlow, ManiSkill, etc. not needed here)
 # roslibpy for rosbridge communication (no ROS 2 required)
 COPY ros2/requirements.txt /tmp/requirements.txt
-RUN pip3 install \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
     roslibpy \
     transformers \
     accelerate \

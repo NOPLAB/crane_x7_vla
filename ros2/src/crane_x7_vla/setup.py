@@ -31,7 +31,6 @@ setup(
     maintainer_email='root@todo.todo',
     description='VLA-based control package for CRANE-X7 robotic arm',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'vla_inference_node = crane_x7_vla.vla_inference_node:main',

@@ -55,4 +55,4 @@ def get_assets_dir() -> str:
 
 def get_mjcf_path() -> str:
     """Get path to the CRANE-X7 MJCF model."""
-    return os.path.join(get_assets_dir(), "crane_x7.mjcf")
+    return os.path.join(get_assets_dir(), "crane_x7.xml")

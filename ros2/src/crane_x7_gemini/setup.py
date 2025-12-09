@@ -30,7 +30,6 @@ setup(
     maintainer_email='root@todo.todo',
     description='Google Gemini Robotics-ER API integration for CRANE-X7',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'gemini_node = crane_x7_gemini.gemini_node:main',

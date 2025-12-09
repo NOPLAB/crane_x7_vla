@@ -28,7 +28,6 @@ setup(
     maintainer_email='noplab90@gmail.com',
     description='Unified simulator abstraction (lift) for CRANE-X7 VLA inference and data collection',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'lift_sim_node = crane_x7_lift.lift_sim_node:main',

@@ -27,8 +27,8 @@ class ManiSkillSimulator(Simulator):
 
     def _init_environment(self) -> None:
         """Initialize ManiSkill environment."""
-        from maniskill.agent import CraneX7  # noqa: F401
-        from maniskill.environments import PickPlace  # noqa: F401
+        from lift_maniskill.agent import CraneX7  # noqa: F401
+        from lift_maniskill.environments import PickPlace  # noqa: F401
 
         self._env = gym.make(
             self.config.env_id,

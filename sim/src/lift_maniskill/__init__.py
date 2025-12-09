@@ -3,7 +3,7 @@
 
 """ManiSkill simulator implementation for lift abstraction."""
 
-from maniskill.adapter import ManiSkillSimulator
-from maniskill.agent import CraneX7
+from lift_maniskill.adapter import ManiSkillSimulator
+from lift_maniskill.agent import CraneX7
 
 __all__ = ["ManiSkillSimulator", "CraneX7"]
