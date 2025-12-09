@@ -87,7 +87,7 @@ cd ros2/docker
 | `real` | 実機制御 | `docker compose --profile real up` |
 | `sim` | Gazeboシミュレーション | `docker compose --profile sim up` |
 | `teleop` | テレオペ（Leader+Follower） | `docker compose --profile teleop up` |
-| `teleop-viewer` | テレオペ + カメラビューア | `docker compose --profile teleop-viewer up` |
+| `log` | テレオペ + カメラ + データロガー | `docker compose --profile log up` |
 | `gemini` | 実機 + Gemini API | `docker compose --profile gemini up` |
 | `gemini-sim` | シミュレーション + Gemini | `docker compose --profile gemini-sim up` |
 | `vla` | 実機 + VLA推論（GPU） | `docker compose --profile vla up` |
@@ -128,11 +128,14 @@ ls -la /dev/ttyUSB*
 # USB_DEVICE=/dev/ttyUSB0        # リーダー
 # USB_DEVICE_FOLLOWER=/dev/ttyUSB1  # フォロワー
 
-# 起動
+# テレオペのみ（カメラなし）
 docker compose --profile teleop up
 
-# カメラビューア付き
-docker compose --profile teleop-viewer up
+# テレオペ + カメラ + データロガー
+docker compose --profile log up
+
+# ビューア表示を切り替え
+USE_VIEWER=false docker compose --profile log up
 ```
 
 ### VLA推論（ローカルGPU）
@@ -295,20 +298,41 @@ docker run --gpus all -it --rm \
 
 ## ROS 2パッケージ
 
+### crane_x7_bringup
+
+統合launchファイルパッケージ。各種起動構成をまとめて管理。
+
+| launchファイル | 説明 |
+|---------------|------|
+| `real.launch.py` | 実機制御（MoveIt2 + ハードウェア + ロガー） |
+| `sim.launch.py` | Gazeboシミュレーション + ロガー |
+| `teleop.launch.py` | テレオペ（リーダー + フォロワー） |
+| `data_collection.launch.py` | カメラ + データロガー（テレオペと併用） |
+| `gemini_real.launch.py` | Gemini API（実機） |
+| `gemini_sim.launch.py` | Gemini API（シミュレーション） |
+| `vla_real.launch.py` | VLA推論（実機） |
+| `vla_sim.launch.py` | VLA推論（Gazebo） |
+| `rosbridge_real.launch.py` | 実機 + rosbridge（リモートVLA用） |
+| `rosbridge_sim.launch.py` | Gazebo + rosbridge（リモートVLA用） |
+| `maniskill.launch.py` | ManiSkillシミュレーション |
+| `maniskill_vla.launch.py` | ManiSkill + VLA推論 |
+| `maniskill_logger.launch.py` | ManiSkill + データロガー |
+
+```bash
+# 使用例
+ros2 launch crane_x7_bringup real.launch.py use_d435:=true
+ros2 launch crane_x7_bringup teleop.launch.py
+ros2 launch crane_x7_bringup data_collection.launch.py  # 別プロセスで起動
+```
+
 ### crane_x7_log
 
 データロギングパッケージ。TFRecord形式でOXE互換データを収集。
 
-```bash
-# スタンドアロンロギング
-ros2 launch crane_x7_log data_logger.launch.py
-
-# 実機 + ロギング
-ros2 launch crane_x7_log real.launch.py
-
-# シミュレーション + ロギング
-ros2 launch crane_x7_log sim.launch.py
-```
+| launchファイル | 説明 |
+|---------------|------|
+| `data_logger.launch.py` | データロガーノード単体 |
+| `camera_viewer.launch.py` | カメラビューア（RViz）単体 |
 
 **出力データ形式**:
 - `observation/state`: 関節位置（float32、8次元）
@@ -319,11 +343,14 @@ ros2 launch crane_x7_log sim.launch.py
 
 Leader-Followerテレオペレーションパッケージ（C++実装）。
 
-```bash
-# リーダー起動
-ros2 launch crane_x7_log teleop_leader.launch.py
+| launchファイル | 説明 |
+|---------------|------|
+| `teleop_leader.launch.py` | リーダーノード単体（トルクOFF） |
+| `teleop_follower.launch.py` | フォロワーノード単体（トルクON） |
 
-# フォロワー起動
+```bash
+# 個別起動
+ros2 launch crane_x7_teleop teleop_leader.launch.py
 ros2 launch crane_x7_teleop teleop_follower.launch.py
 ```
 
@@ -331,20 +358,16 @@ ros2 launch crane_x7_teleop teleop_follower.launch.py
 
 VLA推論ノード。OpenVLAファインチューニング済みモデルを使用。
 
+| launchファイル | 説明 |
+|---------------|------|
+| `vla_control.launch.py` | VLA推論 + ロボットコントローラ |
+| `vla_inference_only.launch.py` | 推論ノードのみ（リモートGPU用） |
+
 ```bash
 # VLA推論のみ
 ros2 launch crane_x7_vla vla_inference_only.launch.py \
   model_path:=/path/to/checkpoint \
   task_instruction:="pick up the object"
-
-# 実機 + VLA制御
-ros2 launch crane_x7_vla real_with_vla.launch.py
-
-# シミュレーション + VLA制御
-ros2 launch crane_x7_vla sim_with_vla.launch.py
-
-# rosbridge経由（リモート推論用）
-ros2 launch crane_x7_vla rosbridge_robot.launch.py
 ```
 
 **Topics**:
@@ -355,36 +378,25 @@ ros2 launch crane_x7_vla rosbridge_robot.launch.py
 
 Google Gemini Robotics-ER API統合パッケージ。
 
-```bash
-# 実機 + Gemini
-ros2 launch crane_x7_gemini gemini_with_robot.launch.py
-
-# シミュレーション + Gemini
-ros2 launch crane_x7_gemini gemini_pick_and_place_sim.launch.py
-```
+| launchファイル | 説明 |
+|---------------|------|
+| `trajectory_planner.launch.py` | Geminiプランナーノード単体 |
 
 ### crane_x7_sim_gazebo
 
 カスタムGazeboシミュレーション環境。
 
-```bash
-ros2 launch crane_x7_sim_gazebo gazebo.launch.py
-```
+| launchファイル | 説明 |
+|---------------|------|
+| `pick_and_place.launch.py` | Pick & Place環境 |
 
 ### crane_x7_sim_maniskill
 
 ManiSkillシミュレーション統合パッケージ。
 
-```bash
-# シミュレーションのみ
-ros2 launch crane_x7_sim_maniskill sim_only.launch.py
-
-# シミュレーション + VLA
-ros2 launch crane_x7_sim_maniskill sim_with_vla.launch.py
-
-# シミュレーション + ロギング
-ros2 launch crane_x7_sim_maniskill sim_with_logger.launch.py
-```
+| launchファイル | 説明 |
+|---------------|------|
+| `sim_only.launch.py` | ManiSkill環境単体 |
 
 ## ディレクトリ構成
 
@@ -406,6 +418,7 @@ ros2/
 ├── src/                        # ROS 2パッケージ
 │   ├── crane_x7_ros/           # RT Corporation公式（サブモジュール）
 │   ├── crane_x7_description/   # URDFモデル（サブモジュール）
+│   ├── crane_x7_bringup/       # 統合launchファイル
 │   ├── crane_x7_log/           # データロギング
 │   ├── crane_x7_teleop/        # テレオペレーション
 │   ├── crane_x7_vla/           # VLA推論ノード
@@ -427,7 +440,7 @@ colcon build --symlink-install
 source install/setup.bash
 
 # 特定パッケージのみ
-colcon build --packages-select crane_x7_vla
+colcon build --packages-select crane_x7_bringup
 
 # テスト実行
 colcon test --packages-select crane_x7_log

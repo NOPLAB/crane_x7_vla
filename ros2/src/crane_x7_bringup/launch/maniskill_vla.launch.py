@@ -2,51 +2,69 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Launch CRANE-X7 Gazebo simulation with VLA control."""
+"""
+ManiSkillシミュレーション + VLA推論のbringup launchファイル。
 
+引数:
+  - model_path: VLAモデルのパス
+  - task_instruction (default: 'pick up the object'): タスク指示
+  - device (default: cuda): 推論デバイス
+  - sim_backend (default: gpu): シミュレーションバックエンド
+"""
+
+import os
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description."""
-    # Declare launch arguments
+    """Launch ManiSkill simulation with VLA inference."""
+
+    pkg_dir = get_package_share_directory('crane_x7_sim_maniskill')
+    config_file = os.path.join(pkg_dir, 'config', 'maniskill_config.yaml')
+
     declare_model_path = DeclareLaunchArgument(
         'model_path',
         default_value='',
-        description='Path to VLA model (e.g., /workspace/vla/outputs/<model_dir>/checkpoint-1500)'
+        description='Path to VLA model'
     )
 
     declare_task_instruction = DeclareLaunchArgument(
         'task_instruction',
         default_value='pick up the object',
-        description='Task instruction for the robot'
+        description='Task instruction for VLA'
     )
 
     declare_device = DeclareLaunchArgument(
         'device',
         default_value='cuda',
-        description='Device to run inference on (cuda or cpu)'
+        description='Device for VLA inference'
     )
 
-    # Include CRANE-X7 Gazebo launch with D435 camera
-    crane_x7_sim_gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('crane_x7_sim_gazebo'),
-                'launch',
-                'pick_and_place.launch.py'
-            ])
-        ]),
-        launch_arguments={
-            'use_d435': 'true',
-        }.items()
+    declare_sim_backend = DeclareLaunchArgument(
+        'sim_backend',
+        default_value='gpu',
+        description='Simulation backend (cpu or gpu)'
     )
 
-    # Include VLA control launch
+    maniskill_sim_node = Node(
+        package='crane_x7_sim_maniskill',
+        executable='maniskill_sim_node',
+        name='maniskill_sim_node',
+        output='screen',
+        parameters=[
+            config_file,
+            {
+                'sim_backend': LaunchConfiguration('sim_backend'),
+            }
+        ]
+    )
+
     vla_control = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -66,6 +84,7 @@ def generate_launch_description():
         declare_model_path,
         declare_task_instruction,
         declare_device,
-        crane_x7_sim_gazebo,
+        declare_sim_backend,
+        maniskill_sim_node,
         vla_control,
     ])

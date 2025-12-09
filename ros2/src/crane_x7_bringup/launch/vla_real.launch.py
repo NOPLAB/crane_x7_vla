@@ -2,7 +2,18 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Launch CRANE-X7 real robot with VLA control."""
+"""
+CRANE-X7 VLA推論（実機）のbringup launchファイル。
+
+crane_x7_vla/real_with_vla.launch.pyをラップする。
+
+引数:
+  - model_path: VLAモデルのパス
+  - port_name (default: /dev/ttyUSB0): CRANE-X7のUSBポート名
+  - use_d435 (default: true): RealSense D435カメラを使用
+  - task_instruction (default: 'pick up the object'): タスク指示
+  - device (default: cuda): 推論デバイス (cuda or cpu)
+"""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -12,18 +23,18 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Generate launch description."""
+    """Launch VLA inference with real robot."""
     # Declare launch arguments
     declare_model_path = DeclareLaunchArgument(
         'model_path',
         default_value='',
-        description='Path to VLA model (e.g., /workspace/vla/outputs/<model_dir>/checkpoint-1500)'
+        description='Path to VLA model'
     )
 
     declare_port_name = DeclareLaunchArgument(
         'port_name',
         default_value='/dev/ttyUSB0',
-        description='USB port for CRANE-X7'
+        description='USB port name for CRANE-X7'
     )
 
     declare_use_d435 = DeclareLaunchArgument(
@@ -44,32 +55,19 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include CRANE-X7 demo launch (MoveIt2 + hardware control)
-    crane_x7_demo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('crane_x7_examples'),
-                'launch',
-                'demo.launch.py'
-            ])
-        ]),
-        launch_arguments={
-            'port_name': LaunchConfiguration('port_name'),
-            'use_d435': LaunchConfiguration('use_d435'),
-        }.items()
-    )
-
-    # Include VLA control launch
-    vla_control = IncludeLaunchDescription(
+    # Include real_with_vla.launch.py
+    vla_real_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('crane_x7_vla'),
                 'launch',
-                'vla_control.launch.py'
+                'real_with_vla.launch.py'
             ])
         ]),
         launch_arguments={
             'model_path': LaunchConfiguration('model_path'),
+            'port_name': LaunchConfiguration('port_name'),
+            'use_d435': LaunchConfiguration('use_d435'),
             'task_instruction': LaunchConfiguration('task_instruction'),
             'device': LaunchConfiguration('device'),
         }.items()
@@ -81,6 +79,5 @@ def generate_launch_description():
         declare_use_d435,
         declare_task_instruction,
         declare_device,
-        crane_x7_demo,
-        vla_control,
+        vla_real_launch,
     ])

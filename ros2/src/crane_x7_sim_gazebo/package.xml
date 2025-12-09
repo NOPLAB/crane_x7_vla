@@ -7,8 +7,10 @@
   <name>crane_x7_sim_gazebo</name>
   <version>1.0.0</version>
   <description>Custom Gazebo simulation environments for CRANE-X7</description>
-  <maintainer email="nop@example.com">nop</maintainer>
+  <maintainer email="noplab90@gmail.com">nop</maintainer>
+  <author email="noplab90@gmail.com">nop</author>
   <license>MIT</license>
+  <url type="repository">https://github.com/NOPLAB/CRANE-X7</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

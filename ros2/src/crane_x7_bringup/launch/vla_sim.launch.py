@@ -2,24 +2,27 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Launch ManiSkill simulation with VLA inference."""
+"""
+CRANE-X7 VLA推論（シミュレーション）のbringup launchファイル。
 
-import os
-from ament_index_python.packages import get_package_share_directory
+crane_x7_vla/sim_with_vla.launch.pyをラップする。
+
+引数:
+  - model_path: VLAモデルのパス
+  - task_instruction (default: 'pick up the object'): タスク指示
+  - device (default: cuda): 推論デバイス (cuda or cpu)
+"""
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description."""
-
-    pkg_dir = get_package_share_directory('crane_x7_sim_maniskill')
-    config_file = os.path.join(pkg_dir, 'config', 'maniskill_config.yaml')
-
+    """Launch VLA inference with Gazebo simulation."""
+    # Declare launch arguments
     declare_model_path = DeclareLaunchArgument(
         'model_path',
         default_value='',
@@ -29,40 +32,22 @@ def generate_launch_description():
     declare_task_instruction = DeclareLaunchArgument(
         'task_instruction',
         default_value='pick up the object',
-        description='Task instruction for VLA'
+        description='Task instruction for the robot'
     )
 
     declare_device = DeclareLaunchArgument(
         'device',
         default_value='cuda',
-        description='Device for VLA inference'
+        description='Device to run inference on (cuda or cpu)'
     )
 
-    declare_sim_backend = DeclareLaunchArgument(
-        'sim_backend',
-        default_value='gpu',
-        description='Simulation backend (cpu or gpu)'
-    )
-
-    maniskill_sim_node = Node(
-        package='crane_x7_sim_maniskill',
-        executable='maniskill_sim_node',
-        name='maniskill_sim_node',
-        output='screen',
-        parameters=[
-            config_file,
-            {
-                'sim_backend': LaunchConfiguration('sim_backend'),
-            }
-        ]
-    )
-
-    vla_control = IncludeLaunchDescription(
+    # Include sim_with_vla.launch.py
+    vla_sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('crane_x7_vla'),
                 'launch',
-                'vla_control.launch.py'
+                'sim_with_vla.launch.py'
             ])
         ]),
         launch_arguments={
@@ -76,7 +61,5 @@ def generate_launch_description():
         declare_model_path,
         declare_task_instruction,
         declare_device,
-        declare_sim_backend,
-        maniskill_sim_node,
-        vla_control,
+        vla_sim_launch,
     ])

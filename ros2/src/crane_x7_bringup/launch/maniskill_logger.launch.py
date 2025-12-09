@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Launch ManiSkill simulation with data logger."""
+"""
+ManiSkillシミュレーション + データロガーのbringup launchファイル。
+
+引数:
+  - output_dir (default: /workspace/data/tfrecord_logs): ログ保存先
+  - episode_length (default: 200): エピソードあたりのステップ数
+  - sim_backend (default: gpu): シミュレーションバックエンド
+"""
 
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -13,7 +20,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description."""
+    """Launch ManiSkill simulation with data logger."""
 
     maniskill_pkg = get_package_share_directory('crane_x7_sim_maniskill')
     log_pkg = get_package_share_directory('crane_x7_log')

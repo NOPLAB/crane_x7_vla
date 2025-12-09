@@ -4,22 +4,21 @@
 
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>crane_x7_sim_maniskill</name>
+  <name>crane_x7_bringup</name>
   <version>0.0.0</version>
-  <description>ManiSkill simulation package for CRANE-X7 VLA inference and data collection</description>
+  <description>Bringup package for CRANE-X7 robot arm with launch files for all configurations</description>
   <maintainer email="noplab90@gmail.com">nop</maintainer>
   <author email="noplab90@gmail.com">nop</author>
   <license>MIT</license>
   <url type="repository">https://github.com/NOPLAB/CRANE-X7</url>
 
-  <depend>rclpy</depend>
-  <depend>sensor_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>cv_bridge</depend>
-  <depend>std_srvs</depend>
-
-  <exec_depend>crane_x7_vla</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>crane_x7_log</exec_depend>
+  <exec_depend>crane_x7_teleop</exec_depend>
+  <exec_depend>crane_x7_vla</exec_depend>
+  <exec_depend>crane_x7_gemini</exec_depend>
+  <exec_depend>crane_x7_examples</exec_depend>
+  <exec_depend>crane_x7_gazebo</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

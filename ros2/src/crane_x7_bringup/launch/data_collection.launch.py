@@ -3,20 +3,16 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-CRANE-X7テレオペ・リーダーモードの統合launchファイル。
+データ収集用launchファイル（カメラ + ロガー）。
 
-リーダーロボットはトルクOFFで手動教示が可能。
-データロガーでデモンストレーションを記録。
+テレオペと組み合わせて使用する。
+docker compose --profile teleop --profile log up
 
 引数:
-  - port_name (default: /dev/ttyUSB0): CRANE-X7 LeaderロボットのUSBポート名
-  - use_d435 (default: false): RealSense D435カメラを使用
-  - use_logger (default: true): データロガーを有効化
   - use_viewer (default: false): カメラビューア(rviz2)を表示
   - output_dir: ログデータの保存先
-  - config_file: ロガー設定ファイルのパス
-  - camera_serial (default: ''): プライマリカメラのシリアル番号（空の場合は自動選択）
-  - camera2_serial (default: ''): セカンダリカメラのシリアル番号（空の場合は1カメラモード）
+  - camera_serial (default: ''): プライマリカメラのシリアル番号
+  - camera2_serial (default: ''): セカンダリカメラのシリアル番号
 """
 
 import os
@@ -35,7 +31,6 @@ def _create_data_logger(context, *args, **kwargs):
     camera2_serial = LaunchConfiguration('camera2_serial').perform(context)
     use_dual_camera = camera2_serial.strip() != ''
 
-    # Determine camera_names based on camera2_serial
     if use_dual_camera:
         camera_names = ['primary', 'secondary']
     else:
@@ -47,7 +42,6 @@ def _create_data_logger(context, *args, **kwargs):
             executable='data_logger',
             name='data_logger',
             output='screen',
-            condition=IfCondition(LaunchConfiguration('use_logger')),
             parameters=[
                 LaunchConfiguration('config_file'),
                 {
@@ -61,33 +55,12 @@ def _create_data_logger(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    """Launch teleop leader with optional logger and viewer."""
+    """Launch camera and data logger for data collection."""
 
-    # Get package directories
     crane_x7_log_dir = get_package_share_directory('crane_x7_log')
-
-    # Paths
     logger_config = os.path.join(crane_x7_log_dir, 'config', 'logger_config.yaml')
 
     # Launch arguments
-    declare_port_name = DeclareLaunchArgument(
-        'port_name',
-        default_value='/dev/ttyUSB0',
-        description='USB port name for CRANE-X7 Leader robot'
-    )
-
-    declare_use_d435 = DeclareLaunchArgument(
-        'use_d435',
-        default_value='false',
-        description='Use RealSense D435 camera for visual observations'
-    )
-
-    declare_use_logger = DeclareLaunchArgument(
-        'use_logger',
-        default_value='true',
-        description='Enable data logger'
-    )
-
     declare_use_viewer = DeclareLaunchArgument(
         'use_viewer',
         default_value='false',
@@ -97,41 +70,28 @@ def generate_launch_description():
     declare_output_dir = DeclareLaunchArgument(
         'output_dir',
         default_value='/workspace/data/tfrecord_logs',
-        description='Directory to save logged demonstration data'
+        description='Directory to save logged data'
     )
 
     declare_config_file = DeclareLaunchArgument(
         'config_file',
         default_value=logger_config,
-        description='Path to data logger config file'
+        description='Path to logger config file'
     )
 
     declare_camera_serial = DeclareLaunchArgument(
         'camera_serial',
         default_value='',
-        description='Primary camera serial number (empty for auto-select)'
+        description='Primary camera serial number'
     )
 
     declare_camera2_serial = DeclareLaunchArgument(
         'camera2_serial',
         default_value='',
-        description='Secondary camera serial number (empty to disable)'
+        description='Secondary camera serial number'
     )
 
-    # Include teleop_leader.launch.py from crane_x7_teleop package
-    teleop_leader = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('crane_x7_teleop'),
-                'launch', 'teleop_leader.launch.py'
-            ])
-        ]),
-        launch_arguments={
-            'port_name': LaunchConfiguration('port_name')
-        }.items()
-    )
-
-    # RealSense D435 primary camera node (conditional)
+    # RealSense D435 primary camera
     realsense_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -139,7 +99,6 @@ def generate_launch_description():
                 'launch', 'rs_launch.py'
             ])
         ]),
-        condition=IfCondition(LaunchConfiguration('use_d435')),
         launch_arguments={
             'camera_namespace': '',
             'camera_name': 'camera',
@@ -151,7 +110,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # RealSense D435 secondary camera node (conditional - only if camera2_serial is set)
+    # RealSense D435 secondary camera (conditional)
     realsense_node2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -160,10 +119,7 @@ def generate_launch_description():
             ])
         ]),
         condition=IfCondition(
-            AndSubstitution(
-                LaunchConfiguration('use_d435'),
-                NotEqualsSubstitution(LaunchConfiguration('camera2_serial'), '')
-            )
+            NotEqualsSubstitution(LaunchConfiguration('camera2_serial'), '')
         ),
         launch_arguments={
             'camera_namespace': '',
@@ -176,7 +132,7 @@ def generate_launch_description():
         }.items()
     )
 
-    # Data logger node (conditional) - uses OpaqueFunction for dynamic camera config
+    # Data logger
     data_logger = OpaqueFunction(function=_create_data_logger)
 
     # Camera viewer (conditional)
@@ -194,15 +150,11 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        declare_port_name,
-        declare_use_d435,
-        declare_use_logger,
         declare_use_viewer,
         declare_output_dir,
         declare_config_file,
         declare_camera_serial,
         declare_camera2_serial,
-        teleop_leader,
         realsense_node,
         realsense_node2,
         data_logger,

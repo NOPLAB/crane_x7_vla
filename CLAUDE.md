@@ -20,11 +20,11 @@ docker compose --profile real up
 # Gazeboシミュレーション
 docker compose --profile sim up
 
-# テレオペレーション（リーダー + フォロワー）
+# テレオペレーション（リーダー + フォロワーのみ）
 docker compose --profile teleop up
 
-# テレオペレーション + カメラビューア
-docker compose --profile teleop-viewer up
+# テレオペレーション + カメラ + データロガー
+docker compose --profile log up
 
 # Gemini API統合（実機）
 docker compose --profile gemini up
@@ -126,7 +126,8 @@ crane_x7_vla/
 │       ├── crane_x7_teleop/       # テレオペレーション
 │       ├── crane_x7_vla/          # VLA推論ノード
 │       ├── crane_x7_gemini/       # Gemini API統合
-│       └── crane_x7_sim_gazebo/   # カスタムGazebo環境
+│       ├── crane_x7_sim_gazebo/   # カスタムGazebo環境
+│       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
 │   ├── Dockerfile.openvla         # OpenVLA用Docker
 │   ├── Dockerfile.openpi          # OpenPI用Docker
@@ -174,8 +175,44 @@ OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメ�
 
 ### 起動フロー
 
-- **実機**: `crane_x7_log/real.launch.py` → MoveIt2 + ハードウェア制御
-- **シミュレーション**: `crane_x7_log/sim.launch.py` → Gazebo
+**crane_x7_bringup**パッケージで各種起動をまとめて管理：
+
+| launchファイル | 説明 |
+|---------------|------|
+| `real.launch.py` | 実機制御（MoveIt2 + ハードウェア + ロガー） |
+| `sim.launch.py` | Gazeboシミュレーション + ロガー |
+| `teleop.launch.py` | テレオペ（リーダー + フォロワー） |
+| `data_collection.launch.py` | カメラ + データロガー（テレオペと併用） |
+| `gemini_real.launch.py` | Gemini API（実機） |
+| `gemini_sim.launch.py` | Gemini API（シミュレーション） |
+| `vla_real.launch.py` | VLA推論（実機） |
+| `vla_sim.launch.py` | VLA推論（Gazebo） |
+| `rosbridge_real.launch.py` | 実機 + rosbridge（リモートVLA用） |
+| `rosbridge_sim.launch.py` | Gazebo + rosbridge（リモートVLA用） |
+| `maniskill.launch.py` | ManiSkillシミュレーション |
+| `maniskill_vla.launch.py` | ManiSkill + VLA推論 |
+| `maniskill_logger.launch.py` | ManiSkill + データロガー |
+
+使用例:
+```bash
+ros2 launch crane_x7_bringup real.launch.py use_d435:=true
+ros2 launch crane_x7_bringup teleop.launch.py  # リーダー+フォロワーのみ
+ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（別プロセス）
+```
+
+**各パッケージの基本launch**（bringupから参照）:
+
+| パッケージ | launchファイル | 説明 |
+|-----------|---------------|------|
+| crane_x7_log | `data_logger.launch.py` | データロガーノード単体 |
+| crane_x7_log | `camera_viewer.launch.py` | カメラビューア単体 |
+| crane_x7_teleop | `teleop_leader.launch.py` | リーダーノード単体 |
+| crane_x7_teleop | `teleop_follower.launch.py` | フォロワーノード単体 |
+| crane_x7_vla | `vla_control.launch.py` | VLAノード群 |
+| crane_x7_vla | `vla_inference_only.launch.py` | 推論ノードのみ（リモートGPU用） |
+| crane_x7_gemini | `trajectory_planner.launch.py` | Geminiプランナーノード |
+| crane_x7_sim_gazebo | `pick_and_place.launch.py` | Gazebo環境 |
+| crane_x7_sim_maniskill | `sim_only.launch.py` | ManiSkill環境 |
 
 ## ライセンス
 
@@ -194,4 +231,4 @@ OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメ�
 ## 注意事項
 
 - 必ず日本語で応答すること
-- 作業の最後にREADMEを更新すること
+- 作業の最後にCLAUDE.mdと各ディレクトリにあるREADME.mdを更新すること

@@ -94,7 +94,7 @@ services:
       - "/dev/snd:/dev/snd"
     privileged: true
     group_add: *real-groups
-    command: ros2 launch crane_x7_log real.launch.py use_d435:=${USE_D435:-false} use_viewer:=${USE_VIEWER:-false}
+    command: ros2 launch crane_x7_bringup real.launch.py use_d435:=${USE_D435:-false} use_viewer:=${USE_VIEWER:-false}
 
   # --------------------------------------------------------------------------
   # Simulation Services
@@ -105,14 +105,18 @@ services:
     environment:
       <<: *base-env
       SIMULATION_MODE: "true"
-    command: ros2 launch crane_x7_log sim.launch.py use_viewer:=${USE_VIEWER:-false}
+    command: ros2 launch crane_x7_bringup sim.launch.py use_viewer:=${USE_VIEWER:-false}
 
   # --------------------------------------------------------------------------
   # Teleoperation Services
   # --------------------------------------------------------------------------
+  # Usage:
+  #   docker compose --profile teleop up           # Leader + Follower only
+  #   docker compose --profile teleop --profile log up  # + Camera + Logger
+  #
   teleop-leader:
     <<: *base
-    profiles: [teleop, teleop-viewer]
+    profiles: [teleop, log]
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
@@ -120,22 +124,11 @@ services:
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
-    command:
-      - /bin/bash
-      - -c
-      - |
-        CAMERA_ARGS="camera_serial:='${CAMERA_SERIAL:-}'"
-        if [ -n "${CAMERA2_SERIAL:-}" ]; then
-          CAMERA_ARGS="$$CAMERA_ARGS camera2_serial:='${CAMERA2_SERIAL}'"
-        fi
-        ros2 launch crane_x7_log teleop_leader.launch.py \
-          use_d435:=${USE_D435:-false} \
-          use_viewer:=false \
-          $$CAMERA_ARGS
+    command: ros2 launch crane_x7_teleop teleop_leader.launch.py
 
   teleop-follower:
     <<: *base
-    profiles: [teleop]
+    profiles: [teleop, log]
     devices:
       - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
@@ -144,12 +137,9 @@ services:
     stop_signal: SIGINT
     command: ros2 launch crane_x7_teleop teleop_follower.launch.py
 
-  teleop-follower-viewer:
+  teleop-logger:
     <<: *base
-    profiles: [teleop-viewer]
-    devices:
-      - "${USB_DEVICE_FOLLOWER:-/dev/ttyUSB1}:/dev/ttyUSB0"
-      - "/dev/snd:/dev/snd"
+    profiles: [log]
     privileged: true
     group_add: *real-groups
     stop_grace_period: 5s
@@ -162,9 +152,8 @@ services:
         if [ -n "${CAMERA2_SERIAL:-}" ]; then
           CAMERA_ARGS="$$CAMERA_ARGS camera2_serial:='${CAMERA2_SERIAL}'"
         fi
-        ros2 launch crane_x7_teleop teleop_follower.launch.py \
-          use_d435:=true \
-          use_viewer:=true \
+        ros2 launch crane_x7_bringup data_collection.launch.py \
+          use_viewer:=${USE_VIEWER:-true} \
           $$CAMERA_ARGS
 
   # --------------------------------------------------------------------------
@@ -181,7 +170,7 @@ services:
     environment:
       <<: *base-env
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-    command: ros2 launch crane_x7_gemini gemini_with_robot.launch.py
+    command: ros2 launch crane_x7_bringup gemini_real.launch.py
 
   gemini-sim:
     <<: *base
@@ -190,7 +179,7 @@ services:
       <<: *base-env
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       SIMULATION_MODE: "true"
-    command: ros2 launch crane_x7_gemini gemini_pick_and_place_sim.launch.py
+    command: ros2 launch crane_x7_bringup gemini_sim.launch.py
 
   # --------------------------------------------------------------------------
   # VLA Inference Services
@@ -209,7 +198,7 @@ services:
     deploy:
       <<: *gpu-deploy
     command: >
-      ros2 launch crane_x7_vla real_with_vla.launch.py
+      ros2 launch crane_x7_bringup vla_real.launch.py
         model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
@@ -225,7 +214,7 @@ services:
     deploy:
       <<: *gpu-deploy
     command: >
-      ros2 launch crane_x7_vla sim_with_vla.launch.py
+      ros2 launch crane_x7_bringup vla_sim.launch.py
         model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
@@ -241,7 +230,7 @@ services:
       <<: *base-env
     deploy:
       <<: *gpu-deploy
-    command: ros2 launch crane_x7_sim_maniskill sim_only.launch.py
+    command: ros2 launch crane_x7_bringup maniskill.launch.py
 
   maniskill-vla:
     <<: *base
@@ -252,7 +241,7 @@ services:
     deploy:
       <<: *gpu-deploy
     command: >
-      ros2 launch crane_x7_sim_maniskill sim_with_vla.launch.py
+      ros2 launch crane_x7_bringup maniskill_vla.launch.py
         model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
@@ -265,7 +254,7 @@ services:
       <<: *base-env
     deploy:
       <<: *gpu-deploy
-    command: ros2 launch crane_x7_sim_maniskill sim_with_logger.launch.py
+    command: ros2 launch crane_x7_bringup maniskill_logger.launch.py
 
 # ============================================================================
 # Networks

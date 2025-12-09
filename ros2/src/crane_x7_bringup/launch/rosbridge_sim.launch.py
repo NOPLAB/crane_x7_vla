@@ -2,39 +2,15 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Launch CRANE-X7 Gazebo simulation with rosbridge for remote VLA inference.
+"""
+CRANE-X7 Gazeboシミュレーション + rosbridge のbringup launchファイル。
 
-This launch file starts:
-- Gazebo simulation with D435 camera
-- rosbridge_server (WebSocket port 9090)
-- image_transport republish (raw -> compressed)
-- robot_controller node
+リモートGPUサーバーからのVLA推論に対応。
 
-The VLA inference runs on a remote GPU server and communicates via rosbridge
-WebSocket over Tailscale VPN.
-
-Usage:
-  ros2 launch crane_x7_vla rosbridge_sim.launch.py
-
-Architecture:
-  [Local: This launch file]              [Remote: Vast.ai GPU]
-  ┌─────────────────────────┐           ┌─────────────────────┐
-  │ Gazebo + D435           │           │ vla_inference       │
-  │ /camera/color/image_raw │           │ _rosbridge.py       │
-  │         │               │           │                     │
-  │         ▼               │           │                     │
-  │ image_transport         │           │                     │
-  │ /camera/color/          │           │                     │
-  │ image_raw/compressed    │           │                     │
-  │         │               │           │                     │
-  │         ▼               │           │                     │
-  │ rosbridge_server ◄──────┼─WebSocket─┼───► roslibpy        │
-  │ (port 9090)             │           │                     │
-  │         │               │           │                     │
-  │         ▼               │           │                     │
-  │ robot_controller ◄──────┼───────────┼──── /vla/predicted  │
-  │                         │           │      _action        │
-  └─────────────────────────┘           └─────────────────────┘
+引数:
+  - use_viewer (default: false): カメラビューア表示
+  - auto_execute (default: true): VLAアクション自動実行
+  - rosbridge_port (default: 9090): rosbridgeポート
 """
 
 from launch import LaunchDescription
@@ -48,7 +24,6 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     """Launch Gazebo simulation + rosbridge + robot_controller."""
-    # Declare launch arguments
     declare_use_viewer = DeclareLaunchArgument(
         'use_viewer',
         default_value='false',
@@ -58,7 +33,7 @@ def generate_launch_description():
     declare_auto_execute = DeclareLaunchArgument(
         'auto_execute',
         default_value='true',
-        description='Automatically execute received VLA actions'
+        description='Automatically execute VLA actions'
     )
 
     declare_config_file = DeclareLaunchArgument(
@@ -77,7 +52,7 @@ def generate_launch_description():
         description='rosbridge WebSocket port'
     )
 
-    # Include CRANE-X7 Gazebo simulation with D435 camera
+    # Gazebo simulation
     crane_x7_sim_gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -92,7 +67,6 @@ def generate_launch_description():
     )
 
     # rosbridge WebSocket server
-    # This allows remote clients to subscribe/publish ROS topics via WebSocket
     rosbridge_server = Node(
         package='rosbridge_server',
         executable='rosbridge_websocket',
@@ -100,12 +74,11 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'port': LaunchConfiguration('rosbridge_port'),
-            'address': '',  # Bind to all interfaces (0.0.0.0)
+            'address': '',
         }],
     )
 
-    # Image transport: republish raw image as compressed JPEG
-    # This reduces bandwidth for remote inference over VPN
+    # Image transport republisher
     image_republisher = Node(
         package='image_transport',
         executable='republish',
@@ -120,7 +93,7 @@ def generate_launch_description():
         ],
     )
 
-    # Robot controller node (receives actions from remote VLA inference)
+    # Robot controller node
     robot_controller_node = Node(
         package='crane_x7_vla',
         executable='robot_controller',
@@ -134,7 +107,7 @@ def generate_launch_description():
         ],
     )
 
-    # Camera viewer (optional RViz)
+    # Camera viewer
     rviz_config_path = PathJoinSubstitution([
         FindPackageShare('crane_x7_log'),
         'config',
