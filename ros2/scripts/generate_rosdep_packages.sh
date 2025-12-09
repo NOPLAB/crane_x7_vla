@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
 # Generate rosdep packages list for Docker caching
 # This script should be run inside a ROS 2 container or on a system with ROS 2 installed
 
