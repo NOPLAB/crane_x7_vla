@@ -57,7 +57,8 @@ etils>=1.0.0
 
 # OpenPI shared utilities
 pydantic>=2.0.0
-openpi-client>=0.1.0
+# openpi-client is installed from submodule (not available on PyPI)
+-e ./src/openpi/packages/openpi-client
 
 # CRANE-X7 VLA integration
 -e ./src/crane_x7_vla

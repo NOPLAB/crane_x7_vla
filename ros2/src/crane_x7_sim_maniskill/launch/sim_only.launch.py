@@ -42,6 +42,12 @@ def generate_launch_description():
         description='Auto reset on episode end'
     )
 
+    declare_render_mode = DeclareLaunchArgument(
+        'render_mode',
+        default_value='rgb_array',
+        description='Render mode (rgb_array, human, none)'
+    )
+
     maniskill_sim_node = Node(
         package='crane_x7_sim_maniskill',
         executable='maniskill_sim_node',
@@ -54,6 +60,7 @@ def generate_launch_description():
                 'sim_rate': LaunchConfiguration('sim_rate'),
                 'env_id': LaunchConfiguration('env_id'),
                 'auto_reset': LaunchConfiguration('auto_reset'),
+                'render_mode': LaunchConfiguration('render_mode'),
             }
         ]
     )
@@ -63,5 +70,6 @@ def generate_launch_description():
         declare_sim_rate,
         declare_env_id,
         declare_auto_reset,
+        declare_render_mode,
         maniskill_sim_node,
     ])

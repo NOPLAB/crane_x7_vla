@@ -48,6 +48,13 @@ x-vla-env: &vla-env
   VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION:-pick up the object}
   VLA_DEVICE: ${VLA_DEVICE:-cuda}
 
+x-maniskill-env: &maniskill-env
+  DISPLAY: ${DISPLAY}
+  PULSE_SERVER: unix:/run/user/1000/pulse/native
+  TF_CPP_MIN_LOG_LEVEL: "2"
+  MANISKILL_BACKEND: ${MANISKILL_BACKEND:-cpu}
+  MANISKILL_RENDER_MODE: ${MANISKILL_RENDER_MODE:-none}
+
 # Group configurations
 x-real-groups: &real-groups
   - dialout
@@ -227,10 +234,11 @@ services:
     profiles: [maniskill]
     volumes: *maniskill-volumes
     environment:
-      <<: *base-env
-    deploy:
-      <<: *gpu-deploy
-    command: ros2 launch crane_x7_bringup maniskill.launch.py
+      <<: *maniskill-env
+    command: >
+      ros2 launch crane_x7_bringup maniskill.launch.py
+        sim_backend:='${MANISKILL_BACKEND:-cpu}'
+        render_mode:='${MANISKILL_RENDER_MODE:-none}'
 
   maniskill-vla:
     <<: *base

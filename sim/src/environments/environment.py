@@ -9,7 +9,7 @@ import torch
 import torch.random
 
 from mani_skill.agents.multi_agent import MultiAgent
-from robot.crane_x7 import CraneX7
+from crane_x7.crane_x7 import CraneX7
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common, sapien_utils
@@ -22,7 +22,7 @@ from mani_skill.utils.structs.types import GPUMemoryConfig, SimConfig
 
 @register_env("PickPlace-CRANE-X7", max_episode_steps=200)
 class PickPlace(BaseEnv):
-    SUPPORTED_ROBOTS = ["robot"]
+    SUPPORTED_ROBOTS = ["CRANE-X7"]
     agent: Union[CraneX7]
 
     goal_radius = 0.1

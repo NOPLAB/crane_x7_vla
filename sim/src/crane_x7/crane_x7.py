@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
+import os
 import sapien
 import numpy as np
 from mani_skill.agents.base_agent import BaseAgent, Keyframe
@@ -8,11 +9,14 @@ from mani_skill.agents.controllers import *
 from mani_skill.agents.registration import register_agent
 from mani_skill.sensors.camera import CameraConfig
 
+# Get the directory containing this file
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 @register_agent()
 class CraneX7(BaseAgent):
     uid = "CRANE-X7"
-    mjcf_path = "crane_x7.xml"
+    mjcf_path = os.path.join(_THIS_DIR, "crane_x7.xml")
 
     keyframes = dict(
         rest=Keyframe(
@@ -87,6 +91,13 @@ class CraneX7(BaseAgent):
             stiffness=self.gripper_stiffness,
             damping=self.gripper_damping,
             force_limit=self.gripper_force_limit,
+            mimic={
+                "crane_x7_gripper_finger_b_joint": {
+                    "joint": "crane_x7_gripper_finger_a_joint",
+                    "multiplier": 1.0,
+                    "offset": 0.0,
+                }
+            },
         )
 
         controller_configs = dict(

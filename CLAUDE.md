@@ -37,7 +37,34 @@ docker compose --profile vla up
 
 # VLA推論（シミュレーション）
 docker compose --profile vla-sim up
+
+# ManiSkillシミュレーション（デフォルト: CPU、レンダリングなし）
+docker compose --profile maniskill up
+
+# ManiSkill + VLA推論
+docker compose --profile maniskill-vla up
+
+# ManiSkill + データロガー
+docker compose --profile maniskill-logger up
 ```
+
+### ManiSkill環境変数
+
+`.env`で以下を設定可能:
+
+| 変数 | 説明 | デフォルト |
+|------|------|-----------|
+| `MANISKILL_BACKEND` | シミュレーションバックエンド（`gpu`/`cpu`） | `cpu` |
+| `MANISKILL_RENDER_MODE` | レンダリングモード（`rgb_array`/`human`/`none`） | `none` |
+
+GPU使用時:
+```bash
+# .envに設定
+MANISKILL_BACKEND=gpu
+MANISKILL_RENDER_MODE=rgb_array
+```
+
+**注意**: `rgb_array`と`human`モードはGPU必須。GPUなし環境では`cpu` + `none`を使用。
 
 ### VLAファインチューニング
 
