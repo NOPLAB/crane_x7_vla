@@ -1,4 +1,4 @@
-# CRANE-X7 ROS 2 ワークスペース
+# CRANE-X7 ROS 2
 
 CRANE-X7ロボットアームのROS 2 Humbleベース制御環境。実機制御、Gazeboシミュレーション、VLA推論、Tailscale経由のリモートGPU推論をサポート。
 
