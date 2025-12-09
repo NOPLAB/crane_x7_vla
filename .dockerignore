@@ -1,0 +1,37 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Temporary files
+*.log
+.cache/
+
+# ROS2 build artifacts
+/ros2/build
+/ros2/install
+/ros2/log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# Data and outputs (mounted as volumes)
+/data/
+/outputs/
+
