@@ -1,0 +1,53 @@
+# Default VLA-RL Configuration
+# For development and testing
+
+experiment_name: crane_x7_vlarl
+seed: 42
+device: cuda
+
+# Model settings
+pretrained_checkpoint: openvla/openvla-7b
+sft_checkpoint: null  # Set to path for fine-tuned model
+
+# LoRA settings
+lora_rank: 32
+lora_alpha: 16
+
+# Training
+num_updates: 1000
+language_instruction: "pick up the object and place it"
+
+# Logging
+use_wandb: false
+wandb_project: crane-x7-vlarl
+log_interval: 10
+eval_interval: 50
+save_interval: 100
+num_eval_episodes: 10
+
+# Rollout configuration
+rollout:
+  simulator: maniskill
+  env_id: PickPlace-CRANE-X7
+  backend: cpu
+  render_mode: rgb_array
+  num_parallel_envs: 4
+  num_rollouts_per_update: 8
+  max_steps: 100
+  use_binary_reward: true
+  temperature: 1.0
+
+# PPO configuration
+ppo:
+  learning_rate: 1.0e-5
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_ratio: 0.2
+  value_loss_coef: 0.5
+  entropy_coef: 0.01
+  num_epochs: 4
+  minibatch_size: 32
+  max_grad_norm: 0.5
+  target_kl: 0.02
+  clip_value_loss: true
+  value_clip_range: 0.2

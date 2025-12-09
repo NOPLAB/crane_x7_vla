@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+
+# Deep learning
+torch>=2.5.1
+accelerate>=1.0.0
+peft>=0.13.0
+transformers>=4.45.0
+
+# RL utilities (standalone implementation, no veRL)
+numpy>=1.24.0
+tensordict>=0.3.0
+
+# Logging
+wandb>=0.16.0
+tqdm>=4.66.0
+
+# Configuration
+PyYAML>=6.0
+
+# Image processing
+Pillow>=10.0.0
+
+# OpenVLA dependencies
+timm>=0.9.0
+einops>=0.7.0
+
+# lift dependencies (installed via sim package)
+# mani_skill (via lift[maniskill])
