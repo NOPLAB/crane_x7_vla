@@ -129,7 +129,7 @@ services:
       - |
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla rosbridge_robot.launch.py \
+        ros2 launch crane_x7_bringup rosbridge_real.launch.py \
           port_name:='/dev/ttyUSB0' \
           use_d435:=true \
           use_viewer:=false \
@@ -166,7 +166,7 @@ services:
       - |
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla rosbridge_robot.launch.py \
+        ros2 launch crane_x7_bringup rosbridge_real.launch.py \
           port_name:='/dev/ttyUSB0' \
           use_d435:=true \
           use_viewer:=true \
@@ -201,7 +201,7 @@ services:
       - |
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla rosbridge_sim.launch.py \
+        ros2 launch crane_x7_bringup rosbridge_sim.launch.py \
           use_viewer:=false \
           auto_execute:=true \
           rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
@@ -232,7 +232,7 @@ services:
       - |
         source /opt/ros/humble/setup.bash
         source /workspace/ros2/install/setup.bash
-        ros2 launch crane_x7_vla rosbridge_sim.launch.py \
+        ros2 launch crane_x7_bringup rosbridge_sim.launch.py \
           use_viewer:=true \
           auto_execute:=true \
           rosbridge_port:=$${ROSBRIDGE_PORT:-9090}
