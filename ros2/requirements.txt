@@ -26,7 +26,7 @@ opencv-python-headless>=4.8.0
 # Tensor operations (used by some model components)
 einops
 
-# ManiSkill simulation
-mani-skill>=3.0.0
+# ManiSkill simulation (3.0.0 stable not yet released, using latest beta)
+mani-skill>=3.0.0b0
 sapien
 gymnasium>=0.26.0
