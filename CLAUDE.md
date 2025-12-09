@@ -156,10 +156,10 @@ crane_x7_vla/
 
 OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメージ**を使用：
 
-| バックエンド | Dockerfile | Python | PyTorch | 状態 |
-|------------|-----------|--------|---------|------|
-| OpenVLA | `Dockerfile.openvla` | 3.10 | 2.5.1 | 実装済み |
-| OpenPI | `Dockerfile.openpi` | 3.11 | 2.7.1 | 未実装 |
+| バックエンド | Dockerfile           | Python | PyTorch | 状態     |
+| ------------ | -------------------- | ------ | ------- | -------- |
+| OpenVLA      | `Dockerfile.openvla` | 3.10   | 2.5.1   | 実装済み |
+| OpenPI       | `Dockerfile.openpi`  | 3.11   | 2.7.1   | 未実装   |
 
 ### データフォーマット
 
@@ -176,19 +176,6 @@ OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメ�
 
 - **実機**: `crane_x7_log/real.launch.py` → MoveIt2 + ハードウェア制御
 - **シミュレーション**: `crane_x7_log/sim.launch.py` → Gazebo
-
-### 環境変数（ros2/docker/.env）
-
-```bash
-USB_DEVICE=/dev/ttyUSB0           # リーダーロボット
-USB_DEVICE_FOLLOWER=/dev/ttyUSB1  # フォロワーロボット
-DISPLAY=:0                        # X11ディスプレイ
-ROS_DOMAIN_ID=42                  # ROS 2 Domain ID
-GEMINI_API_KEY=                   # Gemini APIキー
-HF_TOKEN=                         # Hugging Faceトークン
-VLA_MODEL_PATH=                   # VLAモデルパス
-VLA_TASK_INSTRUCTION=             # タスク指示
-```
 
 ## ライセンス
 
@@ -207,3 +194,4 @@ VLA_TASK_INSTRUCTION=             # タスク指示
 ## 注意事項
 
 - 必ず日本語で応答すること
+- 作業の最後にREADMEを更新すること
