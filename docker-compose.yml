@@ -143,7 +143,6 @@ x-base: &base
   env_file: .env
   build:
     <<: *build-ros2
-    target: base
   devices:
     - "/dev/snd:/dev/snd"
   volumes: *x11-volumes
@@ -349,7 +348,7 @@ services:
     profiles: [vla-rl]
     build:
       <<: *build-vla-rl
-      target: vla-rl
+      target: base
     volumes: *vla-rl-volumes
     environment:
       <<: *vla-rl-env

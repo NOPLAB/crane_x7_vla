@@ -5,7 +5,7 @@
 # LeRobot CRANE-X7 Environment
 # Build context: project root (crane_x7_vla/)
 
-ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=12.6.3
 ARG PYTHON_VERSION=3.11
 
 # Base Stage
@@ -14,14 +14,15 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# System dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# System dependencies and Intel RealSense SDK
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     # Basic tools
     git wget curl vim \
-    ca-certificates sudo \
+    ca-certificates sudo lsb-release \
     software-properties-common \
     build-essential cmake pkg-config \
     # Python
@@ -36,18 +37,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     espeak-ng alsa-utils pulseaudio-utils \
     # X11 for visualization
     libxcb-xinerama0 libxcb-cursor0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Intel RealSense SDK
-RUN mkdir -p /etc/apt/keyrings && \
-    curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null && \
-    echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list && \
-    apt-get update && apt-get install -y --no-install-recommends \
-    librealsense2 librealsense2-utils librealsense2-dev \
-    && rm -rf /var/lib/apt/lists/*
+    # Intel RealSense SDK
+    && mkdir -p /etc/apt/keyrings \
+    && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp \
+       | tee /etc/apt/keyrings/librealsense.pgp > /dev/null \
+    && echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" \
+       | tee /etc/apt/sources.list.d/librealsense.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    librealsense2 librealsense2-utils librealsense2-dev
 
 # Python configuration
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 && \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
     python3 -m pip install --upgrade pip setuptools wheel
 
@@ -56,21 +57,25 @@ WORKDIR /workspace
 # Dependencies Stage
 FROM base AS deps
 
-# Install PyTorch with CUDA support
-RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# Install PyTorch with CUDA support (cu126 for CUDA 12.6)
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 
 # Install LeRobot with Dynamixel and RealSense support
-RUN pip3 install "lerobot[dynamixel,realsense]"
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install "lerobot[dynamixel,realsense]"
 
 # Additional dependencies
 COPY lerobot/requirements.txt /workspace/
-RUN pip3 install -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install -r requirements.txt
 
 # Development Stage
 FROM deps AS dev
 
 # Development tools
-RUN pip3 install \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
     jupyter \
     tensorboard \
     pytest pytest-cov \
@@ -82,7 +87,8 @@ COPY lerobot/pyproject.toml /workspace/lerobot/
 COPY lerobot/lerobot_robot_crane_x7/ /workspace/lerobot/lerobot_robot_crane_x7/
 COPY lerobot/lerobot_teleoperator_crane_x7/ /workspace/lerobot/lerobot_teleoperator_crane_x7/
 
-RUN pip3 install -e /workspace/lerobot
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install -e /workspace/lerobot
 
 # Copy configs and scripts
 COPY lerobot/configs/ /workspace/lerobot/configs/

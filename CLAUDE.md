@@ -341,6 +341,7 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 - [docs/ros2.md](docs/ros2.md) - ROS 2環境詳細
 - [docs/vla.md](docs/vla.md) - VLAファインチューニング詳細
 - [docs/vla-rl.md](docs/vla-rl.md) - VLA強化学習（SimpleVLA-RL方式）
+- [docs/remote.md](docs/remote.md) - リモートGPU推論・VLA-RLトレーニング（Vast.ai、Runpod）
 - [docs/sim.md](docs/sim.md) - Liftシミュレータ抽象化
 - [docs/slurm.md](docs/slurm.md) - Slurmジョブ投下ツール
 - [docs/lerobot.md](docs/lerobot.md) - LeRobot統合

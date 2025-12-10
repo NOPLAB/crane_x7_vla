@@ -5,7 +5,7 @@
 # VLA Inference Dockerfile for Remote GPU Services using rosbridge
 # Build context: project root (crane_x7_vla/)
 
-ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=12.6.3
 
 # Base Stage: CUDA + Python + Tailscale
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
@@ -42,10 +42,10 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 
 WORKDIR /workspace
 
-# Install PyTorch with CUDA support
+# Install PyTorch with CUDA support (cu126 for CUDA 12.6)
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu124
+    --index-url https://download.pytorch.org/whl/cu126
 
 # Install VLA inference dependencies
 COPY ros2/requirements.txt /tmp/requirements.txt

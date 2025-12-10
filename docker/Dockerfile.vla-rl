@@ -5,7 +5,7 @@
 # VLA-RL Dockerfile for CRANE-X7
 # Build context: project root (crane_x7_vla/)
 
-ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=12.6.3
 
 # Base Stage: CUDA + Python + VLA-RL dependencies
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS base
@@ -54,7 +54,7 @@ WORKDIR /workspace
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 
-# Install PyTorch with CUDA support (cu126 for CUDA 12.9)
+# Install PyTorch with CUDA support (cu126 for CUDA 12.6)
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 

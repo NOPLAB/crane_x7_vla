@@ -5,7 +5,7 @@
 # ROS 2 Humble Docker image for CRANE-X7
 # Build context: project root (crane_x7_vla/)
 
-FROM ros:humble-ros-base AS base
+FROM ros:humble-ros-base
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
