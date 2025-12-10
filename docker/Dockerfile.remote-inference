@@ -4,40 +4,17 @@
 #
 # VLA Inference Dockerfile for Remote GPU Services using rosbridge
 # Build context: project root (crane_x7_vla/)
-#
-# This is a lightweight image (no ROS 2 required) that uses roslibpy
-# to communicate with the local robot via rosbridge WebSocket.
-#
-# Benefits over CycloneDDS approach:
-# - Works reliably over Tailscale userspace networking
-# - No UDP port requirements
-# - Smaller image size (no ROS 2 installation)
-#
-# Usage:
-#   docker build -f docker/Dockerfile.remote-inference -t crane_x7_vla-remote-inference .
-#
-#   docker run --gpus all \
-#     -e TS_AUTHKEY=tskey-auth-xxxxx \
-#     -e ROSBRIDGE_HOST=crane-x7-local \
-#     -e VLA_MODEL_PATH=/workspace/models/checkpoint \
-#     -e VLA_TASK_INSTRUCTION="pick up the object" \
-#     -v /path/to/models:/workspace/models:ro \
-#     crane_x7_vla-remote
 
 ARG CUDA_VERSION=12.9.1
 
-# ============================================================================
 # Base Stage: CUDA + Python + Tailscale
-# ============================================================================
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     CUDA_HOME=/usr/local/cuda
 
-# ----------------------------------------------------------------------------
 # Install system dependencies and Tailscale
-# ----------------------------------------------------------------------------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -65,18 +42,12 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 
 WORKDIR /workspace
 
-# ----------------------------------------------------------------------------
 # Install PyTorch with CUDA support
-# ----------------------------------------------------------------------------
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
     --index-url https://download.pytorch.org/whl/cu124
 
-# ----------------------------------------------------------------------------
 # Install VLA inference dependencies
-# ----------------------------------------------------------------------------
-# Uses shared requirements.txt (excludes TensorFlow, ManiSkill, etc. not needed here)
-# roslibpy for rosbridge communication (no ROS 2 required)
 COPY ros2/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install \
@@ -91,20 +62,14 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     sentencepiece \
     tokenizers
 
-# ----------------------------------------------------------------------------
 # Copy OpenVLA/prismatic source for model loading
-# ----------------------------------------------------------------------------
 COPY vla/src/openvla /workspace/vla/src/openvla
 
-# ----------------------------------------------------------------------------
 # Copy VLA inference scripts (crane_x7_vla package)
-# ----------------------------------------------------------------------------
 COPY ros2/src/crane_x7_vla/crane_x7_vla /workspace/crane_x7_vla
 COPY ros2/src/crane_x7_vla/scripts /workspace/scripts
 
-# ----------------------------------------------------------------------------
 # Copy configuration and entrypoint
-# ----------------------------------------------------------------------------
 COPY docker/entrypoint-remote-inference.sh /entrypoint.sh
 COPY docker/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
 RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
@@ -112,10 +77,7 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 # Create directories for model checkpoints and Tailscale state
 RUN mkdir -p /workspace/models /var/lib/tailscale
 
-# ----------------------------------------------------------------------------
 # Environment variables
-# ----------------------------------------------------------------------------
-# Python path for OpenVLA and crane_x7_vla
 ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace"
 
 # CUDA/PyTorch optimization
@@ -144,8 +106,6 @@ ENV VLA_MODEL_PATH="" \
     HF_TOKEN="" \
     HF_HOME="/root/.cache/huggingface"
 
-# ----------------------------------------------------------------------------
 # Entrypoint and default command
-# ----------------------------------------------------------------------------
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "/workspace/scripts/vla_inference_rosbridge.py"]

@@ -1,17 +1,14 @@
-# SPDX-FileCopyrightText: 2025 nop
-# SPDX-License-Identifier: MIT
-
 # syntax=docker/dockerfile:1
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2025 nop
+#
 # LeRobot CRANE-X7 Environment
-# Supports: Teleoperation, Data Collection, Training (ACT/Diffusion), Inference
 # Build context: project root (crane_x7_vla/)
 
 ARG CUDA_VERSION=12.9.1
 ARG PYTHON_VERSION=3.11
 
-# ============================================================================
 # Base Stage
-# ============================================================================
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
 ARG PYTHON_VERSION
@@ -56,9 +53,7 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTH
 
 WORKDIR /workspace
 
-# ============================================================================
 # Dependencies Stage
-# ============================================================================
 FROM base AS deps
 
 # Install PyTorch with CUDA support
@@ -71,9 +66,7 @@ RUN pip3 install "lerobot[dynamixel,realsense]"
 COPY lerobot/requirements.txt /workspace/
 RUN pip3 install -r requirements.txt
 
-# ============================================================================
 # Development Stage
-# ============================================================================
 FROM deps AS dev
 
 # Development tools

@@ -3,43 +3,18 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # Remote VLA-RL Dockerfile for CRANE-X7
-# VLA-RL training environment with SSH X11 forwarding and Tailscale
 # Build context: project root (crane_x7_vla/)
-#
-# Features:
-# - VLA-RL training (OpenVLA + RL)
-# - SSH server with X11 forwarding for GUI applications
-# - Tailscale for secure remote access
-# - Genesis/ManiSkill simulator support
-#
-# Usage:
-#   docker build -f docker/Dockerfile.remote-vla-rl -t crane_x7_vla-remote-vla-rl .
-#
-#   docker run --gpus all -d \
-#     -e TS_AUTHKEY=tskey-auth-xxxxx \
-#     -e SSH_PUBLIC_KEY="ssh-ed25519 AAAA..." \
-#     -p 2222:22 \
-#     -v /path/to/data:/workspace/data \
-#     -v /path/to/outputs:/workspace/vla-rl/outputs \
-#     crane_x7_vla-remote-vla-rl
-#
-#   # SSH with X11 forwarding
-#   ssh -X -p 2222 vla@<tailscale-hostname>
 
 ARG CUDA_VERSION=12.9.1
 
-# ============================================================================
 # Base Stage: CUDA + Python + Tailscale + SSH
-# ============================================================================
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     CUDA_HOME=/usr/local/cuda
 
-# ----------------------------------------------------------------------------
 # Install system dependencies, Tailscale, and SSH server
-# ----------------------------------------------------------------------------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -116,15 +91,11 @@ WORKDIR /workspace
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 
-# ----------------------------------------------------------------------------
 # Install PyTorch with CUDA support (cu126 for CUDA 12.9)
-# ----------------------------------------------------------------------------
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
-# ----------------------------------------------------------------------------
 # Install VLA dependencies
-# ----------------------------------------------------------------------------
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install \
     transformers \
@@ -139,39 +110,29 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     einops \
     draccus
 
-# ----------------------------------------------------------------------------
 # Install VLA-RL and simulator dependencies
-# ----------------------------------------------------------------------------
 COPY vla-rl/requirements.txt /build/requirements-vla-rl.txt
 COPY sim/requirements.txt /build/requirements-sim.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install -r /build/requirements-vla-rl.txt -r /build/requirements-sim.txt
 
-# ----------------------------------------------------------------------------
 # Copy OpenVLA/prismatic source
-# ----------------------------------------------------------------------------
 COPY vla/src/openvla /workspace/vla/src/openvla
 
-# ----------------------------------------------------------------------------
 # Copy and install lift simulator
-# ----------------------------------------------------------------------------
 COPY --chown=root:root sim /workspace/sim
 WORKDIR /workspace/sim
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install --no-deps .
 
-# ----------------------------------------------------------------------------
 # Copy and install vla-rl package
-# ----------------------------------------------------------------------------
 COPY --chown=root:root vla-rl /workspace/vla-rl
 WORKDIR /workspace/vla-rl
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install --no-deps .
 
-# ----------------------------------------------------------------------------
 # Create directories
-# ----------------------------------------------------------------------------
 RUN mkdir -p /workspace/vla-rl/outputs \
     /workspace/data \
     /workspace/models \
@@ -180,17 +141,12 @@ RUN mkdir -p /workspace/vla-rl/outputs \
 # Give vla user access to workspace
 RUN chown -R vla:vla /workspace
 
-# ----------------------------------------------------------------------------
 # Copy entrypoint
-# ----------------------------------------------------------------------------
 COPY docker/entrypoint-remote-vla-rl.sh /entrypoint.sh
 COPY docker/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
 RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 
-# ----------------------------------------------------------------------------
 # Environment variables
-# ----------------------------------------------------------------------------
-# Python path
 ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/vla-rl/src:/workspace/sim/src:/workspace"
 
 # CUDA/PyTorch optimization

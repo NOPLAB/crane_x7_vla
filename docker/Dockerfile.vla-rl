@@ -3,23 +3,36 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # VLA-RL Dockerfile for CRANE-X7
-# Extends OpenVLA environment with RL training capabilities
 # Build context: project root (crane_x7_vla/)
 
-ARG BASE_IMAGE=noppdev/crane_x7_vla:openvla
+ARG CUDA_VERSION=12.9.1
 
-# ============================================================================
-# VLA-RL Stage: Add RL training dependencies
-# ============================================================================
-FROM ${BASE_IMAGE} AS vla-rl
+# Base Stage: CUDA + Python + VLA-RL dependencies
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS base
 
-# Switch to root for installation
-USER root
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+# Install system dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    # Basic tools
+    ca-certificates \
+    curl \
+    gnupg \
+    git \
+    vim \
+    htop \
+    # Python
+    python3-pip \
     python3-dev \
-    # EGL/OpenGL libraries for Genesis headless rendering
+    # Build tools
+    build-essential \
+    libgomp1 \
+    libglib2.0-0 \
+    # EGL/OpenGL for headless rendering
     libegl1 \
     libegl1-mesa-dev \
     libgl1 \
@@ -29,56 +42,89 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglx0 \
     libgles2 \
     libglvnd-dev \
-    libegl-mesa0 \
-    && rm -rf /var/lib/apt/lists/*
+    libegl-mesa0
 
-# Configure NVIDIA EGL for headless rendering
+# Upgrade pip
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
+
+WORKDIR /workspace
+
+# Configure NVIDIA for headless rendering
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 
-# Install dependencies first (for better caching)
+# Install PyTorch with CUDA support (cu126 for CUDA 12.9)
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
+# Install VLA dependencies
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
+    transformers \
+    accelerate \
+    "timm>=0.9.10,<1.0.0" \
+    peft \
+    huggingface_hub \
+    pillow \
+    numpy \
+    sentencepiece \
+    tokenizers \
+    einops \
+    draccus
+
+# Install VLA-RL and simulator dependencies
 COPY vla-rl/requirements.txt /build/requirements-vla-rl.txt
 COPY sim/requirements.txt /build/requirements-sim.txt
 
-# Upgrade PyTorch for Genesis compatibility (requires >=2.8.0)
-# Use cu126 for CUDA 12.9 compatibility
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install -r /build/requirements-vla-rl.txt -r /build/requirements-sim.txt
 
-# Copy lift simulator (install without deps since already installed)
+# Copy OpenVLA/prismatic source
+COPY vla/src/openvla /workspace/vla/src/openvla
+
+# Copy and install lift simulator
 COPY --chown=root:root sim /workspace/sim
 WORKDIR /workspace/sim
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install --no-deps .
 
-# Copy vla-rl package (install without deps since already installed)
+# Copy and install vla-rl package
 COPY --chown=root:root vla-rl /workspace/vla-rl
 WORKDIR /workspace/vla-rl
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install --no-deps .
 
-# Set environment
-ENV PYTHONPATH=/workspace/vla-rl/src:/workspace/sim/src:${PYTHONPATH}
+# Create directories
+RUN mkdir -p /workspace/vla-rl/outputs \
+    /workspace/data \
+    /workspace/models
+
+# Environment variables
+ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/vla-rl/src:/workspace/sim/src:/workspace"
+
+# CUDA/PyTorch optimization
+ENV CUDA_LAUNCH_BLOCKING=0 \
+    PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512" \
+    TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
+    TF_CPP_MIN_LOG_LEVEL=2
+
+# W&B
 ENV WANDB_DIR=/workspace/vla-rl/outputs
 
-# Create outputs directory
-RUN mkdir -p /workspace/vla-rl/outputs
+# HuggingFace
+ENV HF_HOME="/root/.cache/huggingface"
 
 WORKDIR /workspace
 
 # Default command
-CMD ["python", "-m", "crane_x7_vla_rl.training.cli", "--help"]
+CMD ["python3", "-m", "crane_x7_vla_rl.training.cli", "--help"]
 
 
-# ============================================================================
 # Development Stage: Additional dev tools
-# ============================================================================
-FROM vla-rl AS dev
+FROM base AS dev
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip3 install \
         pytest \
         pytest-cov \
