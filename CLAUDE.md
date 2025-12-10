@@ -337,14 +337,16 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 
 ## 参考資料
 
-- [vla/README.md](vla/README.md) - VLAファインチューニング詳細
-- [vla-rl/README.md](vla-rl/README.md) - VLA強化学習（SimpleVLA-RL方式）
-- [sim/README.md](sim/README.md) - Liftシミュレータ抽象化
-- [slurm/README.md](slurm/README.md) - Slurmジョブ投下ツール
-- [lerobot/README.md](lerobot/README.md) - LeRobot統合
-- [ros2/src/crane_x7_gemini/README.md](ros2/src/crane_x7_gemini/README.md) - Gemini API統合
+- [docs/README.md](docs/README.md) - ドキュメントトップページ
+- [docs/ros2.md](docs/ros2.md) - ROS 2環境詳細
+- [docs/vla.md](docs/vla.md) - VLAファインチューニング詳細
+- [docs/vla-rl.md](docs/vla-rl.md) - VLA強化学習（SimpleVLA-RL方式）
+- [docs/sim.md](docs/sim.md) - Liftシミュレータ抽象化
+- [docs/slurm.md](docs/slurm.md) - Slurmジョブ投下ツール
+- [docs/lerobot.md](docs/lerobot.md) - LeRobot統合
+- [docs/gemini.md](docs/gemini.md) - Gemini API統合
 
 ## 注意事項
 
 - 必ず日本語で応答すること
-- 作業の最後にCLAUDE.mdと各ディレクトリにあるREADME.mdを更新すること
+- 作業の合間にCLAUDE.mdとdocs/下にあるドキュメント更新すること

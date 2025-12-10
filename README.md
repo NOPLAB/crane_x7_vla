@@ -13,13 +13,28 @@ CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 - テレオペレーションモード（キネステティックティーチング）
 - RealSenseカメラ対応（RGB + 深度画像）
 
+## ドキュメント
+
+詳細なドキュメントは [docs/](docs/README.md) を参照してください。
+
+| ドキュメント | 説明 |
+|-------------|------|
+| [docs/ros2.md](docs/ros2.md) | ROS 2環境（実機制御、Gazebo、Docker Composeプロファイル） |
+| [docs/vla.md](docs/vla.md) | VLAファインチューニング（OpenVLA、MiniVLA、OpenPI） |
+| [docs/vla-rl.md](docs/vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO） |
+| [docs/sim.md](docs/sim.md) | Liftシミュレータ抽象化（ManiSkill、Genesis） |
+| [docs/lerobot.md](docs/lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
+| [docs/gemini.md](docs/gemini.md) | Gemini API統合 |
+| [docs/slurm.md](docs/slurm.md) | Slurmジョブ投下ツール |
+
 ## ディレクトリ構成
 
 | ディレクトリ | 説明 |
 |-------------|------|
 | `ros2/` | ROS 2ワークスペース。CRANE-X7の実機制御、Gazeboシミュレーション、テレオペレーション、データロギング（RLDS/TFRecord形式）、VLA推論ノード、Gemini API統合を含む。 |
 | `vla/` | VLAファインチューニング環境。OpenVLAおよびOpenPIを用いたモデルトレーニング、LoRAアダプター管理、設定ファイル生成を行う。 |
-| `sim/` | ManiSkillシミュレータ統合。MJCFベースのロボット定義とタスク環境を提供する。 |
+| `vla-rl/` | VLA強化学習。SimpleVLA-RL方式でPPOを使用したVLAモデルのファインチューニング。 |
+| `sim/` | Liftシミュレータ統合。ManiSkill、Genesisなど複数シミュレータの統一抽象化レイヤー。 |
 | `lerobot/` | LeRobot統合。CRANE-X7用のRobotプラグイン、Teleoperatorプラグイン、ACT/Diffusionポリシー設定を含む。 |
 | `slurm/` | Slurmクラスター向けジョブ投下ツール。W&B Sweepによるハイパーパラメータ探索もサポート。 |
 
