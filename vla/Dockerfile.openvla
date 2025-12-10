@@ -6,7 +6,7 @@
 # Optimized for OpenVLA with torch 2.5.1 and CUDA 12.9
 
 ARG CUDA_VERSION=12.9.1
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 
 # ============================================================================
 # Builder Stage: Install build dependencies and Python packages

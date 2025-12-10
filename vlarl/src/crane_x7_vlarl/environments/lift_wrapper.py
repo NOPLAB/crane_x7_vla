@@ -3,6 +3,8 @@
 
 """Wrapper for lift simulator integration with VLA-RL."""
 
+import importlib
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +12,40 @@ import numpy as np
 
 from lift import Simulator, SimulatorConfig, create_simulator
 from lift.types import Observation, StepResult
+
+logger = logging.getLogger(__name__)
+
+# Mapping from simulator name to module name
+_SIMULATOR_MODULES = {
+    "maniskill": "lift_maniskill",
+    "genesis": "lift_genesis",
+    "isaacsim": "lift_isaacsim",
+}
+
+
+def _ensure_simulator_registered(simulator_name: str) -> None:
+    """Import the simulator module to ensure it's registered.
+
+    Args:
+        simulator_name: Name of the simulator (maniskill, genesis, isaacsim).
+
+    Raises:
+        ImportError: If the simulator module cannot be imported.
+    """
+    if simulator_name not in _SIMULATOR_MODULES:
+        logger.warning(f"Unknown simulator: {simulator_name}")
+        return
+
+    module_name = _SIMULATOR_MODULES[simulator_name]
+    try:
+        importlib.import_module(module_name)
+        logger.debug(f"Successfully imported {module_name}")
+    except ImportError as e:
+        raise ImportError(
+            f"Could not import simulator module '{module_name}' for simulator "
+            f"'{simulator_name}'. Please ensure the required dependencies are "
+            f"installed. Error: {e}"
+        ) from e
 
 
 @dataclass
@@ -75,6 +111,9 @@ class LiftRolloutEnvironment:
         Returns:
             Configured LiftRolloutEnvironment instance.
         """
+        # Import the simulator module to ensure it's registered
+        _ensure_simulator_registered(simulator_name)
+
         config = SimulatorConfig(
             env_id=env_id,
             backend=backend,

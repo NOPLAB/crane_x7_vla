@@ -55,17 +55,26 @@ class VLARLConfig:
     """Environment rollout configuration."""
 
     # Training settings
+    num_updates: int = 1000
+    """Total number of PPO updates."""
+
     total_timesteps: int = 100000
     """Total timesteps for training."""
 
-    save_interval: int = 1000
-    """Interval for saving checkpoints (in timesteps)."""
+    save_interval: int = 100
+    """Interval for saving checkpoints (in updates)."""
 
-    eval_interval: int = 500
-    """Interval for evaluation (in timesteps)."""
+    eval_interval: int = 50
+    """Interval for evaluation (in updates)."""
+
+    num_eval_episodes: int = 10
+    """Number of episodes for evaluation."""
 
     eval_episodes: int = 10
-    """Number of episodes for evaluation."""
+    """Number of episodes for evaluation (alias)."""
+
+    language_instruction: str = "pick up the object and place it"
+    """Language instruction for the task."""
 
     # Logging
     use_wandb: bool = True
@@ -81,6 +90,9 @@ class VLARLConfig:
     """Interval for logging metrics (in updates)."""
 
     # Hardware
+    device: str = "cuda"
+    """Device for training (cuda, cpu)."""
+
     num_gpus: int = 1
     """Number of GPUs for training."""
 

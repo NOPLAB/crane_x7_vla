@@ -1,0 +1,11 @@
+# ManiSkill dependencies
+mani-skill>=3.0.0b20
+sapien
+gymnasium>=0.26.0
+
+# Genesis dependencies
+genesis-world
+
+# Common
+torch>=2.0.0
+numpy>=1.20.0

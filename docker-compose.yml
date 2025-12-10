@@ -109,6 +109,8 @@ x-vlarl-env: &vlarl-env
   LIFT_BACKEND: ${LIFT_BACKEND:-gpu}
   WANDB_API_KEY: ${WANDB_API_KEY:-}
   HF_TOKEN: ${HF_TOKEN:-}
+  # EGL for headless GPU rendering (Genesis)
+  PYOPENGL_PLATFORM: egl
 
 x-inference-env: &inference-env
   TS_AUTHKEY: ${TS_AUTHKEY:-}
@@ -373,11 +375,17 @@ services:
       - ./vla/outputs:/workspace/vla/outputs:ro
       - ./data:/workspace/data:rw
       - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
+      # X11 for real-time visualization
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /mnt/wslg:/mnt/wslg:ro
     environment:
+      DISPLAY: ${DISPLAY}
       LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
       LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      # EGL for headless GPU rendering (Genesis)
+      PYOPENGL_PLATFORM: egl
     deploy:
       <<: *gpu-deploy
     working_dir: /workspace/vlarl

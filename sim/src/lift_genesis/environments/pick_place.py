@@ -11,10 +11,11 @@ from lift_genesis.environments.base import GenesisEnvironment
 
 
 class PickPlace(GenesisEnvironment):
-    """Pick and place task environment for Genesis.
+    """Pick and place task environment for Genesis with batch support.
 
     The robot must pick up a cube from the table and lift it to a target height.
     This environment mirrors the ManiSkill PickPlace implementation.
+    Supports batch parallelization via Genesis n_envs.
     """
 
     # Task parameters (matching ManiSkill)
@@ -37,6 +38,7 @@ class PickPlace(GenesisEnvironment):
         self.lift_success_height = self.cube_half_size + self.lift_height_offset
         self.cube = None
         self.plane = None
+        self._n_envs = 1  # Will be set after scene build
 
     def setup_scene(self) -> None:
         """Add table plane and cube to the scene."""
@@ -53,34 +55,53 @@ class PickPlace(GenesisEnvironment):
             )
         )
 
-    def reset(self, seed: Optional[int] = None) -> dict[str, Any]:
-        """Reset the cube position with random jitter.
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        env_ids: Optional[np.ndarray] = None,
+    ) -> dict[str, Any]:
+        """Reset the cube position with random jitter (batched).
 
         Args:
             seed: Optional random seed for reproducibility.
+            env_ids: Optional array of environment indices to reset.
+                    If None, resets all environments.
 
         Returns:
-            Info dictionary with cube position.
+            Info dictionary with cube positions.
         """
+        # Get n_envs from scene if not set
+        if hasattr(self.scene, "n_envs"):
+            self._n_envs = self.scene.n_envs
+
+        if env_ids is None:
+            env_ids = np.arange(self._n_envs)
+        env_ids = np.atleast_1d(env_ids)
+
         if seed is not None:
             self._rng = np.random.default_rng(seed)
 
-        # Randomize cube position
-        jitter = self._rng.uniform(-self.cube_spawn_jitter, self.cube_spawn_jitter)
-        xy = self.cube_spawn_center + jitter
-        z = self.cube_half_size
+        # Randomize cube position for each env
+        n_reset = len(env_ids)
+        jitters = self._rng.uniform(
+            -self.cube_spawn_jitter, self.cube_spawn_jitter, size=(n_reset, 2)
+        )
+        xy = self.cube_spawn_center + jitters
+        z = np.full(n_reset, self.cube_half_size)
+        positions = np.column_stack([xy, z])
 
-        # Set cube pose
-        self.cube.set_pos(np.array([xy[0], xy[1], z]))
-        self.cube.set_quat(np.array([1.0, 0.0, 0.0, 0.0]))  # Identity quaternion (w, x, y, z)
+        # Set cube pose for specified envs
+        self.cube.set_pos(positions, envs_idx=env_ids)
+        identity_quat = np.tile([1.0, 0.0, 0.0, 0.0], (n_reset, 1))
+        self.cube.set_quat(identity_quat, envs_idx=env_ids)
 
-        return {"cube_pos": np.array([xy[0], xy[1], z])}
+        return {"cube_pos": positions}
 
-    def compute_reward(self) -> float:
-        """Compute dense reward (matching ManiSkill implementation).
+    def compute_reward(self) -> np.ndarray:
+        """Compute dense reward (matching ManiSkill implementation, batched).
 
         Returns:
-            Scalar reward value.
+            Reward array of shape (n_envs,).
         """
         metrics = self._compute_metrics()
 
@@ -102,73 +123,75 @@ class PickPlace(GenesisEnvironment):
         reward = reaching_reward + lift_reward + grasp_bonus
 
         # Success bonus
-        if metrics["success"]:
-            reward = 5.0
+        reward = np.where(metrics["success"], 5.0, reward)
 
-        return float(reward)
+        return reward.astype(np.float32)
 
-    def is_success(self) -> bool:
-        """Check if the cube has been lifted to the target height.
+    def is_success(self) -> np.ndarray:
+        """Check if the cube has been lifted to the target height (batched).
 
         Returns:
-            True if task is successfully completed.
+            Boolean array of shape (n_envs,).
         """
         metrics = self._compute_metrics()
-        return bool(metrics["success"])
+        return metrics["success"]
 
-    def is_terminated(self) -> bool:
-        """Check if the episode should terminate.
+    def is_terminated(self) -> np.ndarray:
+        """Check if the episode should terminate (batched).
 
         Returns:
-            True if successful (task complete).
+            Boolean array of shape (n_envs,).
         """
         return self.is_success()
 
-    def get_info(self) -> dict[str, Any]:
-        """Get task metrics.
+    def get_info(self) -> list[dict[str, Any]]:
+        """Get task metrics (batched).
 
         Returns:
-            Dictionary with task-specific metrics.
+            List of info dictionaries, one per environment.
         """
         metrics = self._compute_metrics()
-        return {
-            "success": metrics["success"],
-            "height_reached": metrics["height_reached"],
-            "is_close": metrics["is_close"],
-            "gripper_to_cube_dist": metrics["distance"],
-            "cube_height": metrics["cube_height"],
-        }
+        infos = []
+        for i in range(self._n_envs):
+            infos.append({
+                "success": bool(metrics["success"][i]),
+                "height_reached": bool(metrics["height_reached"][i]),
+                "is_close": bool(metrics["is_close"][i]),
+                "gripper_to_cube_dist": float(metrics["distance"][i]),
+                "cube_height": float(metrics["cube_height"][i]),
+            })
+        return infos
 
-    def _compute_metrics(self) -> dict[str, Any]:
-        """Compute task metrics for reward and success evaluation.
+    def _compute_metrics(self) -> dict[str, np.ndarray]:
+        """Compute task metrics for reward and success evaluation (batched).
 
         Returns:
-            Dictionary containing:
+            Dictionary containing arrays of shape (n_envs,):
                 - distance: gripper to cube distance
                 - cube_height: current cube height
                 - height_reached: whether cube is at target height
                 - is_close: whether gripper is close to cube
                 - success: whether task is complete
         """
-        # Get cube position
+        # Get cube position (n_envs, 3)
         cube_pos = self.cube.get_pos()
         if hasattr(cube_pos, "cpu"):
             cube_pos = cube_pos.cpu().numpy()
-        cube_pos = np.asarray(cube_pos).flatten()
+        cube_pos = np.asarray(cube_pos).reshape(self._n_envs, 3)
 
-        # Get gripper link position
+        # Get gripper link position (n_envs, 3)
         gripper_link = self.robot.get_link("crane_x7_gripper_base_link")
         gripper_pos = gripper_link.get_pos()
         if hasattr(gripper_pos, "cpu"):
             gripper_pos = gripper_pos.cpu().numpy()
-        gripper_pos = np.asarray(gripper_pos).flatten()
+        gripper_pos = np.asarray(gripper_pos).reshape(self._n_envs, 3)
 
-        # Compute metrics
-        distance = float(np.linalg.norm(cube_pos - gripper_pos))
-        height = float(cube_pos[2])
+        # Compute metrics (vectorized)
+        distance = np.linalg.norm(cube_pos - gripper_pos, axis=1)
+        height = cube_pos[:, 2]
         height_reached = height >= self.lift_success_height
         is_close = distance <= self.grasp_distance_threshold
-        success = height_reached and is_close
+        success = height_reached & is_close
 
         return {
             "distance": distance,

@@ -34,4 +34,13 @@ env/
 # Data and outputs (mounted as volumes)
 /data/
 /outputs/
+**/outputs/
 
+# VLA model outputs and checkpoints
+/vla/outputs/
+/vlarl/outputs/
+/lerobot/outputs/
+
+# Huggingface cache
+.cache/
+**/.cache/

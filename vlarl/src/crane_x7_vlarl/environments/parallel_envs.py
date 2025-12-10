@@ -1,16 +1,31 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Parallel environment management for efficient rollout."""
+"""Parallel environment management using Genesis batch parallelization."""
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from crane_x7_vlarl.config.rollout_config import RolloutConfig
-from crane_x7_vlarl.environments.lift_wrapper import LiftRolloutEnvironment, VLARLObservation
+
+# Import lift modules
+from lift import SimulatorConfig, create_simulator
+from lift.types import Observation
+
+
+def _ensure_simulator_registered(simulator_name: str) -> None:
+    """Import the simulator module to ensure it's registered."""
+    import importlib
+
+    module_map = {
+        "maniskill": "lift_maniskill",
+        "genesis": "lift_genesis",
+        "isaacsim": "lift_isaacsim",
+    }
+    if simulator_name in module_map:
+        importlib.import_module(module_map[simulator_name])
 
 
 @dataclass
@@ -48,261 +63,207 @@ class BatchStepResult:
 
 
 class ParallelLiftEnvironments:
-    """Manage multiple lift simulator instances for parallel rollout.
+    """Manage parallel environments using Genesis batch parallelization.
 
-    This class enables efficient parallel data collection by running
-    multiple environments concurrently using a thread pool.
+    This class uses Genesis's native n_envs support for efficient parallel
+    simulation in a single scene, avoiding the overhead of multiple instances.
     """
 
     def __init__(
         self,
         num_envs: int,
         config: RolloutConfig,
-        max_workers: int | None = None,
     ):
-        """Initialize parallel environments.
+        """Initialize parallel environments with batch parallelization.
 
         Args:
             num_envs: Number of parallel environments.
             config: Rollout configuration.
-            max_workers: Maximum worker threads (defaults to num_envs).
         """
         self.num_envs = num_envs
         self.config = config
-        self.max_workers = max_workers or num_envs
 
-        # Create environments
-        self.envs: list[LiftRolloutEnvironment] = []
-        self._create_envs()
+        # Ensure simulator module is registered
+        _ensure_simulator_registered(config.simulator)
 
-        # Thread pool for parallel execution
-        self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
+        # Create single batched simulator
+        sim_config = SimulatorConfig(
+            env_id=config.env_id,
+            backend=config.backend,
+            render_mode=config.render_mode,
+            max_episode_steps=config.max_steps,
+            robot_init_qpos_noise=0.02,
+            n_envs=num_envs,  # Use batch parallelization
+        )
+        self._simulator = create_simulator(config.simulator, sim_config)
+
+        # Reward settings
+        self._use_binary_reward = config.use_binary_reward
+        self._dense_reward_weight = config.dense_reward_weight
 
         # Track active episodes
         self._active_mask = np.ones(num_envs, dtype=bool)
-
-    def _create_envs(self) -> None:
-        """Create all parallel environment instances."""
-        for i in range(self.num_envs):
-            env = LiftRolloutEnvironment.from_config(
-                env_id=self.config.env_id,
-                simulator_name=self.config.simulator,
-                backend=self.config.backend,
-                render_mode=self.config.render_mode,
-                max_episode_steps=self.config.max_steps,
-                use_binary_reward=self.config.use_binary_reward,
-                dense_reward_weight=self.config.dense_reward_weight,
-            )
-            self.envs.append(env)
+        self._episode_steps = np.zeros(num_envs, dtype=np.int32)
+        self._episode_rewards = np.zeros(num_envs, dtype=np.float32)
 
     def reset_all(self, seed: int | None = None) -> BatchObservation:
-        """Reset all environments in parallel.
+        """Reset all environments.
 
         Args:
-            seed: Base random seed (each env gets seed + i).
+            seed: Optional random seed.
 
         Returns:
-            Batched initial observations.
+            Batched observations.
         """
-        observations: list[VLARLObservation] = []
-
-        def reset_env(i: int, env: LiftRolloutEnvironment) -> VLARLObservation:
-            env_seed = seed + i if seed is not None else None
-            obs, _ = env.reset(seed=env_seed)
-            return obs
-
-        # Submit all reset tasks
-        futures = {
-            self.executor.submit(reset_env, i, env): i
-            for i, env in enumerate(self.envs)
-        }
-
-        # Collect results in order
-        results = [None] * self.num_envs
-        for future in as_completed(futures):
-            idx = futures[future]
-            results[idx] = future.result()
-
-        observations = results
+        obs, info = self._simulator.reset(seed=seed)
         self._active_mask = np.ones(self.num_envs, dtype=bool)
+        self._episode_steps = np.zeros(self.num_envs, dtype=np.int32)
+        self._episode_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        return self._convert_batch_observation(obs, info)
 
-        return self._batch_observations(observations)
-
-    def reset_done(self, dones: np.ndarray, seed: int | None = None) -> None:
-        """Reset only environments that are done.
+    def reset_done(
+        self,
+        done_mask: np.ndarray,
+        seed: int | None = None,
+    ) -> None:
+        """Reset environments that are done.
 
         Args:
-            dones: Boolean array indicating which envs to reset.
-            seed: Base random seed.
+            done_mask: Boolean mask of environments to reset (N,).
+            seed: Optional random seed.
         """
-        def reset_env(i: int, env: LiftRolloutEnvironment) -> VLARLObservation:
-            env_seed = seed + i if seed is not None else None
-            obs, _ = env.reset(seed=env_seed)
-            return obs
-
-        futures = {}
-        for i, (env, done) in enumerate(zip(self.envs, dones)):
-            if done:
-                futures[self.executor.submit(reset_env, i, env)] = i
-
-        # Wait for all resets to complete
-        for future in as_completed(futures):
-            future.result()
+        env_ids = np.where(done_mask)[0]
+        if len(env_ids) > 0:
+            self._simulator.reset(seed=seed, env_ids=env_ids)
+            self._episode_steps[env_ids] = 0
+            self._episode_rewards[env_ids] = 0.0
 
     def step_all(self, actions: np.ndarray) -> BatchStepResult:
-        """Execute actions in all environments in parallel.
+        """Step all environments.
 
         Args:
-            actions: Batched actions (N, action_dim).
+            actions: Actions for all environments (N, action_dim).
 
         Returns:
             Batched step results.
         """
-        def step_env(i: int, env: LiftRolloutEnvironment, action: np.ndarray):
-            return env.step(action)
+        result = self._simulator.step(actions)
+        self._episode_steps += 1
 
-        # Submit all step tasks
-        futures = {
-            self.executor.submit(step_env, i, env, actions[i]): i
-            for i, env in enumerate(self.envs)
-        }
+        # Compute rewards
+        rewards = self._compute_rewards(result.reward, result.info)
+        self._episode_rewards += rewards
 
-        # Collect results in order
-        results = [None] * self.num_envs
-        for future in as_completed(futures):
-            idx = futures[future]
-            results[idx] = future.result()
+        # Convert observations
+        batch_obs = self._convert_batch_observation(result.observation, result.info)
 
-        # Unpack results
-        observations = []
-        rewards = []
-        terminateds = []
-        truncateds = []
-        infos = []
+        # Get infos list
+        if isinstance(result.info, list):
+            infos = result.info
+        else:
+            infos = [result.info] * self.num_envs
 
-        for obs, reward, terminated, truncated, info in results:
-            observations.append(obs)
-            rewards.append(reward)
-            terminateds.append(terminated)
-            truncateds.append(truncated)
-            infos.append(info)
+        # Add episode info to each
+        for i, info in enumerate(infos):
+            info["step_count"] = int(self._episode_steps[i])
+            info["episode_reward"] = float(self._episode_rewards[i])
 
         return BatchStepResult(
-            observations=self._batch_observations(observations),
-            rewards=np.array(rewards, dtype=np.float32),
-            terminateds=np.array(terminateds, dtype=bool),
-            truncateds=np.array(truncateds, dtype=bool),
-            infos=infos,
-        )
-
-    def step_active(
-        self,
-        actions: np.ndarray,
-        active_mask: np.ndarray | None = None,
-    ) -> BatchStepResult:
-        """Step only active (non-done) environments.
-
-        Args:
-            actions: Batched actions (N, action_dim).
-            active_mask: Boolean mask for active envs (defaults to internal mask).
-
-        Returns:
-            Batched step results (inactive envs have zero rewards).
-        """
-        if active_mask is None:
-            active_mask = self._active_mask
-
-        def step_env(i: int, env: LiftRolloutEnvironment, action: np.ndarray):
-            return env.step(action)
-
-        # Submit tasks only for active environments
-        futures = {}
-        for i, (env, active) in enumerate(zip(self.envs, active_mask)):
-            if active:
-                futures[self.executor.submit(step_env, i, env, actions[i])] = i
-
-        # Initialize results with defaults
-        observations = [None] * self.num_envs
-        rewards = np.zeros(self.num_envs, dtype=np.float32)
-        terminateds = np.zeros(self.num_envs, dtype=bool)
-        truncateds = np.zeros(self.num_envs, dtype=bool)
-        infos = [{} for _ in range(self.num_envs)]
-
-        # Collect results
-        for future in as_completed(futures):
-            idx = futures[future]
-            obs, reward, terminated, truncated, info = future.result()
-            observations[idx] = obs
-            rewards[idx] = reward
-            terminateds[idx] = terminated
-            truncateds[idx] = truncated
-            infos[idx] = info
-
-            # Update active mask
-            if terminated or truncated:
-                self._active_mask[idx] = False
-
-        # Fill in observations for inactive envs
-        for i, obs in enumerate(observations):
-            if obs is None:
-                observations[i] = self.envs[i].get_observation()
-
-        return BatchStepResult(
-            observations=self._batch_observations(observations),
+            observations=batch_obs,
             rewards=rewards,
-            terminateds=terminateds,
-            truncateds=truncateds,
+            terminateds=np.atleast_1d(result.terminated),
+            truncateds=np.atleast_1d(result.truncated),
             infos=infos,
         )
 
-    def _batch_observations(self, observations: list[VLARLObservation]) -> BatchObservation:
-        """Stack observations into batched format.
+    def _convert_batch_observation(
+        self,
+        obs: Observation,
+        info: Any,
+    ) -> BatchObservation:
+        """Convert lift Observation to BatchObservation.
 
         Args:
-            observations: List of individual observations.
+            obs: lift Observation object (with batched data).
+            info: Info dict or list of dicts.
 
         Returns:
-            Batched observation.
+            BatchObservation for VLA model input.
         """
-        images = np.stack([obs.image for obs in observations], axis=0)
-        states = np.stack([obs.state for obs in observations], axis=0)
-        extras = [obs.extra for obs in observations]
+        # Get RGB images (N, H, W, 3)
+        if obs.rgb_image is not None:
+            images = obs.rgb_image
+            # Ensure batch dimension
+            if images.ndim == 3:
+                images = images[np.newaxis, ...]
+        else:
+            # Fallback: create dummy images
+            images = np.zeros((self.num_envs, 224, 224, 3), dtype=np.uint8)
 
-        return BatchObservation(images=images, states=states, extras=extras)
+        # Get robot states (N, 9)
+        if obs.qpos is not None:
+            states = obs.qpos
+            # Ensure batch dimension
+            if states.ndim == 1:
+                states = states[np.newaxis, ...]
+        else:
+            states = np.zeros((self.num_envs, 9), dtype=np.float32)
 
-    def get_observations(self) -> BatchObservation:
-        """Get current observations from all environments.
+        # Get extras
+        if isinstance(info, list):
+            extras = info
+        elif isinstance(info, dict):
+            extras = [info] * self.num_envs
+        else:
+            extras = [{}] * self.num_envs
+
+        return BatchObservation(
+            images=images,
+            states=states,
+            extras=extras,
+        )
+
+    def _compute_rewards(
+        self,
+        raw_rewards: np.ndarray,
+        infos: Any,
+    ) -> np.ndarray:
+        """Compute rewards from step results.
+
+        Args:
+            raw_rewards: Raw rewards from simulator (N,).
+            infos: Info dict or list of dicts.
 
         Returns:
-            Batched current observations.
+            Computed rewards (N,).
         """
-        observations = [env.get_observation() for env in self.envs]
-        return self._batch_observations(observations)
+        raw_rewards = np.atleast_1d(raw_rewards).astype(np.float32)
+
+        if self._use_binary_reward:
+            # Binary reward: 1.0 on success, 0.0 otherwise
+            if isinstance(infos, list):
+                successes = np.array([
+                    info.get("success", False) for info in infos
+                ], dtype=bool)
+            else:
+                success = infos.get("success", False)
+                if isinstance(success, np.ndarray):
+                    successes = success
+                else:
+                    successes = np.full(self.num_envs, success, dtype=bool)
+
+            rewards = successes.astype(np.float32)
+        else:
+            rewards = np.zeros(self.num_envs, dtype=np.float32)
+
+        if self._dense_reward_weight > 0:
+            rewards += self._dense_reward_weight * raw_rewards
+
+        return rewards
 
     def close(self) -> None:
-        """Release all environment resources."""
-        for env in self.envs:
-            env.close()
-        self.executor.shutdown(wait=True)
-
-    @property
-    def action_dim(self) -> int:
-        """Get action dimension."""
-        return self.envs[0].action_dim if self.envs else 8
-
-    @property
-    def state_dim(self) -> int:
-        """Get state dimension."""
-        return self.envs[0].state_dim if self.envs else 9
-
-    @property
-    def active_count(self) -> int:
-        """Get number of currently active environments."""
-        return int(self._active_mask.sum())
-
-    def __len__(self) -> int:
-        """Get number of environments."""
-        return self.num_envs
+        """Release resources."""
+        self._simulator.close()
 
     def __enter__(self) -> "ParallelLiftEnvironments":
         """Context manager entry."""

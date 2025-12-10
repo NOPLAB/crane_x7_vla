@@ -16,7 +16,7 @@ setup(
     ],
     extras_require={
         "maniskill": [
-            "mani-skill>=3.0.0",
+            "mani-skill>=3.0.0b20",
             "sapien",
             "torch>=1.10.0",
             "gymnasium>=0.26.0",

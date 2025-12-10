@@ -6,7 +6,7 @@
 # Supports: Teleoperation, Data Collection, Training (ACT/Diffusion), Inference
 # Build context: project root (crane_x7_vla/)
 
-ARG CUDA_VERSION=12.4.1
+ARG CUDA_VERSION=12.9.1
 ARG PYTHON_VERSION=3.11
 
 # ============================================================================

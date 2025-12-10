@@ -20,6 +20,7 @@ class SimulatorConfig:
     sim_rate: float = 30.0
     max_episode_steps: int = 200
     robot_init_qpos_noise: float = 0.02
+    n_envs: int = 1  # Number of parallel environments for batch parallelization
 
 
 @dataclass

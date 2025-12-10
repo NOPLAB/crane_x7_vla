@@ -142,6 +142,11 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
         default=4,
         help="Number of parallel environments",
     )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Enable real-time visualization (human render mode)",
+    )
 
     # Training
     parser.add_argument(
@@ -287,6 +292,7 @@ def cmd_train(args: argparse.Namespace) -> int:
     config.rollout.backend = args.backend
     config.rollout.num_parallel_envs = args.num_parallel_envs
     config.rollout.num_rollouts_per_update = args.num_rollouts
+    config.rollout.render_mode = "human" if args.render else "rgb_array"
 
     # PPO config
     config.ppo.learning_rate = args.learning_rate

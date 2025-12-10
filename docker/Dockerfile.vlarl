@@ -13,23 +13,52 @@ ARG BASE_IMAGE=noppdev/crane_x7_vla:openvla
 # ============================================================================
 FROM ${BASE_IMAGE} AS vlarl
 
-# Install additional RL dependencies
+# Switch to root for installation
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    # EGL/OpenGL libraries for Genesis headless rendering
+    libegl1 \
+    libegl1-mesa-dev \
+    libgl1 \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libopengl0 \
+    libglx0 \
+    libgles2 \
+    libglvnd-dev \
+    libegl-mesa0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure NVIDIA EGL for headless rendering
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
+
+# Install dependencies first (for better caching)
 COPY vlarl/requirements.txt /build/requirements-vlarl.txt
+COPY sim/requirements.txt /build/requirements-sim.txt
+
+# Upgrade PyTorch for Genesis compatibility (requires >=2.8.0)
+# Use cu126 for CUDA 12.9 compatibility
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -r /build/requirements-vlarl.txt
+    pip3 install -r /build/requirements-vlarl.txt -r /build/requirements-sim.txt
 
-# Copy lift simulator
-COPY sim /workspace/sim
+# Copy lift simulator (install without deps since already installed)
+COPY --chown=root:root sim /workspace/sim
 WORKDIR /workspace/sim
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -e ".[maniskill,genesis]"
+    pip3 install --no-deps .
 
-# Copy vlarl package
-COPY vlarl /workspace/vlarl
+# Copy vlarl package (install without deps since already installed)
+COPY --chown=root:root vlarl /workspace/vlarl
 WORKDIR /workspace/vlarl
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -e .
+    pip3 install --no-deps .
 
 # Set environment
 ENV PYTHONPATH=/workspace/vlarl/src:/workspace/sim/src:${PYTHONPATH}
