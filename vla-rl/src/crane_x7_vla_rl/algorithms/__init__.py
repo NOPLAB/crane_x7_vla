@@ -3,7 +3,7 @@
 
 """RL algorithms module for VLA-RL."""
 
-from crane_x7_vlarl.algorithms.advantage import compute_gae
-from crane_x7_vlarl.algorithms.ppo import PPOTrainer
+from crane_x7_vla_rl.algorithms.advantage import compute_gae
+from crane_x7_vla_rl.algorithms.ppo import PPOTrainer
 
 __all__ = ["PPOTrainer", "compute_gae"]

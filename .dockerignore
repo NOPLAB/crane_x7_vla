@@ -38,7 +38,7 @@ env/
 
 # VLA model outputs and checkpoints
 /vla/outputs/
-/vlarl/outputs/
+/vla-rl/outputs/
 /lerobot/outputs/
 
 # Huggingface cache

@@ -1,7 +1,7 @@
 # CRANE-X7 VLA-RL Production Configuration
 # Optimized for training on GPU cluster
 
-experiment_name: crane_x7_vlarl_prod
+experiment_name: crane_x7_vla_rl_prod
 seed: 42
 device: cuda
 
@@ -20,7 +20,7 @@ language_instruction: "pick up the object and place it in the target area"
 
 # Logging
 use_wandb: true
-wandb_project: crane-x7-vlarl
+wandb_project: crane-x7-vla-rl
 log_interval: 10
 eval_interval: 100
 save_interval: 500

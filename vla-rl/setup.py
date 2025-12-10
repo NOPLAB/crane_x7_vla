@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Setup script for crane_x7_vlarl package."""
+"""Setup script for crane_x7_vla_rl package."""
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ readme_path = Path(__file__).parent / "README.md"
 long_description = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
 
 setup(
-    name="crane_x7_vlarl",
+    name="crane_x7_vla_rl",
     version="0.1.0",
     description="VLA Reinforcement Learning for CRANE-X7 Robot",
     long_description=long_description,
@@ -47,7 +47,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "crane-x7-vlarl=crane_x7_vlarl.training.cli:main",
+            "crane-x7-vla-rl=crane_x7_vla_rl.training.cli:main",
         ],
     },
     classifiers=[

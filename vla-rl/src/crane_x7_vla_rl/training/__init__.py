@@ -3,6 +3,6 @@
 
 """VLA-RL training module."""
 
-from crane_x7_vlarl.training.trainer import VLARLTrainer
+from crane_x7_vla_rl.training.trainer import VLARLTrainer
 
 __all__ = ["VLARLTrainer"]

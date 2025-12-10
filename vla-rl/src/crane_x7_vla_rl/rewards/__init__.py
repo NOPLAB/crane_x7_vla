@@ -3,7 +3,7 @@
 
 """Reward functions module for VLA-RL."""
 
-from crane_x7_vlarl.rewards.base import RewardFunction
-from crane_x7_vlarl.rewards.binary_reward import BinaryRewardFunction
+from crane_x7_vla_rl.rewards.base import RewardFunction
+from crane_x7_vla_rl.rewards.binary_reward import BinaryRewardFunction
 
 __all__ = ["RewardFunction", "BinaryRewardFunction"]

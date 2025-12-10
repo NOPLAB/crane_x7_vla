@@ -11,7 +11,7 @@ ARG BASE_IMAGE=noppdev/crane_x7_vla:openvla
 # ============================================================================
 # VLA-RL Stage: Add RL training dependencies
 # ============================================================================
-FROM ${BASE_IMAGE} AS vlarl
+FROM ${BASE_IMAGE} AS vla-rl
 
 # Switch to root for installation
 USER root
@@ -37,7 +37,7 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 
 # Install dependencies first (for better caching)
-COPY vlarl/requirements.txt /build/requirements-vlarl.txt
+COPY vla-rl/requirements.txt /build/requirements-vla-rl.txt
 COPY sim/requirements.txt /build/requirements-sim.txt
 
 # Upgrade PyTorch for Genesis compatibility (requires >=2.8.0)
@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -r /build/requirements-vlarl.txt -r /build/requirements-sim.txt
+    pip3 install -r /build/requirements-vla-rl.txt -r /build/requirements-sim.txt
 
 # Copy lift simulator (install without deps since already installed)
 COPY --chown=root:root sim /workspace/sim
@@ -54,29 +54,29 @@ WORKDIR /workspace/sim
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --no-deps .
 
-# Copy vlarl package (install without deps since already installed)
-COPY --chown=root:root vlarl /workspace/vlarl
-WORKDIR /workspace/vlarl
+# Copy vla-rl package (install without deps since already installed)
+COPY --chown=root:root vla-rl /workspace/vla-rl
+WORKDIR /workspace/vla-rl
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --no-deps .
 
 # Set environment
-ENV PYTHONPATH=/workspace/vlarl/src:/workspace/sim/src:${PYTHONPATH}
-ENV WANDB_DIR=/workspace/vlarl/outputs
+ENV PYTHONPATH=/workspace/vla-rl/src:/workspace/sim/src:${PYTHONPATH}
+ENV WANDB_DIR=/workspace/vla-rl/outputs
 
 # Create outputs directory
-RUN mkdir -p /workspace/vlarl/outputs
+RUN mkdir -p /workspace/vla-rl/outputs
 
 WORKDIR /workspace
 
 # Default command
-CMD ["python", "-m", "crane_x7_vlarl.training.cli", "--help"]
+CMD ["python", "-m", "crane_x7_vla_rl.training.cli", "--help"]
 
 
 # ============================================================================
 # Development Stage: Additional dev tools
 # ============================================================================
-FROM vlarl AS dev
+FROM vla-rl AS dev
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install \

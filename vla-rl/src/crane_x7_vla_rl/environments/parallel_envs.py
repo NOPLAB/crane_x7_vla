@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from crane_x7_vlarl.config.rollout_config import RolloutConfig
+from crane_x7_vla_rl.config.rollout_config import RolloutConfig
 
 # Import lift modules
 from lift import SimulatorConfig, create_simulator

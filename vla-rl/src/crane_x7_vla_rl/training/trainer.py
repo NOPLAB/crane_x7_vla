@@ -18,10 +18,10 @@ from typing import Any
 import numpy as np
 import torch
 
-from crane_x7_vlarl.algorithms.ppo import PPOTrainer
-from crane_x7_vlarl.config.base import VLARLConfig
-from crane_x7_vlarl.rollout.rollout_manager import RolloutManager
-from crane_x7_vlarl.vla.openvla_adapter import OpenVLAAdapter
+from crane_x7_vla_rl.algorithms.ppo import PPOTrainer
+from crane_x7_vla_rl.config.base import VLARLConfig
+from crane_x7_vla_rl.rollout.rollout_manager import RolloutManager
+from crane_x7_vla_rl.vla.openvla_adapter import OpenVLAAdapter
 
 logger = logging.getLogger(__name__)
 

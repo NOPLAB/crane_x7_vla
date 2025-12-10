@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from crane_x7_vlarl.rewards.base import RewardFunction
+from crane_x7_vla_rl.rewards.base import RewardFunction
 
 
 class BinaryRewardFunction(RewardFunction):

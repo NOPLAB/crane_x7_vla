@@ -3,7 +3,7 @@
 
 """Environment module for VLA-RL (lift integration)."""
 
-from crane_x7_vlarl.environments.lift_wrapper import LiftRolloutEnvironment
-from crane_x7_vlarl.environments.parallel_envs import ParallelLiftEnvironments
+from crane_x7_vla_rl.environments.lift_wrapper import LiftRolloutEnvironment
+from crane_x7_vla_rl.environments.parallel_envs import ParallelLiftEnvironments
 
 __all__ = ["LiftRolloutEnvironment", "ParallelLiftEnvironments"]

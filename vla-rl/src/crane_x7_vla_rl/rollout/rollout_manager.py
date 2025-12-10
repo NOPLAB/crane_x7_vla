@@ -9,9 +9,9 @@ from typing import Any, Callable
 import numpy as np
 import torch
 
-from crane_x7_vlarl.config.rollout_config import RolloutConfig
-from crane_x7_vlarl.environments.parallel_envs import ParallelLiftEnvironments
-from crane_x7_vlarl.rollout.trajectory_buffer import Trajectory, TrajectoryBuffer
+from crane_x7_vla_rl.config.rollout_config import RolloutConfig
+from crane_x7_vla_rl.environments.parallel_envs import ParallelLiftEnvironments
+from crane_x7_vla_rl.rollout.trajectory_buffer import Trajectory, TrajectoryBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ class RolloutManager:
             Dict with evaluation metrics.
         """
         # Use single env for evaluation to ensure sequential execution
-        from crane_x7_vlarl.environments.lift_wrapper import LiftRolloutEnvironment
+        from crane_x7_vla_rl.environments.lift_wrapper import LiftRolloutEnvironment
 
         eval_env = LiftRolloutEnvironment.from_config(
             env_id=self.config.env_id,

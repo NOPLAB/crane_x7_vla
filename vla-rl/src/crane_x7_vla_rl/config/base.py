@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
-from crane_x7_vlarl.config.ppo_config import PPOConfig
-from crane_x7_vlarl.config.rollout_config import RolloutConfig
+from crane_x7_vla_rl.config.ppo_config import PPOConfig
+from crane_x7_vla_rl.config.rollout_config import RolloutConfig
 
 
 @dataclass
@@ -18,7 +18,7 @@ class VLARLConfig:
     """Unified configuration for VLA-RL training."""
 
     # Basic settings
-    experiment_name: str = "crane_x7_vlarl"
+    experiment_name: str = "crane_x7_vla_rl"
     """Name of the experiment."""
 
     output_dir: Path = field(default_factory=lambda: Path("./outputs"))
@@ -80,7 +80,7 @@ class VLARLConfig:
     use_wandb: bool = True
     """Whether to use Weights & Biases for logging."""
 
-    wandb_project: str = "crane_x7_vlarl"
+    wandb_project: str = "crane_x7_vla_rl"
     """W&B project name."""
 
     wandb_entity: str | None = None

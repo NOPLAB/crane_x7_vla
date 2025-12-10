@@ -21,9 +21,9 @@ x-build-ros2: &build-ros2
   dockerfile: docker/Dockerfile.ros2
 
 # Build configuration for VLA-RL
-x-build-vlarl: &build-vlarl
+x-build-vla-rl: &build-vla-rl
   context: .
-  dockerfile: docker/Dockerfile.vlarl
+  dockerfile: docker/Dockerfile.vla-rl
 
 # Build configuration for Remote Inference
 x-build-inference: &build-inference
@@ -60,8 +60,8 @@ x-lift-volumes: &lift-volumes
   - ./ros2/src:/workspace/ros2/src:ro
   - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
 
-x-vlarl-volumes: &vlarl-volumes
-  - ./vlarl:/workspace/vlarl:rw
+x-vla-rl-volumes: &vla-rl-volumes
+  - ./vla-rl:/workspace/vla-rl:rw
   - ./sim:/workspace/sim:ro
   - ./vla/outputs:/workspace/vla/outputs:ro
   - ./data:/workspace/data:rw
@@ -104,7 +104,7 @@ x-lift-env: &lift-env
   LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
   LIFT_RENDER_MODE: ${LIFT_RENDER_MODE:-none}
 
-x-vlarl-env: &vlarl-env
+x-vla-rl-env: &vla-rl-env
   LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
   LIFT_BACKEND: ${LIFT_BACKEND:-gpu}
   WANDB_API_KEY: ${WANDB_API_KEY:-}
@@ -345,32 +345,32 @@ services:
   # --------------------------------------------------------------------------
   # VLA-RL Training Services
   # --------------------------------------------------------------------------
-  vlarl:
-    profiles: [vlarl]
+  vla-rl:
+    profiles: [vla-rl]
     build:
-      <<: *build-vlarl
-      target: vlarl
-    volumes: *vlarl-volumes
+      <<: *build-vla-rl
+      target: vla-rl
+    volumes: *vla-rl-volumes
     environment:
-      <<: *vlarl-env
+      <<: *vla-rl-env
     deploy:
       <<: *gpu-deploy
-    working_dir: /workspace/vlarl
+    working_dir: /workspace/vla-rl
     command: >
-      python -m crane_x7_vlarl.training.cli train
+      python -m crane_x7_vla_rl.training.cli train
         --simulator ${LIFT_SIMULATOR:-maniskill}
         --env-id PickPlace-CRANE-X7
         --backend ${LIFT_BACKEND:-gpu}
-        --num-parallel-envs ${VLARL_NUM_ENVS:-4}
+        --num-parallel-envs ${VLA_RL_NUM_ENVS:-4}
         --use-wandb
 
-  vlarl-dev:
-    profiles: [vlarl-dev]
+  vla-rl-dev:
+    profiles: [vla-rl-dev]
     build:
-      <<: *build-vlarl
+      <<: *build-vla-rl
       target: dev
     volumes:
-      - ./vlarl:/workspace/vlarl:rw
+      - ./vla-rl:/workspace/vla-rl:rw
       - ./sim:/workspace/sim:rw
       - ./vla/outputs:/workspace/vla/outputs:ro
       - ./data:/workspace/data:rw
@@ -388,7 +388,7 @@ services:
       PYOPENGL_PLATFORM: egl
     deploy:
       <<: *gpu-deploy
-    working_dir: /workspace/vlarl
+    working_dir: /workspace/vla-rl
     stdin_open: true
     tty: true
     command: /bin/bash

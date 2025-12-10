@@ -1,7 +1,7 @@
 # Default VLA-RL Configuration
 # For development and testing
 
-experiment_name: crane_x7_vlarl
+experiment_name: crane_x7_vla_rl
 seed: 42
 device: cuda
 
@@ -19,7 +19,7 @@ language_instruction: "pick up the object and place it"
 
 # Logging
 use_wandb: false
-wandb_project: crane-x7-vlarl
+wandb_project: crane-x7-vla-rl
 log_interval: 10
 eval_interval: 50
 save_interval: 100

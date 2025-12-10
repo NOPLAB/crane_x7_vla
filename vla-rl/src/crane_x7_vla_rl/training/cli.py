@@ -5,21 +5,21 @@
 
 Usage:
     # Train from SFT checkpoint
-    python -m crane_x7_vlarl.training.cli train \\
+    python -m crane_x7_vla_rl.training.cli train \\
         --sft-checkpoint /workspace/vla/outputs/checkpoint \\
-        --experiment-name crane_x7_vlarl
+        --experiment-name crane_x7_vla_rl
 
     # Train from pretrained
-    python -m crane_x7_vlarl.training.cli train \\
+    python -m crane_x7_vla_rl.training.cli train \\
         --pretrained openvla/openvla-7b \\
         --simulator maniskill
 
     # Evaluate checkpoint
-    python -m crane_x7_vlarl.training.cli evaluate \\
-        --checkpoint /workspace/vlarl/outputs/crane_x7_vlarl/checkpoint_best
+    python -m crane_x7_vla_rl.training.cli evaluate \\
+        --checkpoint /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_best
 
     # Generate config file
-    python -m crane_x7_vlarl.training.cli config \\
+    python -m crane_x7_vla_rl.training.cli config \\
         --output my_config.yaml
 """
 
@@ -31,10 +31,10 @@ from typing import Any
 
 import yaml
 
-from crane_x7_vlarl.config.base import VLARLConfig
-from crane_x7_vlarl.config.ppo_config import PPOConfig
-from crane_x7_vlarl.config.rollout_config import RolloutConfig
-from crane_x7_vlarl.training.trainer import VLARLTrainer
+from crane_x7_vla_rl.config.base import VLARLConfig
+from crane_x7_vla_rl.config.ppo_config import PPOConfig
+from crane_x7_vla_rl.config.rollout_config import RolloutConfig
+from crane_x7_vla_rl.training.trainer import VLARLTrainer
 
 # Configure logging
 logging.basicConfig(
@@ -99,7 +99,7 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--experiment-name",
         type=str,
-        default="crane_x7_vlarl",
+        default="crane_x7_vla_rl",
         help="Experiment name for logging and checkpoints",
     )
     parser.add_argument(
@@ -191,7 +191,7 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--wandb-project",
         type=str,
-        default="crane-x7-vlarl",
+        default="crane-x7-vla-rl",
         help="W&B project name",
     )
 
@@ -321,8 +321,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     import numpy as np
     import torch
 
-    from crane_x7_vlarl.environments.lift_wrapper import LiftRolloutEnvironment
-    from crane_x7_vlarl.vla.openvla_adapter import OpenVLAAdapter
+    from crane_x7_vla_rl.environments.lift_wrapper import LiftRolloutEnvironment
+    from crane_x7_vla_rl.vla.openvla_adapter import OpenVLAAdapter
 
     logger.info(f"Evaluating checkpoint: {args.checkpoint}")
 

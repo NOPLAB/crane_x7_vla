@@ -48,10 +48,10 @@ docker compose --profile lift-vla up
 docker compose --profile lift-logger up
 
 # VLA-RLトレーニング
-docker compose --profile vlarl up
+docker compose --profile vla-rl up
 
 # VLA-RL開発モード（インタラクティブシェル）
-docker compose --profile vlarl-dev up
+docker compose --profile vla-rl-dev up
 
 # rosbridgeサーバー（実機、リモート推論用）
 docker compose --profile rosbridge up
@@ -133,13 +133,13 @@ python -m crane_x7_vla.scripts.merge_lora \
 ### VLA-RL強化学習
 
 ```bash
-cd vlarl
+cd vla-rl
 
 # インストール
 pip install -e .
 
 # トレーニング（SFTチェックポイントから）
-python -m crane_x7_vlarl.training.cli train \
+python -m crane_x7_vla_rl.training.cli train \
   --sft-checkpoint /workspace/vla/outputs/checkpoint \
   --simulator maniskill \
   --env-id PickPlace-CRANE-X7 \
@@ -147,16 +147,16 @@ python -m crane_x7_vlarl.training.cli train \
   --use-wandb
 
 # トレーニング（事前学習モデルから）
-python -m crane_x7_vlarl.training.cli train \
+python -m crane_x7_vla_rl.training.cli train \
   --pretrained openvla/openvla-7b
 
 # 評価
-python -m crane_x7_vlarl.training.cli evaluate \
-  --checkpoint outputs/crane_x7_vlarl/checkpoint_best \
+python -m crane_x7_vla_rl.training.cli evaluate \
+  --checkpoint outputs/crane_x7_vla_rl/checkpoint_best \
   --num-episodes 20
 
 # 設定ファイル生成
-python -m crane_x7_vlarl.training.cli config --output my_config.yaml
+python -m crane_x7_vla_rl.training.cli config --output my_config.yaml
 ```
 
 ### Slurmクラスター
@@ -210,7 +210,7 @@ crane_x7_vla/
 ├── docker/                        # Docker環境
 │   ├── Dockerfile.ros2            # ROS 2統合環境
 │   ├── Dockerfile.remote-inference # リモートGPU推論
-│   ├── Dockerfile.vlarl           # VLA-RL学習
+│   ├── Dockerfile.vla-rl          # VLA-RL学習
 │   ├── Dockerfile.lerobot         # LeRobot統合
 │   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
 │   ├── entrypoint-remote-inference.sh # 推論用エントリーポイント
@@ -244,10 +244,10 @@ crane_x7_vla/
 │       ├── maniskill/             # ManiSkill実装
 │       ├── genesis/               # Genesis実装
 │       └── isaacsim/              # Isaac Sim実装（スケルトン）
-├── vlarl/                         # VLA強化学習（SimpleVLA-RL方式）
-│   ├── Dockerfile.vlarl.example   # 参考用Dockerfile
+├── vla-rl/                        # VLA強化学習（SimpleVLA-RL方式）
+│   ├── Dockerfile.vla-rl.example  # 参考用Dockerfile
 │   ├── configs/                   # 設定ファイル
-│   └── src/crane_x7_vlarl/
+│   └── src/crane_x7_vla_rl/
 │       ├── training/              # VLARLTrainer, CLI
 │       ├── algorithms/            # PPO独自実装, GAE
 │       ├── rollout/               # 並列ロールアウト管理
@@ -338,7 +338,7 @@ ros2 launch crane_x7_bringup data_collection.launch.py  # カメラ+ロガー（
 ## 参考資料
 
 - [vla/README.md](vla/README.md) - VLAファインチューニング詳細
-- [vlarl/README.md](vlarl/README.md) - VLA強化学習（SimpleVLA-RL方式）
+- [vla-rl/README.md](vla-rl/README.md) - VLA強化学習（SimpleVLA-RL方式）
 - [sim/README.md](sim/README.md) - Liftシミュレータ抽象化
 - [slurm/README.md](slurm/README.md) - Slurmジョブ投下ツール
 - [lerobot/README.md](lerobot/README.md) - LeRobot統合

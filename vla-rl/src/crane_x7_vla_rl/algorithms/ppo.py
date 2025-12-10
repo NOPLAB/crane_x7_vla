@@ -16,8 +16,8 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-from crane_x7_vlarl.algorithms.advantage import compute_gae, normalize_advantages
-from crane_x7_vlarl.config.ppo_config import PPOConfig
+from crane_x7_vla_rl.algorithms.advantage import compute_gae, normalize_advantages
+from crane_x7_vla_rl.config.ppo_config import PPOConfig
 
 logger = logging.getLogger(__name__)
 
