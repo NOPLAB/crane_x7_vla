@@ -10,7 +10,7 @@ torch
 torchvision
 
 # JAX stack (required by OpenPI)
-jax[cuda12]==0.5.3
+jax[cuda12]==0.8.1
 flax==0.10.2
 jaxtyping==0.3.3
 equinox>=0.11.8
