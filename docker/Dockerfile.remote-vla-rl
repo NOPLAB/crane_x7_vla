@@ -10,6 +10,11 @@ ARG CUDA_VERSION=12.6.3
 # Base Stage: CUDA + Python + Tailscale + SSH
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS base
 
+LABEL maintainer="nop" \
+    org.opencontainers.image.source="https://github.com/NOPLAB/crane_x7_vla" \
+    org.opencontainers.image.description="Remote VLA-RL training environment for CRANE-X7 with Tailscale/SSH" \
+    org.opencontainers.image.licenses="MIT"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     CUDA_HOME=/usr/local/cuda
@@ -180,3 +185,18 @@ EXPOSE 22
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["sshd"]
+
+
+# Development Stage: Additional dev tools
+FROM base AS dev
+
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
+        pytest \
+        pytest-cov \
+        ipython \
+        jupyter \
+        black \
+        ruff
+
+CMD ["/bin/bash"]

@@ -10,6 +10,11 @@ ARG CUDA_VERSION=12.6.3
 # Base Stage: CUDA + Python + Tailscale
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
+LABEL maintainer="nop" \
+    org.opencontainers.image.source="https://github.com/NOPLAB/crane_x7_vla" \
+    org.opencontainers.image.description="VLA inference for remote GPU services using rosbridge" \
+    org.opencontainers.image.licenses="MIT"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     CUDA_HOME=/usr/local/cuda
@@ -18,18 +23,23 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
+    # Basic tools
     ca-certificates \
     curl \
     gnupg \
     lsb-release \
+    # Python
     python3-pip \
     python3-dev \
+    # Libraries
     libgomp1 \
     libglib2.0-0 \
     libgl1 \
+    # Network tools
     iproute2 \
     iputils-ping \
     socat \
+    # Install Tailscale
     && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg \
        | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null \
     && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list \
@@ -44,8 +54,7 @@ WORKDIR /workspace
 
 # Install PyTorch with CUDA support (cu126 for CUDA 12.6)
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu126
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # Install VLA inference dependencies
 COPY ros2/requirements.txt /tmp/requirements.txt
@@ -109,3 +118,18 @@ ENV VLA_MODEL_PATH="" \
 # Entrypoint and default command
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "/workspace/scripts/vla_inference_rosbridge.py"]
+
+
+# Development Stage: Additional dev tools
+FROM base AS dev
+
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
+        pytest \
+        pytest-cov \
+        ipython \
+        jupyter \
+        black \
+        ruff
+
+CMD ["/bin/bash"]

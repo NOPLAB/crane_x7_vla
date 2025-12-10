@@ -10,6 +10,11 @@ ARG CUDA_VERSION=12.6.3
 # Base Stage: CUDA + Python + VLA-RL dependencies
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu22.04 AS base
 
+LABEL maintainer="nop" \
+    org.opencontainers.image.source="https://github.com/NOPLAB/crane_x7_vla" \
+    org.opencontainers.image.description="VLA-RL training environment for CRANE-X7" \
+    org.opencontainers.image.licenses="MIT"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     CUDA_HOME=/usr/local/cuda

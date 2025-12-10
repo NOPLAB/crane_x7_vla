@@ -11,6 +11,11 @@ ARG PYTHON_VERSION=3.11
 # Base Stage
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS base
 
+LABEL maintainer="nop" \
+    org.opencontainers.image.source="https://github.com/NOPLAB/crane_x7_vla" \
+    org.opencontainers.image.description="LeRobot environment for CRANE-X7" \
+    org.opencontainers.image.licenses="MIT"
+
 ARG PYTHON_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -94,8 +99,8 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 COPY lerobot/configs/ /workspace/lerobot/configs/
 COPY lerobot/scripts/ /workspace/lerobot/scripts/
 
-# udev rules for Dynamixel USB access
-COPY lerobot/99-dynamixel.rules /etc/udev/rules.d/ 2>/dev/null || true
+# udev rules for Dynamixel USB access (optional, file may not exist)
+COPY lerobot/99-dynamixel.rules* /etc/udev/rules.d/
 
 # Create user with matching host UID/GID
 ARG USER_ID=1000

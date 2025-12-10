@@ -5,10 +5,16 @@
 # ROS 2 Humble Docker image for CRANE-X7
 # Build context: project root (crane_x7_vla/)
 
-FROM ros:humble-ros-base
+# Base Stage: ROS 2 + system dependencies
+FROM ros:humble-ros-base AS base
 
-# Avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
+LABEL maintainer="nop" \
+    org.opencontainers.image.source="https://github.com/NOPLAB/crane_x7_vla" \
+    org.opencontainers.image.description="ROS 2 Humble environment for CRANE-X7" \
+    org.opencontainers.image.licenses="MIT"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
 
 # Copy rosdep packages list first for better caching
 # Regenerate with: ./scripts/generate_rosdep_packages.sh
@@ -17,39 +23,53 @@ COPY ros2/rosdep_packages.txt /tmp/rosdep_packages.txt
 # Add Intel RealSense repository and install all apt dependencies in one layer
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y \
+    apt-get update && apt-get install -y --no-install-recommends \
+    # Basic tools
     ca-certificates \
     curl \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null \
-    && echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list \
-    && apt-get update && apt-get install -y \
+    # Build tools
     build-essential \
     cmake \
     git \
+    # Python
     python3-pip \
     python3-opencv \
+    # System utilities
     sudo \
     v4l-utils \
+    iproute2 \
+    gettext-base \
+    # Audio
     espeak-ng \
     alsa-utils \
     pulseaudio-utils \
-    iproute2 \
+    # X11
     x11-apps \
+    # Install Intel RealSense SDK
+    && mkdir -p /etc/apt/keyrings \
+    && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null \
+    && echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/librealsense.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
     librealsense2 \
     librealsense2-utils \
     librealsense2-dev \
+    # ROS 2 packages
     ros-humble-rmw-cyclonedds-cpp \
     ros-humble-rosbridge-server \
     ros-humble-image-transport-plugins \
-    gettext-base \
+    # rosdep packages
     $(grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | tr '\n' ' ') \
     && rm /tmp/rosdep_packages.txt
 
-# Install PyTorch (CUDA 12.4 compatible)
+# Upgrade pip and install compatible setuptools version
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu124
+    python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
+
+WORKDIR /workspace
+
+# Install PyTorch with CUDA support (cu126 for CUDA 12.6)
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # Install Python dependencies
 # Note: numpy<2.0 constraint is specified first in requirements.txt to prevent
@@ -64,12 +84,13 @@ COPY vla/src/openvla /workspace/vla/src/openvla
 
 # Copy ManiSkill CRANE-X7 environment
 COPY sim/src /workspace/sim/src
-ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/sim/src:${PYTHONPATH}"
-# Cache directories for Genesis, Taichi, and Numba (avoid permission issues)
-ENV NUMBA_CACHE_DIR="/tmp/numba_cache"
-ENV XDG_CACHE_HOME="/tmp/cache"
-ENV GS_CACHE_FILE_PATH="/tmp/cache/genesis"
-ENV TI_OFFLINE_CACHE_FILE_PATH="/tmp/cache/taichi"
+
+# Environment variables
+ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace/sim/src:${PYTHONPATH}" \
+    NUMBA_CACHE_DIR="/tmp/numba_cache" \
+    XDG_CACHE_HOME="/tmp/cache" \
+    GS_CACHE_FILE_PATH="/tmp/cache/genesis" \
+    TI_OFFLINE_CACHE_FILE_PATH="/tmp/cache/taichi"
 
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src
@@ -100,3 +121,31 @@ USER ${USERNAME}
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
+
+
+# Development Stage: Additional dev tools
+FROM base AS dev
+
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip3 install \
+        pytest \
+        pytest-cov \
+        ipython \
+        jupyter \
+        black \
+        ruff
+
+# Re-create user for dev stage
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USERNAME=ros2
+
+RUN groupadd -g ${GROUP_ID} ${USERNAME} 2>/dev/null || true && \
+    useradd -l -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USERNAME} 2>/dev/null || true && \
+    usermod -aG sudo ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R ${USER_ID}:${GROUP_ID} /workspace
+
+USER ${USERNAME}
+
+CMD ["/bin/bash"]
