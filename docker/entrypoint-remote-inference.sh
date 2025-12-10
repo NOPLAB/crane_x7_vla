@@ -10,7 +10,9 @@
 # 3. Validates VLA model configuration
 # 4. Executes the VLA inference rosbridge client
 
-set -e
+# Note: We don't use 'set -e' here to prevent container restart loops
+# when non-critical commands fail (e.g., GPU checks, Tailscale setup)
+# Critical errors (missing model, etc.) are handled with explicit exit 1
 
 echo "=========================================="
 echo "  VLA Inference Container (rosbridge)"
@@ -47,27 +49,33 @@ else
 
     # Connect to Tailscale network
     echo "Connecting to Tailscale network..."
-    tailscale --socket="$TS_STATE_DIR/tailscaled.sock" up \
+    if ! tailscale --socket="$TS_STATE_DIR/tailscaled.sock" up \
         --authkey="$TS_AUTHKEY" \
         --hostname="${TS_HOSTNAME:-crane-x7-inference}" \
         --accept-routes \
-        --reset
+        --reset; then
+        echo "ERROR: Tailscale connection failed."
+        echo "Check TS_AUTHKEY and network connectivity."
+        exit 1
+    fi
 
     echo ""
     echo "Tailscale connected!"
-    tailscale --socket="$TS_STATE_DIR/tailscaled.sock" status
+    tailscale --socket="$TS_STATE_DIR/tailscaled.sock" status || true
 
     # Get Tailscale IP
     ACTUAL_TS_IP=$(tailscale --socket="$TS_STATE_DIR/tailscaled.sock" ip -4 2>/dev/null || echo "")
 
-    echo ""
-    echo "=========================================="
-    echo "  Tailscale Connection Info"
-    echo "=========================================="
-    echo "  Hostname: ${TS_HOSTNAME:-crane-x7-inference}"
-    echo "  Tailscale IP: $ACTUAL_TS_IP"
-    echo "=========================================="
-    echo ""
+    if [ -n "$ACTUAL_TS_IP" ]; then
+        echo ""
+        echo "=========================================="
+        echo "  Tailscale Connection Info"
+        echo "=========================================="
+        echo "  Hostname: ${TS_HOSTNAME:-crane-x7-inference}"
+        echo "  Tailscale IP: $ACTUAL_TS_IP"
+        echo "=========================================="
+        echo ""
+    fi
 
     # Wait for local peer to become reachable
     echo "=== Waiting for Local Peer ==="

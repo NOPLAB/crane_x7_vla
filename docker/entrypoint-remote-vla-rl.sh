@@ -10,7 +10,8 @@
 # 3. Starts SSH server for X11 forwarding
 # 4. Optionally runs a command or drops to shell
 
-set -e
+# Note: We don't use 'set -e' here to prevent container restart loops
+# when non-critical commands fail (e.g., GPU checks, Python imports)
 
 echo "=========================================="
 echo "  Remote VLA-RL Container"
@@ -45,27 +46,32 @@ else
 
     # Connect to Tailscale network
     echo "Connecting to Tailscale network..."
-    tailscale --socket="$TS_STATE_DIR/tailscaled.sock" up \
+    if tailscale --socket="$TS_STATE_DIR/tailscaled.sock" up \
         --authkey="$TS_AUTHKEY" \
         --hostname="${TS_HOSTNAME:-crane-x7-vla-rl}" \
         --accept-routes \
-        --reset
-
-    echo ""
-    echo "Tailscale connected!"
-    tailscale --socket="$TS_STATE_DIR/tailscaled.sock" status
+        --reset; then
+        echo ""
+        echo "Tailscale connected!"
+        tailscale --socket="$TS_STATE_DIR/tailscaled.sock" status || true
+    else
+        echo "WARNING: Tailscale connection failed. Continuing without Tailscale."
+        echo "Container is still accessible via port mapping."
+    fi
 
     # Get Tailscale IP
-    TS_IP=$(tailscale --socket="$TS_STATE_DIR/tailscaled.sock" ip -4 2>/dev/null || echo "N/A")
+    TS_IP=$(tailscale --socket="$TS_STATE_DIR/tailscaled.sock" ip -4 2>/dev/null || echo "")
 
-    echo ""
-    echo "=========================================="
-    echo "  Tailscale Connection Info"
-    echo "=========================================="
-    echo "  Hostname: ${TS_HOSTNAME:-crane-x7-vla-rl}"
-    echo "  Tailscale IP: $TS_IP"
-    echo "=========================================="
-    echo ""
+    if [ -n "$TS_IP" ]; then
+        echo ""
+        echo "=========================================="
+        echo "  Tailscale Connection Info"
+        echo "=========================================="
+        echo "  Hostname: ${TS_HOSTNAME:-crane-x7-vla-rl}"
+        echo "  Tailscale IP: $TS_IP"
+        echo "=========================================="
+        echo ""
+    fi
 fi
 
 # ----------------------------------------------------------------------------
@@ -110,10 +116,13 @@ echo ""
 # Python Environment Check
 # ----------------------------------------------------------------------------
 echo "=== Python Environment ==="
-echo "Python: $(python3 --version)"
+echo "Python: $(python3 --version 2>/dev/null || echo 'not found')"
 echo "PyTorch: $(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || echo 'not installed')"
-echo "CUDA available: $(python3 -c 'import torch; print(torch.cuda.is_available())' 2>/dev/null || echo 'N/A')"
-if python3 -c 'import torch; torch.cuda.is_available()' 2>/dev/null; then
+
+# Check CUDA availability safely
+CUDA_AVAILABLE=$(python3 -c 'import torch; print(torch.cuda.is_available())' 2>/dev/null || echo 'False')
+echo "CUDA available: $CUDA_AVAILABLE"
+if [ "$CUDA_AVAILABLE" = "True" ]; then
     echo "CUDA device: $(python3 -c 'import torch; print(torch.cuda.get_device_name(0))' 2>/dev/null || echo 'N/A')"
 fi
 echo ""
