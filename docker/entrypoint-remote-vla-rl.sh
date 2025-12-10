@@ -75,9 +75,23 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# SSH Key Setup
+# SSH Host Key Setup
 # ----------------------------------------------------------------------------
-echo "=== SSH Key Setup ==="
+echo "=== SSH Host Key Setup ==="
+
+# Generate SSH host keys if they don't exist
+if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
+    echo "Generating SSH host keys..."
+    ssh-keygen -A
+fi
+
+# Ensure /run/sshd exists
+mkdir -p /run/sshd
+
+# ----------------------------------------------------------------------------
+# SSH User Key Setup
+# ----------------------------------------------------------------------------
+echo "=== SSH User Key Setup ==="
 
 if [ -z "$SSH_PUBLIC_KEY" ]; then
     echo "WARNING: SSH_PUBLIC_KEY not set!"
@@ -160,8 +174,22 @@ if [ $# -eq 0 ] || [ "$1" = "sshd" ]; then
     # Start SSH server in foreground
     exec /usr/sbin/sshd -D -e
 elif [ "$1" = "bash" ] || [ "$1" = "/bin/bash" ]; then
-    echo "Starting interactive shell..."
-    exec /bin/bash
+    # Check if running with a TTY
+    if [ -t 0 ]; then
+        echo "Starting interactive shell..."
+        exec /bin/bash
+    else
+        echo "No TTY detected. Starting SSH server + keeping container alive..."
+        echo "Use 'ssh -X vla@<host>' to connect."
+        # Start SSH server in background and keep container running
+        /usr/sbin/sshd
+        exec tail -f /dev/null
+    fi
+elif [ "$1" = "sleep" ] || [ "$1" = "infinity" ] || [ "$1" = "sleep infinity" ]; then
+    echo "Keeping container alive (sleep infinity mode)..."
+    echo "Use 'ssh -X vla@<host>' to connect."
+    /usr/sbin/sshd
+    exec tail -f /dev/null
 else
     echo "Executing: $@"
     exec "$@"
