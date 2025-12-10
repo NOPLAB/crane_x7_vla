@@ -20,6 +20,7 @@ from crane_x7_vla.config.base import CameraConfig, DataConfig, OverfittingConfig
 from crane_x7_vla.config.openpi_config import OpenPIConfig, OpenPISpecificConfig
 from crane_x7_vla.config.openpi_pytorch_config import OpenPIPytorchConfig, OpenPIPytorchSpecificConfig
 from crane_x7_vla.config.openvla_config import OpenVLAConfig, OpenVLASpecificConfig
+from crane_x7_vla.config.minivla_config import MiniVLAConfig, MiniVLASpecificConfig, VQConfig, MultiImageConfig
 from crane_x7_vla.training.trainer import VLATrainer
 
 
@@ -275,6 +276,15 @@ def create_default_config(backend: str, data_root: Path, output_dir: Path, exper
             experiment_name=experiment_name,
             openpi_pytorch=OpenPIPytorchSpecificConfig(),
         )
+    elif backend == "minivla":
+        config = MiniVLAConfig(
+            backend="minivla",
+            data=data_config,
+            training=training_config,
+            output_dir=output_dir,
+            experiment_name=experiment_name,
+            minivla=MiniVLASpecificConfig(),
+        )
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
@@ -311,6 +321,8 @@ def _build_config_from_args(
             config = OpenPIConfig.from_yaml(args.config)
         elif config.backend == "openpi-pytorch":
             config = OpenPIPytorchConfig.from_yaml(args.config)
+        elif config.backend == "minivla":
+            config = MiniVLAConfig.from_yaml(args.config)
 
         # Warn if config backend doesn't match CLI subcommand
         if config.backend != backend:
@@ -651,6 +663,42 @@ Examples:
         exclude_fields=["image_size", "camera_names"],  # Complex types
     )
 
+    # ----- MiniVLA subcommand -----
+    minivla_parser = train_subparsers.add_parser(
+        "minivla",
+        help="Train with MiniVLA backend (Qwen 2.5 0.5B + VQ Action Chunking)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_common_train_args(minivla_parser)
+    all_arg_mappings["minivla"] = _add_common_config_args(minivla_parser)
+
+    # Add MiniVLA-specific arguments (without prefix for cleaner CLI)
+    minivla_group = minivla_parser.add_argument_group("MiniVLA Configuration")
+    all_arg_mappings["minivla"]["minivla"] = add_dataclass_args_to_parser(
+        minivla_group,
+        MiniVLASpecificConfig,
+        prefix="",  # No prefix for backend-specific args
+        exclude_fields=["lora_target_modules", "action_range", "image_size", "vq", "multi_image"],  # Complex types
+    )
+
+    # Add VQ-specific arguments
+    vq_group = minivla_parser.add_argument_group("VQ Action Chunking Configuration")
+    all_arg_mappings["minivla"]["vq"] = add_dataclass_args_to_parser(
+        vq_group,
+        VQConfig,
+        prefix="vq",
+        exclude_fields=[],
+    )
+
+    # Add Multi-image-specific arguments
+    multi_image_group = minivla_parser.add_argument_group("Multi-Image Configuration")
+    all_arg_mappings["minivla"]["multi_image"] = add_dataclass_args_to_parser(
+        multi_image_group,
+        MultiImageConfig,
+        prefix="multi-image",
+        exclude_fields=["camera_names"],  # Complex types
+    )
+
     # =====================
     # Evaluate command
     # =====================
@@ -663,7 +711,7 @@ Examples:
     # Config command
     # =====================
     config_parser = subparsers.add_parser("config", help="Generate default configuration file")
-    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi", "openpi-pytorch"], required=True, help="VLA backend")
+    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi", "openpi-pytorch", "minivla"], required=True, help="VLA backend")
     config_parser.add_argument("--output", type=str, default="config.yaml", help="Output configuration file path")
     config_parser.add_argument("--data-root", type=str, help="Path to training data directory")
     config_parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints and logs")
@@ -758,6 +806,37 @@ Examples:
         OpenPIPytorchSpecificConfig,
         prefix="",
         exclude_fields=["image_size", "camera_names"],
+    )
+
+    # ----- Agent MiniVLA subcommand -----
+    agent_minivla_parser = agent_subparsers.add_parser(
+        "minivla",
+        help="Run sweep agent with MiniVLA backend",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    agent_minivla_parser.add_argument("--sweep-id", type=str, required=True, help="W&B Sweep ID")
+    agent_minivla_parser.add_argument("--entity", type=str, help="W&B entity (team/username)")
+    agent_minivla_parser.add_argument("--project", type=str, default="crane_x7", help="W&B project name")
+    agent_minivla_parser.add_argument("--count", type=int, default=1, help="Number of runs to execute")
+    _add_common_train_args(agent_minivla_parser)
+    agent_arg_mappings["minivla"] = _add_common_config_args(agent_minivla_parser)
+
+    # Add MiniVLA-specific arguments
+    agent_minivla_group = agent_minivla_parser.add_argument_group("MiniVLA Configuration")
+    agent_arg_mappings["minivla"]["minivla"] = add_dataclass_args_to_parser(
+        agent_minivla_group,
+        MiniVLASpecificConfig,
+        prefix="",
+        exclude_fields=["lora_target_modules", "action_range", "image_size", "vq", "multi_image"],
+    )
+
+    # Add VQ-specific arguments for agent
+    agent_vq_group = agent_minivla_parser.add_argument_group("VQ Action Chunking Configuration")
+    agent_arg_mappings["minivla"]["vq"] = add_dataclass_args_to_parser(
+        agent_vq_group,
+        VQConfig,
+        prefix="vq",
+        exclude_fields=[],
     )
 
     args = parser.parse_args()

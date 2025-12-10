@@ -16,6 +16,12 @@ from crane_x7_vla.config.openpi_pytorch_config import (
     OpenPIPytorchConfig,
     OpenPIPytorchSpecificConfig,
 )
+from crane_x7_vla.config.minivla_config import (
+    MiniVLAConfig,
+    MiniVLASpecificConfig,
+    MultiImageConfig,
+    VQConfig,
+)
 from crane_x7_vla.config.robot import RobotConfig
 
 __all__ = [
@@ -31,4 +37,8 @@ __all__ = [
     "OpenPISpecificConfig",
     "OpenPIPytorchConfig",
     "OpenPIPytorchSpecificConfig",
+    "MiniVLAConfig",
+    "MiniVLASpecificConfig",
+    "MultiImageConfig",
+    "VQConfig",
 ]

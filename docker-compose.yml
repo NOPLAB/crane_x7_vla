@@ -28,7 +28,7 @@ x-build-vlarl: &build-vlarl
 # Build configuration for Remote Inference
 x-build-inference: &build-inference
   context: .
-  dockerfile: docker/Dockerfile.inference
+  dockerfile: docker/Dockerfile.remote-inference
 
 # Build configuration for LeRobot
 x-build-lerobot: &build-lerobot

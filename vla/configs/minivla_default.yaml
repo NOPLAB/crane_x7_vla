@@ -1,0 +1,143 @@
+# MiniVLA Training Configuration for CRANE-X7
+# This is a sample configuration file for training MiniVLA on CRANE-X7 robot data
+# MiniVLA: ~1B parameters (7x smaller than OpenVLA), ~12.5Hz inference speed
+
+# =============================================================================
+# Top-level Settings
+# =============================================================================
+backend: minivla
+output_dir: ./outputs/minivla
+experiment_name: crane_x7_minivla
+seed: 42
+resume_from_checkpoint: null
+
+# Weights & Biases logging
+wandb_project: crane-x7-vla
+wandb_entity: null  # Your W&B username or team name
+
+# =============================================================================
+# Data Configuration
+# =============================================================================
+data:
+  data_root: ./data/tfrecord_logs
+  format: tfrecord  # 'tfrecord' or 'lerobot'
+  train_split: 0.9
+  val_split: 0.1
+  shuffle: true
+  shuffle_buffer_size: 1000
+  num_workers: 4
+  prefetch_factor: 2
+
+  # Camera configuration
+  cameras:
+    - name: primary
+      topic: /camera/color/image_raw
+      enabled: true
+      width: 640
+      height: 480
+      calibration_file: null
+    - name: wrist
+      topic: /wrist_camera/color/image_raw
+      enabled: true
+      width: 640
+      height: 480
+      calibration_file: null
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  batch_size: 32  # Larger batch size possible due to smaller model
+  num_epochs: 100
+  max_steps: 200000
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  warmup_steps: 1000
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  mixed_precision: bf16  # 'no', 'fp16', or 'bf16'
+  gradient_checkpointing: false
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10
+
+# =============================================================================
+# Overfitting Detection Settings
+# Uses step-level splitting (not episode-level) to properly detect memorization
+# =============================================================================
+overfitting:
+  overfit_split_ratio: 0.1      # 10% of steps for overfitting detection (0.0 to disable)
+  overfit_check_interval: 500   # Check overfitting every N gradient steps
+  overfit_check_steps: 50       # Number of batches to evaluate per overfitting check
+
+# =============================================================================
+# MiniVLA Backend Configuration
+# =============================================================================
+backend_config:
+  # Model settings
+  llm_model_id: Qwen/Qwen2.5-0.5B
+  vision_backbone: dinosiglip-vit-so-224px
+
+  # LoRA settings for parameter-efficient fine-tuning
+  use_lora: true
+  lora_rank: 16
+  lora_alpha: 8
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+  # Action tokenization
+  action_tokenization_bins: 256
+  action_range:
+    - -1.0
+    - 1.0
+
+  # Model architecture
+  max_sequence_length: 512
+  image_size:
+    - 224
+    - 224
+
+  # Optimization
+  use_flash_attention: true   # Recommended for Qwen 2.5
+  use_quantization: false     # Use quantization (4-bit/8-bit) for memory efficiency
+  compile_model: false        # Use torch.compile() for optimization
+
+  # Checkpoint saving
+  # When true, only LoRA adapters are saved (faster, avoids NCCL timeout on multi-GPU)
+  # Use merge_lora.py to merge adapters into base model after training
+  skip_merge_on_save: true
+
+  # Data augmentation
+  image_aug: true
+
+# =============================================================================
+# VQ Action Chunking Configuration
+# Enables prediction of multiple future actions using Residual VQ
+# =============================================================================
+vq:
+  enabled: true
+  vq_path: null              # Path to pre-trained VQ model (null = train from scratch)
+  action_horizon: 8          # Number of future actions to predict per chunk
+  n_embed: 256               # Number of embeddings per codebook
+  n_latent: 512              # Latent dimension for encoder/decoder
+  n_groups: 7                # Number of residual VQ groups (sequential codebooks)
+  commitment_weight: 0.25    # Weight for commitment loss during VQ training
+
+# =============================================================================
+# Multi-Image Configuration
+# Enables temporal context and wrist camera input
+# =============================================================================
+multi_image:
+  enabled: true
+  image_history: 2           # Number of historical frames to include (1 = current only)
+  use_wrist_camera: true     # Whether to include wrist camera image
+  camera_names:              # Camera names in order of input to model
+    - primary
+    - wrist

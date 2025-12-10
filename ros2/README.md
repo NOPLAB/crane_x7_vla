@@ -302,11 +302,11 @@ crane_x7_vla/
 ├── .env.template                  # 環境設定テンプレート
 ├── docker/                        # Docker環境
 │   ├── Dockerfile.ros2            # ROS 2統合環境
-│   ├── Dockerfile.inference       # リモートGPU推論
+│   ├── Dockerfile.remote-inference # リモートGPU推論
 │   ├── Dockerfile.vlarl           # VLA-RL学習
 │   ├── Dockerfile.lerobot         # LeRobot統合
 │   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
-│   ├── entrypoint-inference.sh    # 推論用エントリーポイント
+│   ├── entrypoint-remote-inference.sh # 推論用エントリーポイント
 │   └── wait-for-peer.sh           # Tailscale待機スクリプト
 │
 ├── ros2/                          # ROS 2ワークスペース

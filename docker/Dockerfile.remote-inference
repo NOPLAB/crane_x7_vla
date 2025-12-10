@@ -14,7 +14,7 @@
 # - Smaller image size (no ROS 2 installation)
 #
 # Usage:
-#   docker build -f docker/Dockerfile.inference -t crane_x7_vla-inference .
+#   docker build -f docker/Dockerfile.remote-inference -t crane_x7_vla-remote-inference .
 #
 #   docker run --gpus all \
 #     -e TS_AUTHKEY=tskey-auth-xxxxx \
@@ -105,7 +105,7 @@ COPY ros2/src/crane_x7_vla/scripts /workspace/scripts
 # ----------------------------------------------------------------------------
 # Copy configuration and entrypoint
 # ----------------------------------------------------------------------------
-COPY docker/entrypoint-inference.sh /entrypoint.sh
+COPY docker/entrypoint-remote-inference.sh /entrypoint.sh
 COPY docker/wait-for-peer.sh /usr/local/bin/wait-for-peer.sh
 RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 

@@ -95,10 +95,13 @@ LIFT_RENDER_MODE=rgb_array
 cd vla
 
 # OpenVLA用Dockerイメージビルド
-docker build -f Dockerfile.openvla.example -t crane_x7_vla_openvla .
+docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
+
+# MiniVLA用Dockerイメージビルド（軽量版、~1Bパラメータ）
+docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
 
 # OpenPI用Dockerイメージビルド
-docker build -f Dockerfile.openpi.example -t crane_x7_vla_openpi .
+docker build -f Dockerfile.openpi -t crane_x7_vla_openpi .
 
 # トレーニング実行（コンテナ内）
 python -m crane_x7_vla.training.cli train openvla \
@@ -106,11 +109,20 @@ python -m crane_x7_vla.training.cli train openvla \
   --experiment-name crane_x7_openvla \
   --training-batch-size 16
 
+# MiniVLAトレーニング（VQ Action Chunking + Multi-image）
+python -m crane_x7_vla.training.cli train minivla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_minivla \
+  --training-batch-size 32 \
+  --vq-enabled \
+  --multi-image-enabled
+
 # マルチGPU
 torchrun --nproc_per_node=2 -m crane_x7_vla.training.cli train openvla ...
 
 # 設定ファイル生成
 python -m crane_x7_vla.training.cli config --backend openvla --output my_config.yaml
+python -m crane_x7_vla.training.cli config --backend minivla --output minivla_config.yaml
 
 # LoRAマージ
 python -m crane_x7_vla.scripts.merge_lora \
@@ -197,11 +209,11 @@ crane_x7_vla/
 ├── .env.template                  # 環境変数テンプレート
 ├── docker/                        # Docker環境
 │   ├── Dockerfile.ros2            # ROS 2統合環境
-│   ├── Dockerfile.inference       # リモートGPU推論
+│   ├── Dockerfile.remote-inference # リモートGPU推論
 │   ├── Dockerfile.vlarl           # VLA-RL学習
 │   ├── Dockerfile.lerobot         # LeRobot統合
 │   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
-│   ├── entrypoint-inference.sh    # 推論用エントリーポイント
+│   ├── entrypoint-remote-inference.sh # 推論用エントリーポイント
 │   └── wait-for-peer.sh           # Tailscale待機スクリプト
 ├── ros2/                          # ROS 2ワークスペース
 │   └── src/
@@ -215,11 +227,14 @@ crane_x7_vla/
 │       ├── crane_x7_lift/         # 統一シミュレータROS 2インターフェース
 │       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
-│   ├── Dockerfile.openvla.example # OpenVLA用Docker
-│   ├── Dockerfile.openpi.example  # OpenPI用Docker
+│   ├── Dockerfile.openvla         # OpenVLA用Docker
+│   ├── Dockerfile.minivla         # MiniVLA用Docker
+│   ├── Dockerfile.openpi          # OpenPI用Docker
 │   ├── configs/                   # 設定ファイル
 │   └── src/
 │       ├── crane_x7_vla/          # 統一トレーニングCLI
+│       │   ├── action_tokenizer/  # VQ Action Tokenizer（MiniVLA用）
+│       │   └── backends/          # バックエンド実装
 │       ├── openvla/               # OpenVLAサブモジュール
 │       └── openpi/                # OpenPIサブモジュール
 ├── sim/                           # シミュレータ（lift抽象化）
@@ -252,14 +267,15 @@ crane_x7_vla/
 
 ## アーキテクチャ詳細
 
-### OpenVLA vs OpenPI
+### VLAバックエンド比較
 
-OpenVLAとOpenPIは依存関係が競合するため、**別々のDockerイメージ**を使用：
+各VLAバックエンドは依存関係が異なるため、**別々のDockerイメージ**を使用：
 
-| バックエンド | Dockerfile                   | Python | PyTorch | 状態     |
-| ------------ | ---------------------------- | ------ | ------- | -------- |
-| OpenVLA      | `Dockerfile.openvla.example` | 3.10   | 2.5.1   | 実装済み |
-| OpenPI       | `Dockerfile.openpi.example`  | 3.11   | 2.7.1   | 未実装   |
+| バックエンド | Dockerfile             | Python | PyTorch | パラメータ | 特徴                          | 状態     |
+| ------------ | ---------------------- | ------ | ------- | ---------- | ----------------------------- | -------- |
+| OpenVLA      | `Dockerfile.openvla`   | 3.10   | 2.5.1   | ~7B        | Prismatic VLMベース           | 実装済み |
+| MiniVLA      | `Dockerfile.minivla`   | 3.10   | 2.5.1   | ~1B        | Qwen 2.5 + VQ Action Chunking | 実装済み |
+| OpenPI       | `Dockerfile.openpi`    | 3.11   | 2.7.1   | -          | π₀モデル（JAX版）             | 未実装   |
 
 ### データフォーマット
 

@@ -6,11 +6,21 @@ CRANE-X7ロボットアーム用のVision-Language-Action（VLA）モデルを�
 
 このディレクトリでは、以下のVLAバックエンドをサポートしています：
 
-| バックエンド | 説明 | Dockerfile | 状態 |
-|-------------|------|------------|------|
-| **OpenVLA** | Prismatic VLMベースの7Bパラメータモデル | `Dockerfile.openvla` | 実装済み |
-| **OpenPI** | Physical Intelligence社のπ₀モデル（JAX版） | `Dockerfile.openpi` | 未実装 |
-| **OpenPI PyTorch** | π₀モデルのHuggingFace/PyTorch実装 | `Dockerfile.openpi-pytorch` | 未実装 |
+| バックエンド | 説明 | Dockerfile | パラメータ | 推論速度 | 状態 |
+|-------------|------|------------|-----------|---------|------|
+| **OpenVLA** | Prismatic VLMベースの7Bパラメータモデル | `Dockerfile.openvla` | ~7B | ~5Hz | 実装済み |
+| **MiniVLA** | Qwen 2.5 0.5B + VQ Action Chunking | `Dockerfile.minivla` | ~1B | ~12.5Hz | 実装済み |
+| **OpenPI** | Physical Intelligence社のπ₀モデル（JAX版） | `Dockerfile.openpi` | - | - | 未実装 |
+| **OpenPI PyTorch** | π₀モデルのHuggingFace/PyTorch実装 | `Dockerfile.openpi-pytorch` | - | - | 未実装 |
+
+### MiniVLAの特徴
+
+MiniVLAは軽量で高速な推論を実現するVLAモデルです：
+
+- **軽量**: OpenVLAの約1/7のパラメータ（~1B vs ~7B）
+- **高速推論**: ~12.5Hz（OpenVLAの~2.5倍）
+- **VQ Action Chunking**: 複数の将来アクションを効率的に予測
+- **Multi-image Support**: 画像履歴 + 手首カメラ入力に対応
 
 ## クイックスタート
 
@@ -21,6 +31,9 @@ cd /path/to/crane_x7_vla/vla
 
 # OpenVLA用
 docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
+
+# MiniVLA用（軽量版）
+docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
 ```
 
 ### 2. トレーニングの実行
@@ -32,10 +45,23 @@ docker run --gpus all -it --rm \
   -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
   crane_x7_vla_openvla
 
-# コンテナ内でトレーニング実行
+# コンテナ内でトレーニング実行（OpenVLA）
 python -m crane_x7_vla.training.cli train openvla \
   --data-root /workspace/data/tfrecord_logs \
   --experiment-name crane_x7_openvla
+
+# MiniVLAの場合
+docker run --gpus all -it --rm \
+  -v $(pwd)/..:/workspace \
+  -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
+  crane_x7_vla_minivla
+
+# コンテナ内でトレーニング実行（MiniVLA）
+python -m crane_x7_vla.training.cli train minivla \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name crane_x7_minivla \
+  --vq-enabled \
+  --multi-image-enabled
 ```
 
 ## 環境構築
@@ -48,11 +74,14 @@ python -m crane_x7_vla.training.cli train openvla \
 
 ### Dockerイメージ
 
-OpenVLAとOpenPIは依存関係が競合するため、別々のDockerイメージを使用します：
+各VLAバックエンドは依存関係が異なるため、別々のDockerイメージを使用します：
 
 ```bash
-# OpenVLA（Python 3.10, PyTorch 2.5.1）
+# OpenVLA（Python 3.10, PyTorch 2.5.1, ~7Bパラメータ）
 docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
+
+# MiniVLA（Python 3.10, PyTorch 2.5.1, ~1Bパラメータ、軽量・高速）
+docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
 
 # OpenPI JAX版（Python 3.11, JAX）
 docker build -f Dockerfile.openpi -t crane_x7_vla_openpi .
@@ -163,13 +192,49 @@ python -m crane_x7_vla.training.cli train openvla \
 | `--image-aug` | True | 画像拡張を使用 |
 | `--skip-merge-on-save` | True | 保存時にLoRAマージをスキップ |
 
+#### MiniVLA固有設定
+
+| 引数 | デフォルト | 説明 |
+|------|-----------|------|
+| `--llm-model-id` | `Qwen/Qwen2.5-0.5B` | LLMモデルID |
+| `--use-lora` | True | LoRAを使用 |
+| `--lora-rank` | 16 | LoRAランク |
+| `--lora-alpha` | 8 | LoRAアルファ |
+| `--use-flash-attention` | True | Flash Attentionを使用 |
+| `--image-aug` | True | 画像拡張を使用 |
+
+#### VQ Action Chunking設定（MiniVLA）
+
+| 引数 | デフォルト | 説明 |
+|------|-----------|------|
+| `--vq-enabled` | True | VQ Action Chunkingを有効化 |
+| `--vq-action-horizon` | 8 | アクションチャンク長 |
+| `--vq-n-embed` | 256 | コードブックサイズ |
+| `--vq-n-latent` | 512 | 潜在次元 |
+| `--vq-n-groups` | 7 | Residual VQグループ数 |
+
+#### Multi-image設定（MiniVLA）
+
+| 引数 | デフォルト | 説明 |
+|------|-----------|------|
+| `--multi-image-enabled` | True | マルチ画像入力を有効化 |
+| `--multi-image-image-history` | 2 | 履歴フレーム数 |
+| `--multi-image-use-wrist-camera` | True | 手首カメラを使用 |
+
 ### 設定ファイルの生成
 
 ```bash
-# デフォルト設定ファイルを生成
+# OpenVLAデフォルト設定ファイルを生成
 python -m crane_x7_vla.training.cli config \
   --backend openvla \
-  --output my_config.yaml \
+  --output openvla_config.yaml \
+  --data-root /workspace/data/tfrecord_logs \
+  --experiment-name my_experiment
+
+# MiniVLAデフォルト設定ファイルを生成
+python -m crane_x7_vla.training.cli config \
+  --backend minivla \
+  --output minivla_config.yaml \
   --data-root /workspace/data/tfrecord_logs \
   --experiment-name my_experiment
 ```
@@ -294,12 +359,15 @@ VLA_MODEL_PATH=/workspace/outputs/my_experiment_merged
 ```
 vla/
 ├── Dockerfile.openvla          # OpenVLA用Dockerfile
+├── Dockerfile.minivla          # MiniVLA用Dockerfile
 ├── Dockerfile.openpi           # OpenPI JAX版用Dockerfile
 ├── Dockerfile.openpi-pytorch   # OpenPI PyTorch版用Dockerfile
 ├── requirements-openvla.txt    # OpenVLA依存関係
+├── requirements-minivla.txt    # MiniVLA依存関係
 ├── requirements-openpi.txt     # OpenPI依存関係
 ├── configs/
 │   ├── openvla_default.yaml    # OpenVLAデフォルト設定
+│   ├── minivla_default.yaml    # MiniVLAデフォルト設定
 │   └── openpi_default.yaml     # OpenPIデフォルト設定
 ├── outputs/                    # 学習出力（チェックポイント）
 ├── src/
@@ -308,10 +376,15 @@ vla/
 │   │   │   ├── cli.py          # コマンドラインインターフェース
 │   │   │   └── trainer.py      # 統一トレーナー
 │   │   ├── backends/           # バックエンド実装
-│   │   │   ├── openvla_backend.py
-│   │   │   └── openpi_backend.py
+│   │   │   ├── openvla.py      # OpenVLAバックエンド
+│   │   │   ├── minivla.py      # MiniVLAバックエンド
+│   │   │   └── openpi.py       # OpenPIバックエンド
+│   │   ├── action_tokenizer/   # アクショントークナイザー
+│   │   │   ├── vq.py           # Residual VQ実装
+│   │   │   └── vq_tokenizer.py # VQアクショントークナイザー
 │   │   ├── config/             # 設定データクラス
 │   │   ├── data/               # データローダー
+│   │   │   └── minivla_dataset.py  # MiniVLAマルチ画像データセット
 │   │   ├── scripts/            # ユーティリティスクリプト
 │   │   │   └── merge_lora.py   # LoRAマージスクリプト
 │   │   └── transforms/         # データ変換
@@ -349,8 +422,11 @@ export TF_CPP_MIN_LOG_LEVEL=2
 ## 参考リンク
 
 - [OpenVLA](https://github.com/openvla/openvla) - Prismatic VLMベースのVLAモデル
+- [MiniVLA Blog](https://ai.stanford.edu/blog/minivla/) - Stanford SAILによるMiniVLA紹介
 - [OpenPI](https://github.com/Physical-Intelligence/openpi) - Physical Intelligence社のπ₀モデル
 - [HuggingFace OpenVLA](https://huggingface.co/openvla/openvla-7b) - 事前学習済みモデル
+- [HuggingFace Qwen2.5](https://huggingface.co/Qwen/Qwen2.5-0.5B) - MiniVLAベースモデル
+- [VQ-BeT](https://arxiv.org/abs/2403.03181) - VQ Action Chunkingの参考論文
 
 ## ライセンス
 
