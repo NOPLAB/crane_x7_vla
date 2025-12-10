@@ -5,7 +5,7 @@
 # Note: PyTorch is installed separately in Dockerfile with specific CUDA version
 
 # Setuptools (must be <59 for ROS 2 Humble compatibility with colcon --symlink-install)
-setuptools==58.5.3
+setuptools==80.9.0
 
 # NumPy (must be <2.0 for cv_bridge/TensorFlow compatibility)
 # This constraint must come first to prevent other packages from installing numpy>=2.0
