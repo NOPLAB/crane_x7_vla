@@ -371,113 +371,158 @@ ros2 topic pub /vla/update_instruction std_msgs/String "data: 'place the cube on
 
 ```bash
 cd crane_x7_vla
-docker build -f docker/Dockerfile.vla-rl -t crane_x7_vla_rl .
+docker build -f docker/Dockerfile.remote-vla-rl -t crane_x7_remote_vla_rl .
 ```
 
 ### Docker Hubにプッシュ
 
 ```bash
-docker tag crane_x7_vla_rl <username>/crane_x7_vla_rl:latest
-docker push <username>/crane_x7_vla_rl:latest
+docker tag crane_x7_remote_vla_rl <username>/crane_x7_remote_vla_rl:latest
+docker push <username>/crane_x7_remote_vla_rl:latest
 ```
 
 ## 実行方法
 
-### 基本的なトレーニング
+### SSHサーバー起動（Tailscale経由）
+
+```bash
+docker run --gpus all -d \
+  -e TS_AUTHKEY="tskey-auth-xxxxx" \
+  -e TS_HOSTNAME="crane-x7-vla-rl" \
+  -e SSH_PUBLIC_KEY="$(cat ~/.ssh/id_rsa.pub)" \
+  -e WANDB_API_KEY="your-wandb-api-key" \
+  -e HF_TOKEN="hf_xxxxx" \
+  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
+  <username>/crane_x7_remote_vla_rl:latest
+```
+
+### SSH接続
+
+```bash
+# Tailscaleホスト名で接続
+ssh -X vla@crane-x7-vla-rl
+
+# X11フォワーディング確認
+echo $DISPLAY  # :10.0 などが表示されればOK
+xeyes          # テスト用GUIアプリ
+```
+
+### SSHサーバー起動（ポートフォワード経由）
+
+```bash
+docker run --gpus all -d \
+  -p 2222:22 \
+  -e SSH_PUBLIC_KEY="$(cat ~/.ssh/id_rsa.pub)" \
+  -e WANDB_API_KEY="your-wandb-api-key" \
+  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
+  <username>/crane_x7_remote_vla_rl:latest
+
+# 接続
+ssh -X -p 2222 vla@<host-ip>
+```
+
+### コンテナ内でトレーニング実行
+
+SSH接続後、コンテナ内でトレーニングを実行：
+
+```bash
+# 基本的なトレーニング
+python -m crane_x7_vla_rl.training.cli train \
+  --pretrained openvla/openvla-7b \
+  --simulator maniskill \
+  --env-id PickPlace-CRANE-X7 \
+  --backend gpu \
+  --num-parallel-envs 4 \
+  --num-updates 1000 \
+  --use-wandb
+
+# SFTチェックポイントからトレーニング
+python -m crane_x7_vla_rl.training.cli train \
+  --sft-checkpoint /workspace/sft_checkpoint \
+  --simulator maniskill \
+  --backend gpu \
+  --num-parallel-envs 4 \
+  --use-wandb
+
+# 設定ファイルを使用
+python -m crane_x7_vla_rl.training.cli train \
+  --config /workspace/config.yaml
+
+# チェックポイントから再開
+python -m crane_x7_vla_rl.training.cli train \
+  --resume /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_500
+
+# 評価のみ
+python -m crane_x7_vla_rl.training.cli evaluate \
+  --checkpoint /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_best \
+  --num-episodes 20
+```
+
+### 直接コマンド実行（SSHなし）
 
 ```bash
 docker run --gpus all \
   -e WANDB_API_KEY="your-wandb-api-key" \
   -e HF_TOKEN="hf_xxxxx" \
   -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
-  <username>/crane_x7_vla_rl:latest \
+  <username>/crane_x7_remote_vla_rl:latest \
   python -m crane_x7_vla_rl.training.cli train \
     --pretrained openvla/openvla-7b \
     --simulator maniskill \
-    --env-id PickPlace-CRANE-X7 \
-    --backend gpu \
-    --num-parallel-envs 4 \
-    --num-updates 1000 \
-    --use-wandb
-```
-
-### SFTチェックポイントからトレーニング
-
-```bash
-docker run --gpus all \
-  -e WANDB_API_KEY="your-wandb-api-key" \
-  -v /path/to/sft/checkpoint:/workspace/sft_checkpoint:ro \
-  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
-  <username>/crane_x7_vla_rl:latest \
-  python -m crane_x7_vla_rl.training.cli train \
-    --sft-checkpoint /workspace/sft_checkpoint \
-    --simulator maniskill \
     --backend gpu \
     --num-parallel-envs 4 \
     --use-wandb
-```
-
-### 設定ファイルを使用
-
-```bash
-docker run --gpus all \
-  -e WANDB_API_KEY="your-wandb-api-key" \
-  -v $(pwd)/my_config.yaml:/workspace/config.yaml:ro \
-  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
-  <username>/crane_x7_vla_rl:latest \
-  python -m crane_x7_vla_rl.training.cli train \
-    --config /workspace/config.yaml
-```
-
-### チェックポイントから再開
-
-```bash
-docker run --gpus all \
-  -e WANDB_API_KEY="your-wandb-api-key" \
-  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
-  <username>/crane_x7_vla_rl:latest \
-  python -m crane_x7_vla_rl.training.cli train \
-    --resume /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_500
-```
-
-### 評価のみ
-
-```bash
-docker run --gpus all \
-  -v $(pwd)/outputs:/workspace/vla-rl/outputs:ro \
-  <username>/crane_x7_vla_rl:latest \
-  python -m crane_x7_vla_rl.training.cli evaluate \
-    --checkpoint /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_best \
-    --num-episodes 20
-```
-
-### インタラクティブシェル（デバッグ用）
-
-```bash
-docker run --gpus all -it \
-  -e WANDB_API_KEY="your-wandb-api-key" \
-  -v $(pwd)/outputs:/workspace/vla-rl/outputs:rw \
-  <username>/crane_x7_vla_rl:latest \
-  /bin/bash
 ```
 
 ## 環境変数リファレンス
 
-### トレーニング設定
+### Tailscale設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `TS_AUTHKEY` | (なし) | Tailscale認証キー。未設定時はTailscaleを使用しない |
+| `TS_HOSTNAME` | `crane-x7-vla-rl` | Tailscaleネットワーク上のホスト名 |
+| `TS_STATE_DIR` | `/var/lib/tailscale` | Tailscale状態ディレクトリ |
+| `TS_USERSPACE` | `true` | ユーザースペースモードで実行（コンテナ内推奨） |
+
+### SSH設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `SSH_PUBLIC_KEY` | (なし) | SSH公開鍵（必須）。`vla`ユーザーの認証に使用 |
+| `SSH_PORT` | `22` | SSHサーバーのポート |
+
+### VLA-RL設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `VLA_MODEL_PATH` | (なし) | モデルパス（ローカル or HF Hub ID） |
+| `HF_TOKEN` | (なし) | HuggingFace Hub認証トークン |
+| `HF_HOME` | `/root/.cache/huggingface` | HuggingFaceキャッシュディレクトリ |
+| `WANDB_API_KEY` | (なし) | W&B APIキー（ログ用） |
+| `WANDB_DIR` | `/workspace/vla-rl/outputs` | W&Bログディレクトリ |
+
+### シミュレータ設定
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `LIFT_SIMULATOR` | `maniskill` | シミュレータ（`maniskill`/`genesis`/`isaacsim`） |
 | `LIFT_BACKEND` | `gpu` | シミュレーションバックエンド（`cpu`/`gpu`） |
-| `WANDB_API_KEY` | (なし) | W&B APIキー（ログ用） |
-| `HF_TOKEN` | (なし) | HuggingFace Hub認証トークン |
 
 ### GPU/レンダリング
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `NVIDIA_VISIBLE_DEVICES` | `all` | 使用するGPU |
+| `NVIDIA_DRIVER_CAPABILITIES` | `graphics,utility,compute` | NVIDIAドライバ機能 |
 | `PYOPENGL_PLATFORM` | `egl` | OpenGLプラットフォーム（ヘッドレス用） |
+
+### PyTorch最適化
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `CUDA_LAUNCH_BLOCKING` | `0` | CUDAカーネル同期（デバッグ用は`1`） |
+| `PYTORCH_CUDA_ALLOC_CONF` | `max_split_size_mb:512` | CUDAメモリアロケータ設定 |
 
 ## GPUインスタンス選択の目安
 
