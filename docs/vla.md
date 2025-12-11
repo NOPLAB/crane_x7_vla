@@ -42,7 +42,7 @@ docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
 # データディレクトリをマウントしてコンテナを起動
 docker run --gpus all -it --rm \
   -v $(pwd)/..:/workspace \
-  -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
+  -v ~/.cache:/home/vla/.cache \
   crane_x7_vla_openvla
 
 # コンテナ内でトレーニング実行（OpenVLA）
@@ -53,7 +53,7 @@ python -m crane_x7_vla.training.cli train openvla \
 # MiniVLAの場合
 docker run --gpus all -it --rm \
   -v $(pwd)/..:/workspace \
-  -v ~/.cache/huggingface:/home/vla/.cache/huggingface \
+  -v ~/.cache/home/vla/.cache \
   crane_x7_vla_minivla
 
 # コンテナ内でトレーニング実行（MiniVLA）
