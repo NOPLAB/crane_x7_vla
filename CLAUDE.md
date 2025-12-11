@@ -94,14 +94,8 @@ LIFT_RENDER_MODE=rgb_array
 ```bash
 cd vla
 
-# OpenVLA用Dockerイメージビルド
-docker build -f Dockerfile.openvla -t crane_x7_vla_openvla .
-
-# MiniVLA用Dockerイメージビルド（軽量版、~1Bパラメータ）
-docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
-
-# OpenPI用Dockerイメージビルド
-docker build -f Dockerfile.openpi -t crane_x7_vla_openpi .
+# Dockerイメージビルド（全バックエンド含む）
+docker build -t crane_x7_vla .
 
 # トレーニング実行（コンテナ内）
 python -m crane_x7_vla.training.cli train openvla \
@@ -227,9 +221,7 @@ crane_x7_vla/
 │       ├── crane_x7_lift/         # 統一シミュレータROS 2インターフェース
 │       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
-│   ├── Dockerfile.openvla         # OpenVLA用Docker
-│   ├── Dockerfile.minivla         # MiniVLA用Docker
-│   ├── Dockerfile.openpi          # OpenPI用Docker
+│   ├── Dockerfile                 # 統一Dockerfile（VLA_BACKENDで切り替え）
 │   ├── configs/                   # 設定ファイル
 │   └── src/
 │       ├── crane_x7_vla/          # 統一トレーニングCLI
@@ -269,13 +261,16 @@ crane_x7_vla/
 
 ### VLAバックエンド比較
 
-各VLAバックエンドは依存関係が異なるため、**別々のDockerイメージ**を使用：
+統一Dockerfile（`vla/Dockerfile`）に全バックエンドの依存関係を含む：
 
-| バックエンド | Dockerfile             | Python | PyTorch | パラメータ | 特徴                          | 状態     |
-| ------------ | ---------------------- | ------ | ------- | ---------- | ----------------------------- | -------- |
-| OpenVLA      | `Dockerfile.openvla`   | 3.10   | 2.5.1   | ~7B        | Prismatic VLMベース           | 実装済み |
-| MiniVLA      | `Dockerfile.minivla`   | 3.10   | 2.5.1   | ~1B        | Qwen 2.5 + VQ Action Chunking | 実装済み |
-| OpenPI       | `Dockerfile.openpi`    | 3.11   | 2.7.1   | -          | π₀モデル（JAX版）             | 未実装   |
+| バックエンド | パラメータ | 特徴 | 状態 |
+|-------------|-----------|------|------|
+| OpenVLA | ~7B | Prismatic VLMベース | 実装済み |
+| MiniVLA | ~1B | Qwen 2.5 + VQ Action Chunking | 実装済み |
+| OpenPI | - | π₀モデル（JAX版） | 未実装 |
+| OpenPI-PyTorch | - | HuggingFace Pi0 | 未実装 |
+
+共通環境: **CUDA 13.0** / **Python 3.11** / **PyTorch 2.9.1** / **JAX 0.5.3**
 
 ### データフォーマット
 
