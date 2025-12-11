@@ -41,6 +41,8 @@ docker build -f Dockerfile.minivla -t crane_x7_vla_minivla .
 ```bash
 # データディレクトリをマウントしてコンテナを起動
 docker run --gpus all -it --rm \
+  --env-file .env \
+  --net host \
   -v $(pwd)/..:/workspace \
   -v ~/.cache:/home/vla/.cache \
   crane_x7_vla_openvla
@@ -52,8 +54,10 @@ python -m crane_x7_vla.training.cli train openvla \
 
 # MiniVLAの場合
 docker run --gpus all -it --rm \
+  --env-file .env \
+  --net host \
   -v $(pwd)/..:/workspace \
-  -v ~/.cache/home/vla/.cache \
+  -v ~/.cache:/home/vla/.cache \
   crane_x7_vla_minivla
 
 # コンテナ内でトレーニング実行（MiniVLA）
