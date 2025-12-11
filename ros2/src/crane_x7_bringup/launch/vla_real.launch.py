@@ -17,6 +17,7 @@ CRANE-X7 VLA推論（実機）のbringup launchファイル。
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -55,7 +56,8 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include crane_x7_examples demo (robot control + optional D435 camera)
+    # Include crane_x7_examples demo (robot control + MoveIt2)
+    # Note: use_d435=false here because we launch RealSense separately with correct namespace
     demo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -66,7 +68,26 @@ def generate_launch_description():
         ]),
         launch_arguments={
             'port_name': LaunchConfiguration('port_name'),
-            'use_d435': LaunchConfiguration('use_d435'),
+            'use_d435': 'false',
+        }.items()
+    )
+
+    # RealSense D435 camera with correct namespace (/camera/color/image_raw)
+    realsense_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('realsense2_camera'),
+                'launch', 'rs_launch.py'
+            ])
+        ]),
+        condition=IfCondition(LaunchConfiguration('use_d435')),
+        launch_arguments={
+            'camera_namespace': '',
+            'camera_name': 'camera',
+            'device_type': 'd435',
+            'pointcloud.enable': 'false',
+            'align_depth.enable': 'false',
+            'rgb_camera.profile': '640x480x15',
         }.items()
     )
 
@@ -93,5 +114,6 @@ def generate_launch_description():
         declare_task_instruction,
         declare_device,
         demo_launch,
+        realsense_node,
         vla_control_launch,
     ])
