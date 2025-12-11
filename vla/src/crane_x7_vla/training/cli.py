@@ -20,6 +20,14 @@ from crane_x7_vla.config.base import CameraConfig, DataConfig, OverfittingConfig
 from crane_x7_vla.config.openpi_config import OpenPIConfig, OpenPISpecificConfig
 from crane_x7_vla.config.openpi_pytorch_config import OpenPIPytorchConfig, OpenPIPytorchSpecificConfig
 from crane_x7_vla.config.openvla_config import OpenVLAConfig, OpenVLASpecificConfig
+from crane_x7_vla.config.openvla_oft_config import (
+    OpenVLAOFTConfig,
+    OpenVLAOFTSpecificConfig,
+    FiLMConfig,
+    ActionHeadConfig,
+    ProprioConfig as OFTProprioConfig,
+    MultiImageConfig as OFTMultiImageConfig,
+)
 from crane_x7_vla.config.minivla_config import MiniVLAConfig, MiniVLASpecificConfig, VQConfig, MultiImageConfig
 from crane_x7_vla.training.trainer import VLATrainer
 
@@ -285,6 +293,15 @@ def create_default_config(backend: str, data_root: Path, output_dir: Path, exper
             experiment_name=experiment_name,
             minivla=MiniVLASpecificConfig(),
         )
+    elif backend == "openvla-oft":
+        config = OpenVLAOFTConfig(
+            backend="openvla-oft",
+            data=data_config,
+            training=training_config,
+            output_dir=output_dir,
+            experiment_name=experiment_name,
+            openvla_oft=OpenVLAOFTSpecificConfig(),
+        )
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
@@ -323,6 +340,8 @@ def _build_config_from_args(
             config = OpenPIPytorchConfig.from_yaml(args.config)
         elif config.backend == "minivla":
             config = MiniVLAConfig.from_yaml(args.config)
+        elif config.backend == "openvla-oft":
+            config = OpenVLAOFTConfig.from_yaml(args.config)
 
         # Warn if config backend doesn't match CLI subcommand
         if config.backend != backend:
@@ -699,6 +718,60 @@ Examples:
         exclude_fields=["camera_names"],  # Complex types
     )
 
+    # ----- OpenVLA-OFT subcommand -----
+    openvla_oft_parser = train_subparsers.add_parser(
+        "openvla-oft",
+        help="Train with OpenVLA-OFT backend (L1 Regression + Action Chunking + FiLM)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_common_train_args(openvla_oft_parser)
+    all_arg_mappings["openvla-oft"] = _add_common_config_args(openvla_oft_parser)
+
+    # Add OpenVLA-OFT specific arguments (without prefix for cleaner CLI)
+    openvla_oft_group = openvla_oft_parser.add_argument_group("OpenVLA-OFT Configuration")
+    all_arg_mappings["openvla-oft"]["openvla_oft"] = add_dataclass_args_to_parser(
+        openvla_oft_group,
+        OpenVLAOFTSpecificConfig,
+        prefix="",  # No prefix for backend-specific args
+        exclude_fields=["lora_target_modules", "image_size", "action_head", "film", "proprio", "multi_image"],  # Complex types
+    )
+
+    # Add FiLM-specific arguments
+    film_group = openvla_oft_parser.add_argument_group("FiLM Configuration")
+    all_arg_mappings["openvla-oft"]["film"] = add_dataclass_args_to_parser(
+        film_group,
+        FiLMConfig,
+        prefix="film",
+        exclude_fields=[],
+    )
+
+    # Add Action Head-specific arguments
+    action_head_group = openvla_oft_parser.add_argument_group("Action Head Configuration")
+    all_arg_mappings["openvla-oft"]["action_head"] = add_dataclass_args_to_parser(
+        action_head_group,
+        ActionHeadConfig,
+        prefix="action-head",
+        exclude_fields=[],
+    )
+
+    # Add Proprio-specific arguments
+    proprio_group = openvla_oft_parser.add_argument_group("Proprioceptive Input Configuration")
+    all_arg_mappings["openvla-oft"]["proprio"] = add_dataclass_args_to_parser(
+        proprio_group,
+        OFTProprioConfig,
+        prefix="proprio",
+        exclude_fields=[],
+    )
+
+    # Add OFT Multi-image-specific arguments
+    oft_multi_image_group = openvla_oft_parser.add_argument_group("Multi-Image Configuration (OFT)")
+    all_arg_mappings["openvla-oft"]["oft_multi_image"] = add_dataclass_args_to_parser(
+        oft_multi_image_group,
+        OFTMultiImageConfig,
+        prefix="multi-image",
+        exclude_fields=["camera_names"],  # Complex types
+    )
+
     # =====================
     # Evaluate command
     # =====================
@@ -711,7 +784,7 @@ Examples:
     # Config command
     # =====================
     config_parser = subparsers.add_parser("config", help="Generate default configuration file")
-    config_parser.add_argument("--backend", type=str, choices=["openvla", "openpi", "openpi-pytorch", "minivla"], required=True, help="VLA backend")
+    config_parser.add_argument("--backend", type=str, choices=["openvla", "openvla-oft", "openpi", "openpi-pytorch", "minivla"], required=True, help="VLA backend")
     config_parser.add_argument("--output", type=str, default="config.yaml", help="Output configuration file path")
     config_parser.add_argument("--data-root", type=str, help="Path to training data directory")
     config_parser.add_argument("--output-dir", type=str, help="Output directory for checkpoints and logs")
@@ -837,6 +910,64 @@ Examples:
         VQConfig,
         prefix="vq",
         exclude_fields=[],
+    )
+
+    # ----- Agent OpenVLA-OFT subcommand -----
+    agent_openvla_oft_parser = agent_subparsers.add_parser(
+        "openvla-oft",
+        help="Run sweep agent with OpenVLA-OFT backend (L1 Regression + Action Chunking + FiLM)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    agent_openvla_oft_parser.add_argument("--sweep-id", type=str, required=True, help="W&B Sweep ID")
+    agent_openvla_oft_parser.add_argument("--entity", type=str, help="W&B entity (team/username)")
+    agent_openvla_oft_parser.add_argument("--project", type=str, default="crane_x7", help="W&B project name")
+    agent_openvla_oft_parser.add_argument("--count", type=int, default=1, help="Number of runs to execute")
+    _add_common_train_args(agent_openvla_oft_parser)
+    agent_arg_mappings["openvla-oft"] = _add_common_config_args(agent_openvla_oft_parser)
+
+    # Add OpenVLA-OFT specific arguments
+    agent_openvla_oft_group = agent_openvla_oft_parser.add_argument_group("OpenVLA-OFT Configuration")
+    agent_arg_mappings["openvla-oft"]["openvla_oft"] = add_dataclass_args_to_parser(
+        agent_openvla_oft_group,
+        OpenVLAOFTSpecificConfig,
+        prefix="",
+        exclude_fields=["lora_target_modules", "image_size", "action_head", "film", "proprio", "multi_image"],
+    )
+
+    # Add FiLM-specific arguments for agent
+    agent_film_group = agent_openvla_oft_parser.add_argument_group("FiLM Configuration")
+    agent_arg_mappings["openvla-oft"]["film"] = add_dataclass_args_to_parser(
+        agent_film_group,
+        FiLMConfig,
+        prefix="film",
+        exclude_fields=[],
+    )
+
+    # Add Action Head-specific arguments for agent
+    agent_action_head_group = agent_openvla_oft_parser.add_argument_group("Action Head Configuration")
+    agent_arg_mappings["openvla-oft"]["action_head"] = add_dataclass_args_to_parser(
+        agent_action_head_group,
+        ActionHeadConfig,
+        prefix="action-head",
+        exclude_fields=[],
+    )
+
+    # Add Proprio-specific arguments for agent
+    agent_proprio_group = agent_openvla_oft_parser.add_argument_group("Proprioceptive Input Configuration")
+    agent_arg_mappings["openvla-oft"]["proprio"] = add_dataclass_args_to_parser(
+        agent_proprio_group,
+        OFTProprioConfig,
+        prefix="proprio",
+        exclude_fields=[],
+    )
+
+    # Add OFT Multi-image-specific arguments for agent
+    agent_oft_multi_image_group = agent_openvla_oft_parser.add_argument_group("Multi-Image Configuration (OFT)")
+    agent_arg_mappings["openvla-oft"]["oft_multi_image"] = add_dataclass_args_to_parser(
+        agent_oft_multi_image_group,
+        OFTMultiImageConfig,
+        prefix="multi-image",
+        exclude_fields=["camera_names"],
     )
 
     args = parser.parse_args()

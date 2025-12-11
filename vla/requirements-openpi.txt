@@ -4,13 +4,10 @@
 # OpenPI-specific requirements for CRANE-X7
 # Based on Physical Intelligence OpenPI v0.1.0 dependencies
 
-# Core PyTorch (OpenPI-compatible version)
---extra-index-url https://download.pytorch.org/whl/cu128
-torch
-torchvision
+# Core PyTorch and JAX are installed separately in Dockerfile with specific CUDA version
+# torch, torchvision, jax are not listed here to avoid conflicts
 
-# JAX stack (required by OpenPI)
-jax[cuda12]==0.8.1
+# JAX ecosystem (JAX itself installed in Dockerfile)
 flax==0.12.1
 jaxtyping==0.3.3
 equinox>=0.11.8
