@@ -255,14 +255,24 @@ torchrun --nproc_per_node=4 -m crane_x7_vla.training.cli train openvla \
 
 ## LoRAアダプターのマージ
 
-トレーニング中は効率のためLoRAアダプターのみが保存されます。推論用にベースモデルとマージするには：
+トレーニング中は効率のためLoRAアダプターのみが保存されます。**推論にはマージ済みモデルが必須**です。
+
+> **重要**: LoRAアダプターのパス（`checkpoint-XXXX/lora_adapters`）を直接`VLA_MODEL_PATH`に指定するとエラーになります。必ず以下の手順でマージを実行してください。
+
+### マージの実行
 
 ```bash
-python -m crane_x7_vla.scripts.merge_lora \
-  --adapter_path /workspace/outputs/my_experiment/lora_adapters \
+# GPU環境でマージを実行
+docker run --gpus all --rm \
+  -v /path/to/vla/outputs:/workspace/outputs \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  noppdev/vla python -m crane_x7_vla.scripts.merge_lora \
+  --adapter_path /workspace/outputs/my_experiment/checkpoint-7000/lora_adapters \
   --output_path /workspace/outputs/my_experiment_merged \
   --base_model openvla/openvla-7b
 ```
+
+### 出力ディレクトリ構成
 
 マージ後のモデルは以下の場所に保存されます：
 
@@ -277,6 +287,22 @@ outputs/my_experiment_merged/
 ├── preprocessor_config.json
 └── dataset_statistics.json
 ```
+
+### チェックポイントの選択
+
+トレーニング中に複数のチェックポイントが保存されます：
+
+```
+outputs/my_experiment/
+├── checkpoint-1000/
+│   └── lora_adapters/
+├── checkpoint-2000/
+│   └── lora_adapters/
+└── checkpoint-7000/    ← 最終チェックポイント
+    └── lora_adapters/
+```
+
+評価ロスを確認してベストなチェックポイントを選択してください（W&Bのeval/lossを参照）。
 
 ## ハイパーパラメータチューニング（W&B Sweeps）
 
@@ -339,8 +365,6 @@ slurm-submit sweep start examples/sweeps/sweep_openvla.yaml --max-runs 10
 学習済みモデルをROS 2で使用する場合：
 
 ```bash
-cd ros2/docker
-
 # 実機で推論
 docker compose --profile vla up
 
@@ -348,11 +372,19 @@ docker compose --profile vla up
 docker compose --profile vla-sim up
 ```
 
-モデルパスは`ros2/docker/.env`で設定：
+### モデルパスの設定
+
+`.env`ファイルで**マージ済みモデル**のパスを設定：
 
 ```env
-VLA_MODEL_PATH=/workspace/outputs/my_experiment_merged
+# 正しい例（マージ済みモデル）
+VLA_MODEL_PATH=/workspace/vla/outputs/my_experiment_merged
+
+# 間違った例（LoRAアダプター） - エラーになる
+# VLA_MODEL_PATH=/workspace/vla/outputs/my_experiment/checkpoint-7000/lora_adapters
 ```
+
+> **注意**: `Failed to load VLA model`エラーが発生する場合は、パスがマージ済みモデルを指しているか確認してください。LoRAアダプターのパスは直接ロードできません。
 
 ## ディレクトリ構成
 
@@ -394,6 +426,17 @@ vla/
 ```
 
 ## トラブルシューティング
+
+### Failed to load VLA model エラー
+
+LoRAアダプターのパスを直接指定した場合に発生します：
+
+```
+# エラー例
+VLA_MODEL_PATH=/workspace/vla/outputs/.../checkpoint-7000/lora_adapters
+```
+
+**解決方法**: LoRAマージを実行してマージ済みモデルを作成し、そのパスを指定してください。詳細は[LoRAアダプターのマージ](#loraアダプターのマージ)を参照。
 
 ### OOM（Out of Memory）エラー
 
