@@ -148,13 +148,17 @@ class CraneX7Dataset(IterableDataset):
     """
 
     # TFRecord feature description for CRANE-X7 format
+    # Note: Optional features use default_value to handle missing keys gracefully
     FEATURE_DESCRIPTION = {
         "observation/proprio": tf.io.FixedLenFeature([8], tf.float32),
         "observation/image_primary": tf.io.FixedLenFeature([], tf.string),
-        "observation/timestep": tf.io.FixedLenFeature([1], tf.int64),
+        "observation/timestep": tf.io.FixedLenFeature([1], tf.int64, default_value=[0]),
         "action": tf.io.FixedLenFeature([8], tf.float32),
-        "task/language_instruction": tf.io.FixedLenFeature([], tf.string),
-        "dataset_name": tf.io.FixedLenFeature([], tf.string),
+        "task/language_instruction": tf.io.FixedLenFeature([], tf.string, default_value=b"manipulate the object"),
+        "dataset_name": tf.io.FixedLenFeature([], tf.string, default_value=b"crane_x7"),
+        # Optional multi-camera support (empty bytes = not present)
+        "observation/image_secondary": tf.io.FixedLenFeature([], tf.string, default_value=b""),
+        "observation/image_wrist": tf.io.FixedLenFeature([], tf.string, default_value=b""),
     }
 
     # Optional image keys for multi-camera support (RLDS naming convention)
@@ -374,36 +378,12 @@ class CraneX7Dataset(IterableDataset):
         return full_stats
 
     def _parse_example(self, example_proto):
-        """Parse a single TFRecord example."""
-        try:
-            parsed = tf.io.parse_single_example(example_proto, self.FEATURE_DESCRIPTION)
-        except tf.errors.InvalidArgumentError:
-            # Try with minimal features if full parse fails
-            minimal_description = {
-                "observation/proprio": tf.io.FixedLenFeature([8], tf.float32),
-                "observation/image_primary": tf.io.FixedLenFeature([], tf.string),
-                "action": tf.io.FixedLenFeature([8], tf.float32),
-            }
-            parsed = tf.io.parse_single_example(example_proto, minimal_description)
+        """Parse a single TFRecord example.
 
-            # Add defaults for missing keys
-            parsed["task/language_instruction"] = tf.constant(b"manipulate the object")
-            parsed["dataset_name"] = tf.constant(b"crane_x7")
-            parsed["observation/timestep"] = tf.constant([0], dtype=tf.int64)
-
-        # Try to parse optional image keys (multi-camera support)
-        for image_key in self.OPTIONAL_IMAGE_KEYS:
-            try:
-                optional_parsed = tf.io.parse_single_example(
-                    example_proto,
-                    {image_key: tf.io.FixedLenFeature([], tf.string)}
-                )
-                parsed[image_key] = optional_parsed[image_key]
-            except tf.errors.InvalidArgumentError:
-                # Optional key not present, skip silently
-                pass
-
-        return parsed
+        All features including optional ones (image_secondary, image_wrist) are parsed
+        using default_value in FEATURE_DESCRIPTION, so missing keys return empty bytes.
+        """
+        return tf.io.parse_single_example(example_proto, self.FEATURE_DESCRIPTION)
 
     def _normalize_action(self, action: tf.Tensor) -> tf.Tensor:
         """
@@ -487,15 +467,9 @@ class CraneX7Dataset(IterableDataset):
             "proprio": tf.expand_dims(example["observation/proprio"], 0),  # [1, 8]
         }
 
-        # Process optional images (multi-camera support)
-        for image_key in self.OPTIONAL_IMAGE_KEYS:
-            if image_key in example:
-                image = self._decode_and_resize_image(example[image_key])
-                if self.image_aug:
-                    image = self._apply_image_augmentation(image)
-                # Extract key name without "observation/" prefix
-                key_name = image_key.replace("observation/", "")
-                observation[key_name] = tf.expand_dims(image, 0)  # [1, H, W, 3]
+        # Note: Optional images (image_secondary, image_wrist) are included in
+        # FEATURE_DESCRIPTION with default_value=b"". They are not added to
+        # observation dict when empty - the model handles single-camera input.
 
         return {
             "observation": observation,

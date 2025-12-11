@@ -50,6 +50,7 @@ class EpisodeSaver:
 
         # Statistics accumulator
         self.action_statistics = [] if compute_statistics else None
+        self.proprio_statistics = [] if compute_statistics else None
 
     def save(
         self,
@@ -185,16 +186,30 @@ class EpisodeSaver:
         return episode_path
 
     def _accumulate_action_statistics(self, episode_data: List[Dict[str, Any]]) -> None:
-        """Accumulate action values for computing dataset statistics."""
+        """Accumulate action and proprio values for computing dataset statistics."""
         if self.action_statistics is None:
             return
 
         for step in episode_data:
             if 'action' in step:
                 self.action_statistics.append(step['action'])
+            if 'observation' in step and 'state' in step['observation']:
+                self.proprio_statistics.append(step['observation']['state'])
 
-    def compute_and_save_statistics(self) -> None:
-        """Compute and save dataset-wide action statistics."""
+    def compute_and_save_statistics(self, num_trajectories: int = 0) -> None:
+        """
+        Compute and save dataset-wide statistics in OpenVLA/RLDS nested format.
+
+        Output format (compatible with OpenVLA):
+        {
+            "dataset_name": {
+                "action": {"mean": [...], "std": [...], ...},
+                "proprio": {"mean": [...], "std": [...], ...},
+                "num_transitions": int,
+                "num_trajectories": int
+            }
+        }
+        """
         if self.action_statistics is None or len(self.action_statistics) == 0:
             self.logger.warn('No action data to compute statistics')
             return
@@ -205,23 +220,43 @@ class EpisodeSaver:
 
         import json
 
-        # Convert to numpy array
+        # Convert to numpy arrays
         all_actions = np.array(self.action_statistics)  # (num_steps, action_dim)
 
-        # Compute statistics
-        stats = {
-            'dataset_name': self.dataset_name,
-            'num_trajectories': 0,  # Will be updated by caller if needed
-            'num_transitions': len(all_actions),
-            'action': {
-                'mean': all_actions.mean(axis=0).tolist(),
-                'std': all_actions.std(axis=0).tolist(),
-                'min': all_actions.min(axis=0).tolist(),
-                'max': all_actions.max(axis=0).tolist(),
-                'q01': np.percentile(all_actions, 1, axis=0).tolist(),
-                'q99': np.percentile(all_actions, 99, axis=0).tolist(),
-            }
+        # Compute action statistics
+        action_stats = {
+            'mean': all_actions.mean(axis=0).tolist(),
+            'std': all_actions.std(axis=0).tolist(),
+            'min': all_actions.min(axis=0).tolist(),
+            'max': all_actions.max(axis=0).tolist(),
+            'q01': np.percentile(all_actions, 1, axis=0).tolist(),
+            'q99': np.percentile(all_actions, 99, axis=0).tolist(),
         }
+
+        # Compute proprio statistics if available
+        proprio_stats = None
+        if self.proprio_statistics and len(self.proprio_statistics) > 0:
+            all_proprios = np.array(self.proprio_statistics)
+            proprio_stats = {
+                'mean': all_proprios.mean(axis=0).tolist(),
+                'std': all_proprios.std(axis=0).tolist(),
+                'min': all_proprios.min(axis=0).tolist(),
+                'max': all_proprios.max(axis=0).tolist(),
+                'q01': np.percentile(all_proprios, 1, axis=0).tolist(),
+                'q99': np.percentile(all_proprios, 99, axis=0).tolist(),
+            }
+
+        # Build nested format (OpenVLA/RLDS standard)
+        dataset_stats = {
+            'action': action_stats,
+            'num_transitions': len(all_actions),
+            'num_trajectories': num_trajectories,
+        }
+        if proprio_stats:
+            dataset_stats['proprio'] = proprio_stats
+
+        # Wrap in dataset name for multi-dataset compatibility
+        stats = {self.dataset_name: dataset_stats}
 
         # Ensure directory exists
         stats_dir = os.path.dirname(self.statistics_output_path)
@@ -233,4 +268,6 @@ class EpisodeSaver:
             json.dump(stats, f, indent=2)
 
         self.logger.info(f'Saved dataset statistics to {self.statistics_output_path}')
-        self.logger.info(f'  Total transitions: {stats["num_transitions"]}')
+        self.logger.info(f'  Dataset: {self.dataset_name}')
+        self.logger.info(f'  Trajectories: {num_trajectories}')
+        self.logger.info(f'  Transitions: {len(all_actions)}')
