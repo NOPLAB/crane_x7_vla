@@ -198,7 +198,6 @@ services:
     devices:
       - "$USB_DEVICE:/dev/ttyUSB0"
       - "/dev/snd:/dev/snd"
-    privileged: true
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT
