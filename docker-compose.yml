@@ -218,6 +218,15 @@ services:
     <<: *base
     profiles: [log]
     privileged: true
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /mnt/wslg:/mnt/wslg:ro
+      - ./ros2/src:/workspace/ros2/src:ro
+      - ./data:/workspace/data:rw
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+      - /dev:/dev:ro
     group_add: *real-groups
     stop_grace_period: 5s
     stop_signal: SIGINT

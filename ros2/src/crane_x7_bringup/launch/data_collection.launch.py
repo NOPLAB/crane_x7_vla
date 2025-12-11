@@ -106,7 +106,7 @@ def generate_launch_description():
             'serial_no': LaunchConfiguration('camera_serial'),
             'pointcloud.enable': 'false',
             'align_depth.enable': 'false',
-            'rgb_camera.profile': '640x480x30',
+            'rgb_camera.profile': '640x480x15',
         }.items()
     )
 
@@ -128,7 +128,7 @@ def generate_launch_description():
             'serial_no': LaunchConfiguration('camera2_serial'),
             'pointcloud.enable': 'false',
             'align_depth.enable': 'false',
-            'rgb_camera.profile': '640x480x30',
+            'rgb_camera.profile': '640x480x15',
         }.items()
     )
 
