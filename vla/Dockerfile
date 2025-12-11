@@ -2,11 +2,14 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
-# MiniVLA-specific Dockerfile for CRANE-X7
-# Optimized for MiniVLA (Qwen 2.5 0.5B + VQ Action Chunking) with torch 2.5.1 and CUDA 12.4
+# Unified VLA Dockerfile for CRANE-X7
+# All backends included: openvla, minivla, openpi, openpi-pytorch
+#
+# Usage:
+#   docker build -t crane_x7_vla .
 
-ARG CUDA_VERSION=12.4.0
-ARG PYTHON_VERSION=3.10
+ARG CUDA_VERSION=13.0.0
+ARG PYTHON_VERSION=3.11
 
 # ============================================================================
 # Builder Stage: Install build dependencies and Python packages
@@ -23,11 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git wget curl \
     build-essential \
     ca-certificates \
+    software-properties-common \
+    ninja-build \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
     python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-dev \
-    python${PYTHON_VERSION}-distutils \
+    python${PYTHON_VERSION}-venv \
     python3-pip \
-    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python version
@@ -40,29 +46,36 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 WORKDIR /build
 
-# Copy only requirements first (for better layer caching)
-COPY requirements-minivla.txt /build/requirements-minivla.txt
+# Copy requirements files
+COPY requirements-*.txt /build/
 
-# Install PyTorch with CUDA 12.4 (using BuildKit cache mount)
+# Install PyTorch 2.9.1 with CUDA 13.0
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install \
-    torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu124
+    torch==2.9.1 torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu130
 
-# Install Flash Attention for Qwen 2.5 (optional but recommended for efficiency)
-# This requires ninja and takes time to compile
+# Install JAX with CUDA 12 support
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install "jax[cuda12]==0.5.3" \
+    -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# Install Flash Attention (optional but recommended for MiniVLA)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install flash-attn --no-build-isolation || true
 
-# Install MiniVLA dependencies (using BuildKit cache mount)
+# Install all backend requirements
 RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r /build/requirements-openvla.txt && \
     pip3 install -r /build/requirements-minivla.txt && \
+    pip3 install -r /build/requirements-openpi.txt && \
+    pip3 install -r /build/requirements-openpi-pytorch.txt && \
     # Clean up (preserve TensorFlow structure)
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyc" -delete && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyo" -delete && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -name "*.pyc" -delete && \
+    find /usr/local/lib/python${PYTHON_VERSION} -name "*.pyo" -delete && \
     rm -rf /tmp/* /var/tmp/*
 
 # ============================================================================
@@ -85,7 +98,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
     python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-distutils \
+    python${PYTHON_VERSION}-venv \
     python3-pip \
     libgomp1 \
     libglib2.0-0 \
@@ -93,6 +106,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgl1 \
+    && apt-get purge -y python3-blinker || true \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -111,28 +125,34 @@ COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/lo
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Aggressive cleanup (preserve TensorFlow structure completely)
-RUN find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "docs" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "examples" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyc" -delete && \
-    find /usr/local/lib/python${PYTHON_VERSION}/dist-packages -name "*.pyo" -delete
+RUN find /usr/local/lib/python${PYTHON_VERSION} -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "docs" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "examples" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local/lib/python${PYTHON_VERSION} -name "*.pyc" -delete && \
+    find /usr/local/lib/python${PYTHON_VERSION} -name "*.pyo" -delete
 
 # Create directories for data, checkpoints, and logs
 RUN mkdir -p /workspace/vla /workspace/data /workspace/checkpoints /workspace/logs
 
 # Copy application source code
-COPY --chown=root:root src/ /workspace/vla/src/
+COPY --chown=root:root src/crane_x7_vla/ /workspace/vla/src/crane_x7_vla/
 COPY --chown=root:root configs/ /workspace/vla/configs/
 
-# GPU optimization settings and PYTHONPATH for embedded source code
+# GPU optimization settings and PYTHONPATH
 ENV CUDA_LAUNCH_BLOCKING=0 \
     TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0" \
     PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:512" \
     TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
     TF_CPP_MIN_LOG_LEVEL=2 \
     PYTHONPATH=/workspace/vla/src/crane_x7_vla:/workspace/vla/src
+
+# JAX-specific environment variables (only relevant for openpi backend)
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    XLA_PYTHON_CLIENT_ALLOCATOR=platform \
+    JAX_PLATFORMS="cuda" \
+    JAX_TRACEBACK_FILTERING=off
 
 # Create non-root user matching host UID/GID
 ARG USER_ID=1000
@@ -146,4 +166,27 @@ RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
     chown -R ${USER_ID}:${GROUP_ID} /workspace
 
 USER ${USERNAME}
+CMD ["/bin/bash"]
+
+# ============================================================================
+# Development Stage: Add development tools
+# ============================================================================
+FROM base AS dev
+
+USER root
+
+# Install development tools (apt)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tmux htop nano \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development Python packages (using BuildKit cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install tensorboard
+
+USER ${USERNAME}
+
+EXPOSE 6006
+
 CMD ["/bin/bash"]
