@@ -55,15 +55,19 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include robot control from crane_x7_control
-    control_launch = IncludeLaunchDescription(
+    # Include crane_x7_examples demo (robot control + optional D435 camera)
+    demo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('crane_x7_control'),
+                FindPackageShare('crane_x7_examples'),
                 'launch',
-                'crane_x7_control.launch.py'
+                'demo.launch.py'
             ])
-        ])
+        ]),
+        launch_arguments={
+            'port_name': LaunchConfiguration('port_name'),
+            'use_d435': LaunchConfiguration('use_d435'),
+        }.items()
     )
 
     # Include VLA control nodes from crane_x7_vla
@@ -88,6 +92,6 @@ def generate_launch_description():
         declare_use_d435,
         declare_task_instruction,
         declare_device,
-        control_launch,
+        demo_launch,
         vla_control_launch,
     ])
