@@ -15,9 +15,9 @@ CRANE-X7 VLA推論（実機）のbringup launchファイル。
   - device (default: cuda): 推論デバイス (cuda or cpu)
 """
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -56,42 +56,21 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include crane_x7_examples demo (robot control + MoveIt2)
-    # Note: use_d435=false here because we launch RealSense separately with correct namespace
+    # Include crane_x7_examples demo (robot control + MoveIt2 + RealSense)
+    # This launches RealSense with camera_namespace='' (topic: /camera/camera/color/image_raw)
     demo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('crane_x7_examples'),
-                'launch',
-                'demo.launch.py'
-            ])
+            get_package_share_directory('crane_x7_examples'),
+            '/launch/demo.launch.py'
         ]),
         launch_arguments={
             'port_name': LaunchConfiguration('port_name'),
-            'use_d435': 'false',
-        }.items()
-    )
-
-    # RealSense D435 camera with correct namespace (/camera/color/image_raw)
-    realsense_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('realsense2_camera'),
-                'launch', 'rs_launch.py'
-            ])
-        ]),
-        condition=IfCondition(LaunchConfiguration('use_d435')),
-        launch_arguments={
-            'camera_namespace': '',
-            'camera_name': 'camera',
-            'device_type': 'd435',
-            'pointcloud.enable': 'false',
-            'align_depth.enable': 'false',
-            'rgb_camera.profile': '640x480x15',
+            'use_d435': LaunchConfiguration('use_d435'),
         }.items()
     )
 
     # Include VLA control nodes from crane_x7_vla
+    # Note: image_topic is set to /camera/camera/color/image_raw to match demo.launch.py
     vla_control_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -104,6 +83,7 @@ def generate_launch_description():
             'model_path': LaunchConfiguration('model_path'),
             'task_instruction': LaunchConfiguration('task_instruction'),
             'device': LaunchConfiguration('device'),
+            'image_topic': '/camera/camera/color/image_raw',
         }.items()
     )
 
@@ -114,6 +94,5 @@ def generate_launch_description():
         declare_task_instruction,
         declare_device,
         demo_launch,
-        realsense_node,
         vla_control_launch,
     ])

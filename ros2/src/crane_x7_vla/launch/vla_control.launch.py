@@ -20,6 +20,7 @@ def launch_setup(context, *args, **kwargs):
     use_flash_attention = LaunchConfiguration('use_flash_attention')
     device = LaunchConfiguration('device')
     auto_execute = LaunchConfiguration('auto_execute')
+    image_topic = LaunchConfiguration('image_topic')
 
     # VLA inference node
     vla_inference_node = Node(
@@ -34,6 +35,7 @@ def launch_setup(context, *args, **kwargs):
                 'task_instruction': task_instruction,
                 'use_flash_attention': use_flash_attention,
                 'device': device,
+                'image_topic': image_topic,
             }
         ],
     )
@@ -98,6 +100,12 @@ def generate_launch_description():
         description='Automatically execute VLA-predicted actions'
     )
 
+    declare_image_topic = DeclareLaunchArgument(
+        'image_topic',
+        default_value='/camera/color/image_raw',
+        description='RGB image topic for VLA inference'
+    )
+
     return LaunchDescription([
         declare_model_path,
         declare_task_instruction,
@@ -105,5 +113,6 @@ def generate_launch_description():
         declare_use_flash_attention,
         declare_device,
         declare_auto_execute,
+        declare_image_topic,
         OpaqueFunction(function=launch_setup)
     ])
