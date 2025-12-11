@@ -5,7 +5,7 @@
 """
 CRANE-X7 VLA推論（実機）のbringup launchファイル。
 
-crane_x7_vla/real_with_vla.launch.pyをラップする。
+実機制御 + VLA制御ノードを統合して起動する。
 
 引数:
   - model_path: VLAモデルのパス
@@ -55,19 +55,28 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include real_with_vla.launch.py
-    vla_real_launch = IncludeLaunchDescription(
+    # Include robot control from crane_x7_control
+    control_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('crane_x7_control'),
+                'launch',
+                'crane_x7_control.launch.py'
+            ])
+        ])
+    )
+
+    # Include VLA control nodes from crane_x7_vla
+    vla_control_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('crane_x7_vla'),
                 'launch',
-                'real_with_vla.launch.py'
+                'vla_control.launch.py'
             ])
         ]),
         launch_arguments={
             'model_path': LaunchConfiguration('model_path'),
-            'port_name': LaunchConfiguration('port_name'),
-            'use_d435': LaunchConfiguration('use_d435'),
             'task_instruction': LaunchConfiguration('task_instruction'),
             'device': LaunchConfiguration('device'),
         }.items()
@@ -79,5 +88,7 @@ def generate_launch_description():
         declare_use_d435,
         declare_task_instruction,
         declare_device,
-        vla_real_launch,
+        control_launch,
+        moveit_launch,
+        vla_control_launch,
     ])

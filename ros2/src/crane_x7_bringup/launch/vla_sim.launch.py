@@ -5,12 +5,13 @@
 """
 CRANE-X7 VLA推論（シミュレーション）のbringup launchファイル。
 
-crane_x7_vla/sim_with_vla.launch.pyをラップする。
+Gazeboシミュレーション + VLA制御ノードを統合して起動する。
 
 引数:
   - model_path: VLAモデルのパス
   - task_instruction (default: 'pick up the object'): タスク指示
   - device (default: cuda): 推論デバイス (cuda or cpu)
+  - use_d435 (default: true): D435カメラを有効化
 """
 
 from launch import LaunchDescription
@@ -41,13 +42,33 @@ def generate_launch_description():
         description='Device to run inference on (cuda or cpu)'
     )
 
-    # Include sim_with_vla.launch.py
-    vla_sim_launch = IncludeLaunchDescription(
+    declare_use_d435 = DeclareLaunchArgument(
+        'use_d435',
+        default_value='true',
+        description='Enable RealSense D435 camera in simulation'
+    )
+
+    # Include Gazebo simulation from crane_x7_sim_gazebo
+    gazebo_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('crane_x7_sim_gazebo'),
+                'launch',
+                'pick_and_place.launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'use_d435': LaunchConfiguration('use_d435'),
+        }.items()
+    )
+
+    # Include VLA control nodes from crane_x7_vla
+    vla_control_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('crane_x7_vla'),
                 'launch',
-                'sim_with_vla.launch.py'
+                'vla_control.launch.py'
             ])
         ]),
         launch_arguments={
@@ -61,5 +82,7 @@ def generate_launch_description():
         declare_model_path,
         declare_task_instruction,
         declare_device,
-        vla_sim_launch,
+        declare_use_d435,
+        gazebo_launch,
+        vla_control_launch,
     ])
