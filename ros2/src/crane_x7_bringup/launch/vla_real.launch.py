@@ -89,6 +89,5 @@ def generate_launch_description():
         declare_task_instruction,
         declare_device,
         control_launch,
-        moveit_launch,
         vla_control_launch,
     ])
