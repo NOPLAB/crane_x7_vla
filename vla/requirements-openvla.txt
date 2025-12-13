@@ -22,7 +22,7 @@ bitsandbytes>=0.44.0
 tensorflow==2.20.0
 tensorflow-datasets==4.9.9
 tensorflow-graphics==2021.12.3
-dlimp @ git+https://github.com/moojink/dlimp_openvla
+# dlimp is installed separately with --no-deps in Dockerfile (tensorflow version conflict)
 opencv-python-headless>=4.8.0
 numpy>=1.24.0,<2.0.0
 Pillow>=10.0.0

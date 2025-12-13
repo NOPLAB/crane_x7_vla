@@ -40,9 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1
 
-# Upgrade pip (using BuildKit cache mount)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --upgrade pip setuptools wheel packaging
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip setuptools wheel packaging
 
 WORKDIR /build
 
@@ -50,26 +49,24 @@ WORKDIR /build
 COPY requirements-*.txt /build/
 
 # Install PyTorch 2.9.1 with CUDA 13.0
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install \
+RUN python3 -m pip install \
     torch==2.9.1 torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cu130
 
 # Install JAX with CUDA 12 support
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install "jax[cuda12]==0.5.3" \
+RUN python3 -m pip install "jax[cuda12]==0.5.3" \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 # Install Flash Attention (optional but recommended for MiniVLA)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install flash-attn --no-build-isolation || true
+RUN python3 -m pip install flash-attn --no-build-isolation || true
 
 # Install all backend requirements
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -r /build/requirements-openvla.txt && \
-    pip3 install -r /build/requirements-minivla.txt && \
-    pip3 install -r /build/requirements-openpi.txt && \
-    pip3 install -r /build/requirements-openpi-pytorch.txt && \
+RUN python3 -m pip install -r /build/requirements-openvla.txt && \
+    python3 -m pip install -r /build/requirements-minivla.txt && \
+    python3 -m pip install -r /build/requirements-openpi.txt && \
+    python3 -m pip install -r /build/requirements-openpi-pytorch.txt && \
+    # Install dlimp without dependencies (avoids tensorflow version conflict)
+    python3 -m pip install --no-deps "dlimp @ git+https://github.com/moojink/dlimp_openvla" && \
     # Clean up (preserve TensorFlow structure)
     find /usr/local/lib/python${PYTHON_VERSION} -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION} -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
@@ -114,7 +111,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1
 
-# Upgrade pip
+# Upgrade pip (use python3 -m pip to ensure correct Python version)
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
     rm -rf /root/.cache
 
@@ -181,9 +178,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install development Python packages (using BuildKit cache mount)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install tensorboard
+# Install development Python packages
+RUN python3 -m pip install tensorboard
 
 USER ${USERNAME}
 
