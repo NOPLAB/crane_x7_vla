@@ -24,7 +24,7 @@ tensorflow-datasets==4.9.9
 tensorflow-graphics==2021.12.3
 dlimp @ git+https://github.com/moojink/dlimp_openvla
 opencv-python-headless>=4.8.0
-numpy>=1.24.0,<2.0.0
+numpy>=2.3.5,<2.4.0
 Pillow>=10.0.0
 
 # Utilities
