@@ -2,43 +2,9 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # MiniVLA-specific requirements for CRANE-X7
+# Requires: requirements-base.txt
+#
 # Based on Qwen 2.5 0.5B + VQ Action Chunking architecture
 
-# Core PyTorch is installed separately in Dockerfile with specific CUDA version
-# torch, torchvision, torchaudio are not listed here to avoid conflicts
-
-# Transformers stack (Qwen 2.5 support)
-transformers>=4.40.0
-tokenizers>=0.19.0
-timm>=0.9.16
-sentencepiece>=0.2.0
-
-# Flash Attention for efficient inference (optional, installed in Dockerfile)
-# flash-attn>=2.5.0  # Requires CUDA compilation
-
-# Training and fine-tuning
-peft>=0.13.0
-accelerate>=1.0.0
-bitsandbytes>=0.44.0
-
-# Data processing
-tensorflow>=2.15.0
-tensorflow-datasets>=4.9.0
-opencv-python-headless>=4.8.0
-numpy>=1.24.0,<2.0.0
-Pillow>=10.0.0
-
-# Utilities
-einops>=0.7.0
-protobuf
-rich
-draccus>=0.11.0
-json-numpy
-jsonlines
-PyYAML>=6.0
-
-# Monitoring
-wandb>=0.16.0
-tqdm>=4.66.0
-
-# Note: crane_x7_vla is included via PYTHONPATH in Dockerfile
+# Flash Attention is installed from prebuilt wheel in Dockerfile
+# No additional packages needed beyond base requirements

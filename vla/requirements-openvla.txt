@@ -2,42 +2,10 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # OpenVLA-specific requirements for CRANE-X7
-# Based on OpenVLA v0.0.3 dependencies
+# Requires: requirements-base.txt
 
-# Core PyTorch is installed separately in Dockerfile with specific CUDA version
-# torch, torchvision, torchaudio are not listed here to avoid conflicts
-
-# Transformers stack (pinned to tested versions)
-transformers==4.57.3
-tokenizers==0.22.1
-timm==0.9.16
-sentencepiece==0.2.1
-
-# Training and fine-tuning
-peft>=0.13.0
-accelerate>=1.0.0
-bitsandbytes>=0.44.0
-
-# Data processing
-tensorflow==2.20.0
-tensorflow-datasets==4.9.9
+# OpenVLA-specific packages
 tensorflow-graphics==2021.12.3
-# dlimp is installed separately with --no-deps in Dockerfile (tensorflow version conflict)
-opencv-python-headless>=4.8.0
-numpy>=1.24.0,<2.0.0
-Pillow>=10.0.0
 
-# Utilities
-einops
-protobuf
-rich
-draccus==0.11.5
-json-numpy
-jsonlines
-PyYAML>=6.0
-
-# Monitoring
-wandb>=0.16.0
-tqdm>=4.66.0
-
-# Note: crane_x7_vla is included via PYTHONPATH in Dockerfile
+# dlimp is installed separately with --no-deps in Dockerfile
+# (tensorflow version conflict)

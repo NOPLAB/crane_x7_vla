@@ -57,18 +57,28 @@ RUN python3 -m pip install \
 RUN python3 -m pip install "jax[cuda12]==0.5.3" \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Install Flash Attention (optional but recommended for MiniVLA)
-RUN python3 -m pip install flash-attn --no-build-isolation || true
+# Install Flash Attention from prebuilt wheel (PyTorch 2.9 + CUDA 13.0)
+# Source: https://github.com/mjun0812/flash-attention-prebuild-wheels/releases
+ARG FLASH_ATTN_WHEEL=flash_attn-2.8.3+cu130torch2.9-cp311-cp311-linux_x86_64.whl
+RUN wget -q https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.5.4/${FLASH_ATTN_WHEEL} && \
+    python3 -m pip install ${FLASH_ATTN_WHEEL} && \
+    rm -f ${FLASH_ATTN_WHEEL}
 
 # Install all backend requirements
+# Base requirements (shared by all backends)
+RUN python3 -m pip install -r /build/requirements-base.txt
+
+# Backend-specific requirements
 RUN python3 -m pip install -r /build/requirements-openvla.txt && \
     python3 -m pip install -r /build/requirements-minivla.txt && \
     python3 -m pip install -r /build/requirements-openpi.txt && \
-    python3 -m pip install -r /build/requirements-openpi-pytorch.txt && \
-    # Install dlimp without dependencies (avoids tensorflow version conflict)
-    python3 -m pip install --no-deps "dlimp @ git+https://github.com/moojink/dlimp_openvla" && \
-    # Clean up (preserve TensorFlow structure)
-    find /usr/local/lib/python${PYTHON_VERSION} -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
+    python3 -m pip install -r /build/requirements-openpi-pytorch.txt
+
+# Install dlimp without dependencies (avoids tensorflow version conflict)
+RUN python3 -m pip install --no-deps "dlimp @ git+https://github.com/moojink/dlimp_openvla"
+
+# Clean up (preserve TensorFlow structure)
+RUN find /usr/local/lib/python${PYTHON_VERSION} -type d -name "tests" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION} -type d -name "test" ! -path "*/tensorflow*/*" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION} -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python${PYTHON_VERSION} -name "*.pyc" -delete && \

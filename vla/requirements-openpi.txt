@@ -2,10 +2,9 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # OpenPI-specific requirements for CRANE-X7
+# Requires: requirements-base.txt
+#
 # Based on Physical Intelligence OpenPI v0.1.0 dependencies
-
-# Core PyTorch and JAX are installed separately in Dockerfile with specific CUDA version
-# torch, torchvision, jax are not listed here to avoid conflicts
 
 # JAX ecosystem (JAX itself installed in Dockerfile)
 flax==0.12.1
@@ -13,45 +12,19 @@ jaxtyping==0.3.3
 equinox>=0.11.8
 orbax-checkpoint==0.11.30
 
-# Transformers stack (OpenPI-compatible versions)
-transformers==4.57.3
-sentencepiece>=0.2.0
-
-# Data processing and robotics
-lerobot
+# OpenPI-specific data processing
 augmax>=0.3.4
-dm-tree>=0.1.8
-opencv-python>=4.10.0.84
-numpy>=1.22.4,<2.0.0
-Pillow>=11.0.0
 imageio>=2.36.1
 
-# TensorFlow for RLDS data loading (optional)
-tensorflow==2.20.0
-tensorflow-datasets==4.9.9
-
-# Utilities
-PyYAML>=6.0
-einops>=0.8.0
-fsspec[gcs]>=2024.6.0
+# OpenPI-specific utilities
 ml_collections==1.1.0
 numpydantic>=1.6.6
-flatbuffers>=24.3.25
-filelock>=3.16.1
-beartype==0.22.8
+beartype>=0.18.0,<0.23.0
 treescope>=0.1.7
-rich>=14.0.0
 polars>=1.30.0
 tyro>=0.9.5
-typing-extensions>=4.12.2
-
-# Monitoring
-wandb>=0.19.1
 tqdm-loggable>=0.2
+fsspec[gcs]>=2024.6.0
 
-# etils for path utilities
-etils>=1.0.0
-
-# OpenPI shared utilities
-pydantic>=2.0.0
-# Note: openpi-client and crane_x7_vla are included via PYTHONPATH in Dockerfile
+# lerobot has complex dependencies - install separately if needed:
+# pip install lerobot

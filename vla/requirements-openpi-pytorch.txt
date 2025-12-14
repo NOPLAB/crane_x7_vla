@@ -2,38 +2,8 @@
 # SPDX-FileCopyrightText: 2025 nop
 #
 # OpenPI PyTorch-specific requirements for CRANE-X7
+# Requires: requirements-base.txt
+#
 # Uses HuggingFace Pi0 model instead of JAX/Flax implementation
 
-# Core PyTorch is installed separately in Dockerfile with specific CUDA version
-# torch, torchvision, torchaudio are not listed here to avoid conflicts
-
-# Transformers stack (compatible with HF Pi0)
-transformers>=4.53.0
-tokenizers>=0.20.0
-timm>=0.9.10
-sentencepiece>=0.1.99
-
-# Training and fine-tuning
-peft>=0.13.0
-accelerate>=1.0.0
-
-# Data processing
-tensorflow==2.15.0
-tensorflow-datasets==4.9.3
-opencv-python-headless>=4.8.0
-numpy>=1.24.0,<2.0.0
-Pillow>=10.0.0
-
-# Utilities
-einops
-rich
-PyYAML>=6.0
-tqdm>=4.66.0
-
-# Monitoring
-wandb>=0.16.0
-
-# Model checkpointing
-safetensors>=0.4.0
-
-# Note: crane_x7_vla is included via PYTHONPATH in Dockerfile
+# No additional packages needed - all covered by base requirements
