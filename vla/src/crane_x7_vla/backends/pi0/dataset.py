@@ -527,7 +527,9 @@ def collate_pi0_batch(batch: list[dict]) -> dict[str, Any]:
         images[camera_name] = torch.stack([b["images"][camera_name] for b in batch])
         image_masks[camera_name] = torch.stack([b["image_masks"][camera_name] for b in batch])
 
-    states = torch.stack([b["state"] for b in batch])
+    # Pi0.5モードではstateがNone (状態は言語トークンに統合)
+    states = torch.stack([b["state"] for b in batch]) if batch[0]["state"] is not None else None
+
     actions = torch.stack([b["actions"] for b in batch])
     lang_tokens = torch.stack([b["lang_tokens"] for b in batch])
     lang_masks = torch.stack([b["lang_masks"] for b in batch])

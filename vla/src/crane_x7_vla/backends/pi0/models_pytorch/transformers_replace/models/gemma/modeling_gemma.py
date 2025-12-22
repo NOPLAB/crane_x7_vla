@@ -63,10 +63,11 @@ class GemmaRMSNorm(nn.Module):
 
         # Dense layer for adaptive normalization (if cond_dim is provided)
         if cond_dim is not None:
-            # OpenPI準拠: biasなし (kernel_init=zeros_init()のみ)
-            self.dense = nn.Linear(cond_dim, dim * 3, bias=False)
+            # OpenPI準拠: biasあり (JAX nn.Denseはデフォルトでuse_bias=True)
+            self.dense = nn.Linear(cond_dim, dim * 3, bias=True)
             # Initialize with zeros (matches source implementation)
             nn.init.zeros_(self.dense.weight)
+            nn.init.zeros_(self.dense.bias)
         else:
             self.weight = nn.Parameter(torch.zeros(dim))
             self.dense = None

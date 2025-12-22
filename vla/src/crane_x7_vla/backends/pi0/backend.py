@@ -393,7 +393,8 @@ class Pi0Trainer:
             img_masks = [batch["image_masks"][cam].to(device_id) for cam in camera_names]
             lang_tokens = batch["lang_tokens"].to(device_id)
             lang_masks = batch["lang_masks"].to(device_id)
-            state = batch["state"].to(device_id)
+            # Pi0.5モードではstateがNone (状態は言語トークンに統合)
+            state = batch["state"].to(device_id) if batch["state"] is not None else None
             actions = batch["actions"].to(device_id)
 
             # Forward pass
@@ -497,7 +498,8 @@ class Pi0Trainer:
                 img_masks = [batch["image_masks"][cam].to(device_id) for cam in camera_names]
                 lang_tokens = batch["lang_tokens"].to(device_id)
                 lang_masks = batch["lang_masks"].to(device_id)
-                state = batch["state"].to(device_id)
+                # Pi0.5モードではstateがNone
+                state = batch["state"].to(device_id) if batch["state"] is not None else None
                 actions = batch["actions"].to(device_id)
 
                 with torch.amp.autocast("cuda", dtype=dtype):
@@ -726,7 +728,8 @@ class Pi0Backend(VLABackend):
                 img_masks = [batch["image_masks"][cam].to(device) for cam in camera_names]
                 lang_tokens = batch["lang_tokens"].to(device)
                 lang_masks = batch["lang_masks"].to(device)
-                state = batch["state"].to(device)
+                # Pi0.5モードではstateがNone
+                state = batch["state"].to(device) if batch["state"] is not None else None
                 actions = batch["actions"].to(device)
 
                 with torch.amp.autocast("cuda", dtype=dtype):
