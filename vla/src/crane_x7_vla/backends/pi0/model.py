@@ -289,14 +289,15 @@ class Pi0Model(nn.Module):
 
     def embed_suffix(
         self,
-        state: torch.Tensor,
+        state: torch.Tensor | None,
         noisy_actions: torch.Tensor,
         timestep: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Embed state, noisy actions, and timestep for suffix.
 
         Args:
-            state: Robot state [B, state_dim]
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
+                   (Pi0.5 includes state in language tokens)
             noisy_actions: Noisy action chunk [B, horizon, action_dim]
             timestep: Flow matching timestep [B]
 
@@ -310,8 +311,10 @@ class Pi0Model(nn.Module):
         device = timestep.device
         bsize = noisy_actions.shape[0]
 
-        # Pi0: Add state token
+        # Pi0: Add state token (Pi0.5 includes state in language tokens)
         if not self.pi05:
+            if state is None:
+                raise ValueError("state is required for Pi0 mode (discrete_state_input=False)")
             if self.state_proj.weight.dtype == torch.float32:
                 state = state.to(torch.float32)
             state_emb = self.state_proj(state)[:, None, :]
@@ -368,7 +371,7 @@ class Pi0Model(nn.Module):
         img_masks: list[torch.Tensor],
         lang_tokens: torch.Tensor,
         lang_masks: torch.Tensor,
-        state: torch.Tensor,
+        state: torch.Tensor | None,
         actions: torch.Tensor,
         noise: torch.Tensor | None = None,
         time: torch.Tensor | None = None,
@@ -380,7 +383,7 @@ class Pi0Model(nn.Module):
             img_masks: List of image masks [B]
             lang_tokens: Language token IDs [B, seq_len]
             lang_masks: Language attention masks [B, seq_len]
-            state: Robot state [B, state_dim]
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
             actions: Target action chunk [B, horizon, action_dim]
             noise: Optional pre-sampled noise
             time: Optional pre-sampled timesteps
@@ -454,7 +457,7 @@ class Pi0Model(nn.Module):
 
     def _denoise_step(
         self,
-        state: torch.Tensor,
+        state: torch.Tensor | None,
         x_t: torch.Tensor,
         timestep: torch.Tensor,
         prefix_pad_masks: torch.Tensor,
@@ -463,6 +466,13 @@ class Pi0Model(nn.Module):
         """Single denoising step using KV cache.
 
         This matches OpenPI's inference approach using KV caching.
+
+        Args:
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
+            x_t: Current noisy actions
+            timestep: Current timestep
+            prefix_pad_masks: Prefix padding masks
+            past_key_values: KV cache from prefix computation
         """
         # Embed suffix for current x_t
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)
@@ -516,30 +526,37 @@ class Pi0Model(nn.Module):
         img_masks: list[torch.Tensor],
         lang_tokens: torch.Tensor,
         lang_masks: torch.Tensor,
-        state: torch.Tensor,
+        state: torch.Tensor | None,
         num_steps: int = 10,
         noise: torch.Tensor | None = None,
+        use_kv_cache: bool = True,
     ) -> torch.Tensor:
         """Sample actions using flow matching ODE integration.
 
-        Processes full prefix+suffix sequence each step for correctness.
-        Both PaliGemma and Expert Gemma process the full sequence together
-        with joint layer-by-layer attention.
+        When use_kv_cache=True (default), computes prefix KV cache once and
+        reuses it for all denoising steps, significantly improving inference speed.
 
         Args:
             images: List of image tensors [B, C, H, W]
             img_masks: List of image masks [B]
             lang_tokens: Language token IDs [B, seq_len]
             lang_masks: Language attention masks [B, seq_len]
-            state: Robot state [B, state_dim]
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
             num_steps: Number of integration steps (default: 10)
             noise: Optional initial noise
+            use_kv_cache: Whether to use KV caching for inference (default: True)
 
         Returns:
             Sampled action chunk [B, horizon, action_dim]
         """
-        device = state.device
-        bsize = state.shape[0]
+        # Determine device and batch size
+        if state is not None:
+            device = state.device
+            bsize = state.shape[0]
+        else:
+            # Pi0.5: get device and batch from lang_tokens
+            device = lang_tokens.device
+            bsize = lang_tokens.shape[0]
 
         # Initialize from noise
         if noise is None:
@@ -563,28 +580,147 @@ class Pi0Model(nn.Module):
         dt = -1.0 / num_steps
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
 
-        while time >= -dt / 2:
-            expanded_time = time.expand(bsize)
-            v_t = self._denoise_step_full(
-                prefix_embs,
-                prefix_pad_masks,
-                prefix_att_masks,
-                state,
-                x_t,
-                expanded_time,
-            )
+        if use_kv_cache:
+            # Compute prefix KV cache once
+            kv_cache = self._compute_prefix_kv_cache(prefix_embs, prefix_pad_masks, prefix_att_masks)
 
-            x_t = x_t + dt * v_t
-            time = time + dt
+            while time >= -dt / 2:
+                expanded_time = time.expand(bsize)
+                v_t = self._denoise_step_with_cache(
+                    state,
+                    x_t,
+                    expanded_time,
+                    prefix_pad_masks,
+                    kv_cache,
+                )
+
+                x_t = x_t + dt * v_t
+                time = time + dt
+        else:
+            # Full computation each step (slower but more accurate for debugging)
+            while time >= -dt / 2:
+                expanded_time = time.expand(bsize)
+                v_t = self._denoise_step_full(
+                    prefix_embs,
+                    prefix_pad_masks,
+                    prefix_att_masks,
+                    state,
+                    x_t,
+                    expanded_time,
+                )
+
+                x_t = x_t + dt * v_t
+                time = time + dt
 
         return x_t
+
+    def _compute_prefix_kv_cache(
+        self,
+        prefix_embs: torch.Tensor,
+        prefix_pad_masks: torch.Tensor,
+        prefix_att_masks: torch.Tensor,
+    ) -> list:
+        """Compute KV cache for prefix (images + language).
+
+        Args:
+            prefix_embs: Prefix embeddings [B, prefix_len, dim]
+            prefix_pad_masks: Prefix padding masks [B, prefix_len]
+            prefix_att_masks: Prefix attention masks [B, prefix_len]
+
+        Returns:
+            KV cache list for reuse in denoising steps
+        """
+        # Create prefix attention mask
+        att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+        position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+
+        # Prepare 4D attention mask
+        att_2d_4d = self._prepare_attention_masks_4d(att_2d_masks)
+
+        # Forward through model with cache enabled
+        _, kv_cache = self.paligemma_with_expert.forward(
+            attention_mask=att_2d_4d,
+            position_ids=position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, None],
+            use_cache=True,
+            adarms_cond=[None, None],
+        )
+
+        return kv_cache
+
+    def _denoise_step_with_cache(
+        self,
+        state: torch.Tensor | None,
+        x_t: torch.Tensor,
+        timestep: torch.Tensor,
+        prefix_pad_masks: torch.Tensor,
+        kv_cache: list,
+    ) -> torch.Tensor:
+        """Single denoising step using cached prefix KV.
+
+        Args:
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
+            x_t: Current noisy actions
+            timestep: Current timestep
+            prefix_pad_masks: Prefix padding masks
+            kv_cache: Cached KV from prefix computation
+
+        Returns:
+            Velocity prediction [B, horizon, action_dim]
+        """
+        # Embed suffix for current x_t
+        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)
+
+        # Match dtype
+        model_dtype = self._get_model_dtype()
+        if model_dtype == torch.bfloat16:
+            suffix_embs = suffix_embs.to(dtype=torch.bfloat16)
+
+        # Build attention mask: suffix attends to [prefix, suffix]
+        suffix_len = suffix_pad_masks.shape[1]
+        batch_size = prefix_pad_masks.shape[0]
+        prefix_len = prefix_pad_masks.shape[1]
+
+        # Suffix can attend to all prefix tokens
+        prefix_att_2d = prefix_pad_masks[:, None, :].expand(batch_size, suffix_len, prefix_len)
+
+        # Suffix attention to itself
+        suffix_att_2d = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
+
+        # Full attention: [prefix, suffix]
+        full_att_2d = torch.cat([prefix_att_2d, suffix_att_2d], dim=2)
+
+        # Position IDs for suffix (continue from prefix)
+        prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
+        position_ids = prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1
+
+        # Prepare 4D attention mask
+        full_att_2d_4d = self._prepare_attention_masks_4d(full_att_2d)
+
+        # Forward with KV cache
+        (_, suffix_out), _ = self.paligemma_with_expert.forward(
+            attention_mask=full_att_2d_4d,
+            position_ids=position_ids,
+            past_key_values=kv_cache,
+            inputs_embeds=[None, suffix_embs],
+            use_cache=False,  # Don't update cache for suffix
+            adarms_cond=[None, adarms_cond],
+        )
+
+        # Extract velocity prediction
+        suffix_out = suffix_out[:, -self.action_horizon :]
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        v_t = self.action_out_proj(suffix_out)
+
+        return v_t
 
     def _denoise_step_full(
         self,
         prefix_embs: torch.Tensor,
         prefix_pad_masks: torch.Tensor,
         prefix_att_masks: torch.Tensor,
-        state: torch.Tensor,
+        state: torch.Tensor | None,
         x_t: torch.Tensor,
         timestep: torch.Tensor,
     ) -> torch.Tensor:
@@ -592,6 +728,14 @@ class Pi0Model(nn.Module):
 
         This processes both prefix and suffix through joint attention,
         matching the training-time forward pass.
+
+        Args:
+            prefix_embs: Pre-computed prefix embeddings
+            prefix_pad_masks: Prefix padding masks
+            prefix_att_masks: Prefix attention masks
+            state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
+            x_t: Current noisy actions
+            timestep: Current timestep
         """
         # Embed suffix for current x_t
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)

@@ -18,6 +18,7 @@ from typing import Any, ClassVar
 
 import cv2
 import numpy as np
+import sentencepiece
 import torch
 from torch.utils.data import IterableDataset
 
@@ -31,6 +32,94 @@ from crane_x7_vla.core.transforms.action_transforms import (
 
 
 logger = logging.getLogger(__name__)
+
+
+class PaliGemmaTokenizer:
+    """
+    OpenPI準拠のPaliGemma SentencePieceトークナイザ。
+
+    Pi0では状態は連続値として別途処理され、Pi0.5では状態が256ビンに離散化されて
+    言語トークンに統合されます。
+    """
+
+    # PaliGemmaトークナイザのダウンロードURL
+    TOKENIZER_URL = "https://storage.googleapis.com/big_vision/paligemma_tokenizer.model"
+
+    def __init__(self, max_len: int = 48):
+        """
+        PaliGemmaトークナイザを初期化。
+
+        Args:
+            max_len: 最大トークン長。Pi0=48、Pi0.5=200
+        """
+        self._max_len = max_len
+        self._tokenizer = None
+
+    @property
+    def tokenizer(self) -> sentencepiece.SentencePieceProcessor:
+        """遅延ロードでトークナイザを取得。"""
+        if self._tokenizer is None:
+            tokenizer_path = self._download_tokenizer()
+            self._tokenizer = sentencepiece.SentencePieceProcessor(model_file=str(tokenizer_path))
+        return self._tokenizer
+
+    def _download_tokenizer(self) -> Path:
+        """PaliGemmaトークナイザをダウンロード。"""
+        cache_dir = Path.home() / ".cache" / "crane_x7_vla" / "tokenizers"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        tokenizer_path = cache_dir / "paligemma_tokenizer.model"
+
+        if not tokenizer_path.exists():
+            logger.info(f"Downloading PaliGemma tokenizer to {tokenizer_path}")
+            import urllib.request
+
+            urllib.request.urlretrieve(self.TOKENIZER_URL, tokenizer_path)
+            logger.info("PaliGemma tokenizer downloaded successfully")
+
+        return tokenizer_path
+
+    def tokenize(self, prompt: str, state: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+        """
+        プロンプトをトークン化。
+
+        Args:
+            prompt: 言語指示
+            state: ロボット状態 (Pi0.5の場合のみ使用)。[-1, 1]に正規化済みと想定。
+
+        Returns:
+            (token_ids, token_mask) のタプル
+        """
+        cleaned_text = prompt.strip().replace("_", " ").replace("\n", " ")
+
+        if state is not None:
+            # Pi0.5フォーマット: 状態を256ビンに離散化して言語トークンに統合
+            discretized_state = np.digitize(state, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
+            discretized_state = np.clip(discretized_state, 0, 255)  # 範囲を保証
+            state_str = " ".join(map(str, discretized_state.astype(int)))
+            full_prompt = f"Task: {cleaned_text}, State: {state_str};\nAction: "
+            tokens = self.tokenizer.encode(full_prompt, add_bos=True)
+        else:
+            # Pi0フォーマット: 状態は連続値として別途処理
+            # "\n"を別途トークン化して"start of answer"トークンとする
+            tokens = self.tokenizer.encode(cleaned_text, add_bos=True) + self.tokenizer.encode("\n")
+
+        tokens_len = len(tokens)
+        if tokens_len < self._max_len:
+            # パディング
+            padding = [0] * (self._max_len - tokens_len)  # 0 = pad token
+            mask = [True] * tokens_len + [False] * (self._max_len - tokens_len)
+            tokens = tokens + padding
+        else:
+            # トランケーション
+            if tokens_len > self._max_len:
+                logger.warning(
+                    f"Token length ({tokens_len}) exceeds max length ({self._max_len}), truncating. "
+                    "Consider increasing max_token_len if this happens frequently."
+                )
+            tokens = tokens[: self._max_len]
+            mask = [True] * self._max_len
+
+        return np.asarray(tokens, dtype=np.int64), np.asarray(mask, dtype=bool)
 
 
 class CraneX7Pi0Dataset(IterableDataset):
@@ -137,8 +226,8 @@ class CraneX7Pi0Dataset(IterableDataset):
         self.action_chunker = ActionChunker(action_horizon, interpolation="linear")
         self.action_normalizer = ActionNormalizer(mode=normalization_mode)
 
-        # Initialize tokenizer (lazy load)
-        self._tokenizer = None
+        # Initialize PaliGemma tokenizer (OpenPI準拠)
+        self._paligemma_tokenizer = PaliGemmaTokenizer(max_len=max_token_len)
 
         # Find all TFRecord files
         self.tfrecord_files = self._find_tfrecord_files()
@@ -160,23 +249,9 @@ class CraneX7Pi0Dataset(IterableDataset):
         logger.info(f"[Rank {self.rank}/{self.world_size}] Total samples: {self.total_samples}")
 
     @property
-    def tokenizer(self):
-        """Lazy-load tokenizer."""
-        if self._tokenizer is None:
-            import os
-
-            from transformers import AutoTokenizer
-
-            # Get HuggingFace token from environment
-            hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-
-            # Use Gemma tokenizer
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                "google/gemma-2b",
-                trust_remote_code=True,
-                token=hf_token,
-            )
-        return self._tokenizer
+    def paligemma_tokenizer(self) -> PaliGemmaTokenizer:
+        """PaliGemmaトークナイザを取得。"""
+        return self._paligemma_tokenizer
 
     def _find_tfrecord_files(self) -> list[Path]:
         """Find all TFRecord files in the data directory."""
@@ -326,23 +401,26 @@ class CraneX7Pi0Dataset(IterableDataset):
 
         return image
 
-    def _tokenize_prompt(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
-        """Tokenize language prompt.
+    def _tokenize_prompt(self, prompt: str, state: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+        """Tokenize language prompt with optional state integration.
+
+        OpenPI準拠のトークン化:
+        - Pi0: 状態は別途連続値として処理 (state=None)
+        - Pi0.5: 状態を256ビンに離散化してプロンプトに統合
 
         Args:
             prompt: Language instruction string
+            state: Robot state (normalized to [-1, 1]). Only used for Pi0.5.
 
         Returns:
             Tuple of (token_ids, attention_mask)
         """
-        encoding = self.tokenizer(
-            prompt,
-            max_length=self.max_token_len,
-            padding="max_length",
-            truncation=True,
-            return_tensors="np",
-        )
-        return encoding["input_ids"][0], encoding["attention_mask"][0].astype(bool)
+        if self.discrete_state_input and state is not None:
+            # Pi0.5: 状態をプロンプトに統合
+            return self.paligemma_tokenizer.tokenize(prompt, state)
+        else:
+            # Pi0: 状態なし
+            return self.paligemma_tokenizer.tokenize(prompt, state=None)
 
     def _should_include_step(self, episode_idx: int, step_idx: int) -> bool:
         """Determine if a step should be included based on split."""
@@ -404,14 +482,22 @@ class CraneX7Pi0Dataset(IterableDataset):
                 action_chunk.append(action_padded)
             action_chunk = np.stack(action_chunk, axis=0)
 
-            # Tokenize prompt
+            # Tokenize prompt (with state for Pi0.5)
             prompt = current_step.get("prompt", self.default_prompt)
-            token_ids, token_mask = self._tokenize_prompt(prompt)
+            if self.discrete_state_input:
+                # Pi0.5: 状態をトークンに統合
+                token_ids, token_mask = self._tokenize_prompt(prompt, state_padded)
+                # 状態はトークンに含まれるため、出力はNone
+                output_state = None
+            else:
+                # Pi0: 状態は連続値として別途処理
+                token_ids, token_mask = self._tokenize_prompt(prompt, state=None)
+                output_state = torch.tensor(state_padded, dtype=torch.float32)
 
             yield {
                 "images": images,
                 "image_masks": image_masks,
-                "state": torch.tensor(state_padded, dtype=torch.float32),
+                "state": output_state,
                 "actions": torch.tensor(action_chunk, dtype=torch.float32),
                 "lang_tokens": torch.tensor(token_ids, dtype=torch.long),
                 "lang_masks": torch.tensor(token_mask, dtype=torch.bool),
