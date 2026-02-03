@@ -166,16 +166,17 @@ class CraneX7Teleop(Teleoperator):
     def configure(self) -> None:
         """Configure leader arm for teleoperation (torque OFF)."""
         # Leader arm operates with torque disabled for manual positioning
+        # NOTE: Do NOT use torque_disabled() context manager here, as it would
+        # re-enable torque on exit. We want torque to remain disabled.
         self.bus.disable_torque()
 
-        with self.bus.torque_disabled():
-            for motor in self.bus.motors:
-                # Set position control mode (for reading)
-                self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-                # Low PID gains (not used since torque is off, but set for safety)
-                self.bus.write("Position_P_Gain", motor, 5)
-                self.bus.write("Position_I_Gain", motor, 0)
-                self.bus.write("Position_D_Gain", motor, 0)
+        for motor in self.bus.motors:
+            # Set position control mode (for reading)
+            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+            # Low PID gains (not used since torque is off, but set for safety)
+            self.bus.write("Position_P_Gain", motor, 5)
+            self.bus.write("Position_I_Gain", motor, 0)
+            self.bus.write("Position_D_Gain", motor, 0)
 
     # -------------------------------------------------------------------------
     # Action and Feedback
