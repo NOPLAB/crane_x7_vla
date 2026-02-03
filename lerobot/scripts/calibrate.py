@@ -2,72 +2,225 @@
 # SPDX-FileCopyrightText: 2025 nop
 # SPDX-License-Identifier: MIT
 
-"""Calibration script for CRANE-X7 robot and teleoperator."""
+"""Calibration script for CRANE-X7 robot and teleoperator.
+
+For teleoperation, both leader and follower must be calibrated at the same
+physical position to ensure position matching. Use --type=both to calibrate
+them sequentially while maintaining the same pose.
+"""
 
 import argparse
 import sys
-from pathlib import Path
+
+
+def calibrate_robot(port: str):
+    """Calibrate the follower robot."""
+    from lerobot_robot_crane_x7 import CraneX7Robot, CraneX7RobotConfig
+
+    config = CraneX7RobotConfig(
+        port=port,
+        use_degrees=True,
+        cameras={},  # No cameras needed for calibration
+    )
+    robot = CraneX7Robot(config)
+
+    print(f"\nConnecting to robot on {port}...")
+    robot.bus.port_handler.baudrate = config.baudrate
+    robot.bus.connect()
+
+    # Run calibration
+    robot.calibrate()
+
+    robot.bus.disconnect()
+    print("Robot calibration complete.")
+    return robot
+
+
+def calibrate_teleop(port: str):
+    """Calibrate the leader teleoperator."""
+    from lerobot_teleoperator_crane_x7 import CraneX7Teleop, CraneX7TeleopConfig
+
+    config = CraneX7TeleopConfig(
+        port=port,
+        use_degrees=True,
+    )
+    teleop = CraneX7Teleop(config)
+
+    print(f"\nConnecting to teleoperator on {port}...")
+    teleop.bus.port_handler.baudrate = config.baudrate
+    teleop.bus.connect()
+
+    # Run calibration
+    teleop.calibrate()
+
+    teleop.bus.disconnect()
+    print("Teleoperator calibration complete.")
+    return teleop
+
+
+def calibrate_both(robot_port: str, teleop_port: str):
+    """Calibrate both robot and teleoperator at the same position."""
+    from lerobot.motors import MotorCalibration
+    from lerobot.motors.dynamixel import OperatingMode
+
+    from lerobot_robot_crane_x7 import CraneX7Robot, CraneX7RobotConfig
+    from lerobot_teleoperator_crane_x7 import CraneX7Teleop, CraneX7TeleopConfig
+
+    # Create configs
+    robot_config = CraneX7RobotConfig(
+        port=robot_port,
+        use_degrees=True,
+        cameras={},
+    )
+    teleop_config = CraneX7TeleopConfig(
+        port=teleop_port,
+        use_degrees=True,
+    )
+
+    # Create devices
+    robot = CraneX7Robot(robot_config)
+    teleop = CraneX7Teleop(teleop_config)
+
+    # Connect both (without calibration)
+    print(f"\nConnecting to robot on {robot_port}...")
+    robot.bus.port_handler.baudrate = robot_config.baudrate
+    robot.bus.connect()
+
+    print(f"Connecting to teleoperator on {teleop_port}...")
+    teleop.bus.port_handler.baudrate = teleop_config.baudrate
+    teleop.bus.connect()
+
+    # Disable torque on both for manual positioning
+    robot.bus.disable_torque()
+    teleop.bus.disable_torque()
+
+    # Set position control mode on both
+    for motor in robot.bus.motors:
+        robot.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+    for motor in teleop.bus.motors:
+        teleop.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+
+    print("\n" + "=" * 60)
+    print("CRANE-X7 Dual Calibration")
+    print("=" * 60)
+    print("\nBoth arms will be calibrated at the SAME position.")
+    print("This ensures position matching during teleoperation.")
+
+    # Step 1: Move both to center position
+    input(
+        "\n[Step 1] Move BOTH arms to the SAME center position.\n"
+        "         Align them visually or use a reference pose.\n"
+        "         Press ENTER when ready..."
+    )
+
+    # Record homing offsets for both
+    print("\nRecording homing offsets...")
+    robot_homing = robot.bus.set_half_turn_homings()
+    teleop_homing = teleop.bus.set_half_turn_homings()
+
+    # Step 2: Record range of motion for robot
+    print(
+        "\n[Step 2] Move the ROBOT (follower) through its full range of motion.\n"
+        "         Recording positions. Press ENTER to stop..."
+    )
+    robot_mins, robot_maxes = robot.bus.record_ranges_of_motion()
+
+    # Step 3: Record range of motion for teleop
+    print(
+        "\n[Step 3] Move the TELEOP (leader) through its full range of motion.\n"
+        "         Recording positions. Press ENTER to stop..."
+    )
+    teleop_mins, teleop_maxes = teleop.bus.record_ranges_of_motion()
+
+    # Save robot calibration
+    robot.calibration = {}
+    for motor, m in robot.bus.motors.items():
+        robot.calibration[motor] = MotorCalibration(
+            id=m.id,
+            drive_mode=0,
+            homing_offset=robot_homing[motor],
+            range_min=robot_mins[motor],
+            range_max=robot_maxes[motor],
+        )
+    robot.bus.write_calibration(robot.calibration)
+    robot._save_calibration()
+    print(f"\nRobot calibration saved to: {robot.calibration_fpath}")
+
+    # Save teleop calibration
+    teleop.calibration = {}
+    for motor, m in teleop.bus.motors.items():
+        teleop.calibration[motor] = MotorCalibration(
+            id=m.id,
+            drive_mode=0,
+            homing_offset=teleop_homing[motor],
+            range_min=teleop_mins[motor],
+            range_max=teleop_maxes[motor],
+        )
+    teleop.bus.write_calibration(teleop.calibration)
+    teleop._save_calibration()
+    print(f"Teleop calibration saved to: {teleop.calibration_fpath}")
+
+    # Disconnect
+    robot.bus.disconnect()
+    teleop.bus.disconnect()
+
+    print("\n" + "=" * 60)
+    print("Dual calibration complete!")
+    print("Both arms are now calibrated at the same reference position.")
+    print("=" * 60)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Calibrate CRANE-X7 robot or teleoperator"
-    )
-    parser.add_argument(
-        "--port",
-        type=str,
-        default="/dev/ttyUSB0",
-        help="USB port for Dynamixel communication",
+        description="Calibrate CRANE-X7 robot and/or teleoperator"
     )
     parser.add_argument(
         "--type",
         type=str,
-        choices=["robot", "teleop"],
-        default="robot",
-        help="Device type to calibrate",
+        choices=["robot", "teleop", "both"],
+        default="both",
+        help="Device type to calibrate (default: both)",
     )
     parser.add_argument(
-        "--calibration-dir",
-        type=Path,
-        default=Path("/workspace/lerobot/calibration"),
-        help="Directory to save calibration data",
+        "--robot-port",
+        type=str,
+        default="/dev/ttyUSB0",
+        help="USB port for robot (follower)",
+    )
+    parser.add_argument(
+        "--teleop-port",
+        type=str,
+        default="/dev/ttyUSB1",
+        help="USB port for teleoperator (leader)",
+    )
+    # Legacy support
+    parser.add_argument(
+        "--port",
+        type=str,
+        help="USB port (legacy, use --robot-port or --teleop-port instead)",
     )
     args = parser.parse_args()
 
-    # Ensure calibration directory exists
-    args.calibration_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.type == "robot":
-        print("=" * 60)
-        print("CRANE-X7 Robot Calibration")
-        print("=" * 60)
-
-        from lerobot_robot_crane_x7 import CraneX7Robot, CraneX7RobotConfig
-
-        config = CraneX7RobotConfig(
-            port=args.port,
-            use_degrees=True,
-            cameras={},  # No cameras needed for calibration
-        )
-        device = CraneX7Robot(config)
-
-    else:  # teleop
-        print("=" * 60)
-        print("CRANE-X7 Teleoperator (Leader Arm) Calibration")
-        print("=" * 60)
-
-        from lerobot_teleoperator_crane_x7 import CraneX7Teleop, CraneX7TeleopConfig
-
-        config = CraneX7TeleopConfig(
-            port=args.port,
-            use_degrees=True,
-        )
-        device = CraneX7Teleop(config)
-
     try:
-        print(f"\nConnecting to {args.type} on {args.port}...")
-        device.connect(calibrate=True)
-        print("\nCalibration complete!")
+        if args.type == "robot":
+            port = args.port or args.robot_port
+            print("=" * 60)
+            print("CRANE-X7 Robot (Follower) Calibration")
+            print("=" * 60)
+            calibrate_robot(port)
+
+        elif args.type == "teleop":
+            port = args.port or args.teleop_port
+            print("=" * 60)
+            print("CRANE-X7 Teleoperator (Leader) Calibration")
+            print("=" * 60)
+            calibrate_teleop(port)
+
+        else:  # both
+            print("=" * 60)
+            print("CRANE-X7 Dual Calibration (Robot + Teleoperator)")
+            print("=" * 60)
+            calibrate_both(args.robot_port, args.teleop_port)
 
     except KeyboardInterrupt:
         print("\n\nCalibration cancelled by user.")
@@ -75,12 +228,9 @@ def main():
 
     except Exception as e:
         print(f"\nError during calibration: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
-
-    finally:
-        if device.is_connected:
-            device.disconnect()
-            print("Device disconnected.")
 
 
 if __name__ == "__main__":
