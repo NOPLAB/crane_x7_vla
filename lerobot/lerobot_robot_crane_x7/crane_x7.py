@@ -109,8 +109,11 @@ class CraneX7Robot(Robot):
         Args:
             calibrate: If True and not calibrated, run calibration procedure
         """
-        # Connect motor bus
-        self.bus.connect()
+        # Connect motor bus with custom baudrate
+        # LeRobot defaults to 1Mbps, but CRANE-X7 uses 3Mbps
+        self.bus.connect(handshake=False)
+        self.bus.set_baudrate(self.config.baudrate)
+        self.bus._handshake()
 
         # Run calibration if needed
         if not self.is_calibrated and calibrate:
