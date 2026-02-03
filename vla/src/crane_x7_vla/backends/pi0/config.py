@@ -92,24 +92,45 @@ class Pi0SpecificConfig:
     quantile_high: float = 0.99
     """Upper quantile for normalization"""
 
-    # LoRA settings
+    # LoRA settings (OpenPI準拠: スケーリング=1.0)
     use_lora: bool = False
     """Whether to use LoRA for finetuning"""
 
-    lora_rank: int = 32
-    """LoRA rank"""
+    # VLM (PaliGemma) LoRA settings
+    vlm_lora_rank: int = 16
+    """LoRA rank for VLM (OpenPI default: 16)"""
 
-    lora_alpha: int = 16
-    """LoRA alpha scaling factor"""
+    vlm_lora_alpha: int = 16
+    """LoRA alpha for VLM (OpenPI default: 16, scaling = 1.0)"""
 
-    lora_dropout: float = 0.1
-    """LoRA dropout rate"""
+    # Expert (Gemma-300M) LoRA settings
+    expert_lora_rank: int = 32
+    """LoRA rank for Expert (OpenPI default: 32)"""
+
+    expert_lora_alpha: int = 32
+    """LoRA alpha for Expert (OpenPI default: 32, scaling = 1.0)"""
+
+    lora_dropout: float = 0.05
+    """LoRA dropout rate (OpenPI default: 0.05)"""
+
+    lora_rslora: bool = False
+    """Use Rank-Stabilized LoRA (scaling = alpha / sqrt(rank))"""
 
     freeze_vlm: bool = True
     """Whether to freeze VLM (PaliGemma) weights"""
 
     freeze_action_expert: bool = False
     """Whether to freeze action expert weights"""
+
+    lora_apply_to_vlm: bool = False
+    """Whether to apply LoRA to VLM (PaliGemma)"""
+
+    lora_apply_to_expert: bool = True
+    """Whether to apply LoRA to Expert (Gemma-300M)"""
+
+    # EMA settings
+    ema_decay: float | None = None
+    """EMA decay rate. None to disable EMA. OpenPI default: 0.99"""
 
     # Precision
     precision: Literal["bfloat16", "float32"] = "bfloat16"
@@ -191,11 +212,17 @@ class Pi0Config(UnifiedVLAConfig):
             "quantile_low": self.pi0.quantile_low,
             "quantile_high": self.pi0.quantile_high,
             "use_lora": self.pi0.use_lora,
-            "lora_rank": self.pi0.lora_rank,
-            "lora_alpha": self.pi0.lora_alpha,
+            "vlm_lora_rank": self.pi0.vlm_lora_rank,
+            "vlm_lora_alpha": self.pi0.vlm_lora_alpha,
+            "expert_lora_rank": self.pi0.expert_lora_rank,
+            "expert_lora_alpha": self.pi0.expert_lora_alpha,
             "lora_dropout": self.pi0.lora_dropout,
+            "lora_rslora": self.pi0.lora_rslora,
+            "lora_apply_to_vlm": self.pi0.lora_apply_to_vlm,
+            "lora_apply_to_expert": self.pi0.lora_apply_to_expert,
             "freeze_vlm": self.pi0.freeze_vlm,
             "freeze_action_expert": self.pi0.freeze_action_expert,
+            "ema_decay": self.pi0.ema_decay,
             "precision": self.pi0.precision,
             "default_prompt": self.pi0.default_prompt,
             "use_delta_actions": self.pi0.use_delta_actions,
