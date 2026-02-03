@@ -6,14 +6,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "lifter"
+name = "crane_x7_sim"
 version = "0.1.0"
-description = "SSH経由でSlurmクラスターにジョブを投下するツール"
-readme = "README.md"
+description = "CRANE-X7 robot simulation with unified simulator abstraction (lift)"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "nop" }]
-keywords = ["slurm", "hpc", "job-scheduler", "ssh", "wandb", "sweep"]
+keywords = ["robotics", "simulation", "maniskill", "genesis", "isaacsim"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -26,28 +25,57 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
-    "Topic :: System :: Distributed Computing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "typer>=0.9.0",
-    "pydantic>=2.0",
-    "pydantic-settings>=2.0",
-    "paramiko>=3.0",
-    "python-dotenv>=1.0",
-    "wandb>=0.15",
-    "pyyaml>=6.0",
-    "rich>=13.0",
-    "jinja2>=3.0",
+    "numpy>=1.20.0",
 ]
 
-[project.scripts]
-lifter = "lifter.cli:app"
+[project.optional-dependencies]
+maniskill = [
+    "mani-skill>=3.0.0b20",
+    "sapien",
+    "torch>=1.10.0",
+    "gymnasium>=0.26.0",
+]
+genesis = [
+    "genesis-world",
+    "torch>=2.0.0",
+]
+isaacsim = [
+    # Isaac Sim dependencies are installed via Omniverse
+]
+all = [
+    "crane_x7_sim[maniskill,genesis]",
+]
 
 [project.urls]
 Repository = "https://github.com/nop/crane_x7_vla"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lifter"]
+packages = ["src/lift", "src/lift_maniskill", "src/lift_genesis", "src/lift_isaacsim", "src/robot"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[tool.hatch.build]
+include = [
+    "src/**/*.py",
+    "src/robot/assets/*.mjcf",
+    "src/robot/assets/meshes/collision/*.stl",
+    "src/robot/assets/meshes/visual/*.stl",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu128"]
 
 [tool.ruff]
 line-length = 100
@@ -63,20 +91,6 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
-[[tool.mypy.overrides]]
-module = ["wandb.*", "paramiko.*"]
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-
-[dependency-groups]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "ruff>=0.1",
-    "mypy>=1.0",
-    "types-paramiko>=3.0",
-    "types-PyYAML>=6.0",
-]

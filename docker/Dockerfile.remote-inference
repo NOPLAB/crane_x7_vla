@@ -17,7 +17,8 @@ LABEL maintainer="nop" \
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    CUDA_HOME=/usr/local/cuda
+    CUDA_HOME=/usr/local/cuda \
+    UV_LINK_MODE=copy
 
 # Install system dependencies and Tailscale
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -29,8 +30,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     gnupg \
     lsb-release \
     # Python
-    python3-pip \
-    python3-dev \
+    python3.10 \
+    python3.10-dev \
+    python3.10-venv \
     # Libraries
     libgomp1 \
     libglib2.0-0 \
@@ -46,30 +48,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        | tee /etc/apt/sources.list.d/tailscale.list \
     && apt-get update && apt-get install -y --no-install-recommends tailscale
 
-# Upgrade pip and install compatible setuptools version
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
+# Set Python version
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /workspace
 
-# Install PyTorch with CUDA support (cu128 for CUDA 12.8)
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# Copy VLA pyproject.toml and uv.lock for dependency installation
+COPY vla/pyproject.toml vla/uv.lock /workspace/vla/
 
-# Install VLA inference dependencies
-COPY ros2/requirements.txt /tmp/requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install \
-    roslibpy \
-    transformers \
-    accelerate \
-    "timm>=0.9.10,<1.0.0" \
-    peft \
-    huggingface_hub \
-    pillow \
-    numpy \
-    sentencepiece \
-    tokenizers
+# Install dependencies using uv
+WORKDIR /workspace/vla
+RUN uv sync --frozen --no-dev --no-install-project
+
+# Install roslibpy for rosbridge communication
+RUN uv pip install roslibpy
 
 # Copy OpenVLA/prismatic source for model loading
 COPY vla/src/openvla /workspace/vla/src/openvla
@@ -87,7 +83,9 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/wait-for-peer.sh
 RUN mkdir -p /workspace/models /var/lib/tailscale
 
 # Environment variables
-ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace"
+ENV PYTHONPATH="/workspace/vla/src/openvla:/workspace" \
+    VIRTUAL_ENV=/workspace/vla/.venv \
+    PATH="/workspace/vla/.venv/bin:$PATH"
 
 # CUDA/PyTorch optimization
 ENV CUDA_LAUNCH_BLOCKING=0 \
@@ -102,7 +100,6 @@ ENV TS_AUTHKEY="" \
     TS_USERSPACE="true"
 
 # rosbridge connection (override at runtime)
-# Uses Tailscale MagicDNS hostname
 ENV ROSBRIDGE_HOST="crane-x7-local" \
     ROSBRIDGE_PORT="9090"
 
@@ -123,13 +120,12 @@ CMD ["python3", "/workspace/scripts/vla_inference_rosbridge.py"]
 # Development Stage: Additional dev tools
 FROM base AS dev
 
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install \
-        pytest \
-        pytest-cov \
-        ipython \
-        jupyter \
-        black \
-        ruff
+RUN uv pip install \
+    pytest \
+    pytest-cov \
+    ipython \
+    jupyter \
+    black \
+    ruff
 
 CMD ["/bin/bash"]

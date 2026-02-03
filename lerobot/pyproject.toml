@@ -9,9 +9,8 @@ build-backend = "hatchling.build"
 name = "crane-x7-lerobot"
 version = "0.1.0"
 description = "LeRobot integration for CRANE-X7 robot arm"
-readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 authors = [
     { name = "nop" }
 ]
@@ -27,18 +26,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "lerobot[dynamixel,realsense]>=0.1.0",
+    "lerobot[dynamixel]>=0.4.0",
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "pyrealsense2>=2.54.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    # Training dependencies
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "wandb>=0.15.0",
+    "huggingface-hub>=0.20.0",
+    # Utilities
+    "tqdm>=4.65.0",
+    "pyyaml>=6.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -57,3 +56,16 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu128"]
+index-strategy = "unsafe-best-match"
+environments = ["python_version >= '3.11' and python_version < '3.14'"]

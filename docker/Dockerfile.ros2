@@ -14,10 +14,10 @@ LABEL maintainer="nop" \
     org.opencontainers.image.licenses="MIT"
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy
 
 # Copy rosdep packages list first for better caching
-# Regenerate with: ./scripts/generate_rosdep_packages.sh
 COPY ros2/rosdep_packages.txt /tmp/rosdep_packages.txt
 
 # Add Intel RealSense repository and install all apt dependencies in one layer
@@ -61,35 +61,28 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     $(grep -v '^#' /tmp/rosdep_packages.txt | grep -v '^$' | tr '\n' ' ') \
     && rm /tmp/rosdep_packages.txt
 
-# Upgrade pip and install compatible setuptools version
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    python3 -m pip install --upgrade pip "setuptools<78" wheel "packaging<24"
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /workspace
 
-# Install PyTorch with CUDA support (cu128 for CUDA 12.8)
 # Remove distutils-installed sympy to avoid conflict with PyTorch dependencies
 RUN rm -rf /usr/lib/python3/dist-packages/sympy* && \
     rm -rf /usr/lib/python3/dist-packages/mpmath*
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
-# Install Python dependencies
-# Note: numpy<2.0 constraint is specified first in requirements.txt to prevent
-# other packages from installing numpy>=2.0 (cv_bridge requires NumPy 1.x)
-COPY ros2/requirements.txt /tmp/requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install -r /tmp/requirements.txt && \
-    rm /tmp/requirements.txt
+# Copy VLA pyproject.toml and uv.lock for dependency installation
+COPY vla/pyproject.toml vla/uv.lock /workspace/vla/
+
+# Install dependencies using uv (uses vla's dependencies for ROS 2 nodes)
+WORKDIR /workspace/vla
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy VLA source code for model loading (OpenVLA, Pi0, etc.)
 COPY vla/src /workspace/vla/src
 
 # Install transformers_replace for Pi0/Pi0.5 (OpenPI compatibility)
-# This patches transformers with custom GemmaRMSNorm (adaRMS support) and
-# eager_attention_forward (joint layer-by-layer attention)
 RUN cp -r /workspace/vla/src/crane_x7_vla/backends/pi0/models_pytorch/transformers_replace/* \
-    /usr/local/lib/python3.10/dist-packages/transformers/
+    /workspace/vla/.venv/lib/python3.10/site-packages/transformers/
 
 # Copy ManiSkill CRANE-X7 environment
 COPY sim/src /workspace/sim/src
@@ -99,7 +92,9 @@ ENV PYTHONPATH="/workspace/vla/src:/workspace/vla/src/openvla:/workspace/sim/src
     NUMBA_CACHE_DIR="/tmp/numba_cache" \
     XDG_CACHE_HOME="/tmp/cache" \
     GS_CACHE_FILE_PATH="/tmp/cache/genesis" \
-    TI_OFFLINE_CACHE_FILE_PATH="/tmp/cache/taichi"
+    TI_OFFLINE_CACHE_FILE_PATH="/tmp/cache/taichi" \
+    VIRTUAL_ENV=/workspace/vla/.venv \
+    PATH="/workspace/vla/.venv/bin:$PATH"
 
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src
@@ -137,14 +132,13 @@ FROM base AS dev
 
 USER root
 
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    pip3 install \
-        pytest \
-        pytest-cov \
-        ipython \
-        jupyter \
-        black \
-        ruff
+RUN uv pip install --system \
+    pytest \
+    pytest-cov \
+    ipython \
+    jupyter \
+    black \
+    ruff
 
 # Re-create user for dev stage
 ARG USER_ID=1000

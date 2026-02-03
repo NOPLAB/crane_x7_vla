@@ -139,13 +139,35 @@ python -m crane_x7_vla.scripts.merge_lora \
   --output_path /workspace/outputs/crane_x7_openvla_merged
 ```
 
+### Python環境管理（uv）
+
+各モジュールは[uv](https://docs.astral.sh/uv/)でPython依存関係を管理:
+
+```bash
+# 依存関係インストール
+cd lifter && uv sync     # lifter
+cd sim && uv sync        # シミュレータ
+cd vla-rl && uv sync     # VLA-RL
+cd vla && uv sync        # VLA（Docker環境用、Python 3.10-3.13が必要）
+cd lerobot && uv sync    # LeRobot（Python 3.11-3.13が必要）
+
+# 開発依存関係も含める
+uv sync --group dev
+
+# パッケージ実行
+uv run lifter --help
+uv run crane-x7-vla-rl --help
+```
+
+**注意**: vla/lerobotはnumpy<2.0.0制約のためPython 3.14では動作しません。Docker環境での使用を推奨。
+
 ### VLA-RL強化学習
 
 ```bash
 cd vla-rl
 
-# インストール
-pip install -e .
+# インストール（uv）
+uv sync
 
 # トレーニング（SFTチェックポイントから）
 python -m crane_x7_vla_rl.training.cli train \
@@ -172,7 +194,7 @@ python -m crane_x7_vla_rl.training.cli config --output my_config.yaml
 
 ```bash
 cd lifter
-pip install -e .
+uv sync
 
 # ジョブ投下
 lifter submit jobs/train.sh
@@ -249,7 +271,9 @@ crane_x7_vla/
 │       ├── crane_x7_lift/         # 統一シミュレータROS 2インターフェース
 │       └── crane_x7_bringup/      # 統合launchファイル
 ├── vla/                           # VLAファインチューニング
-│   ├── Dockerfile                 # 統一Dockerfile（VLA_BACKENDで切り替え）
+│   ├── pyproject.toml             # uv依存関係定義
+│   ├── uv.lock                    # ロックファイル
+│   ├── Dockerfile                 # 統一Dockerfile
 │   ├── configs/                   # 設定ファイル
 │   └── src/
 │       ├── crane_x7_vla/          # 統一トレーニングCLI
@@ -258,6 +282,8 @@ crane_x7_vla/
 │       ├── openvla/               # OpenVLAサブモジュール
 │       └── openpi/                # OpenPIサブモジュール
 ├── sim/                           # シミュレータ（lift抽象化）
+│   ├── pyproject.toml             # uv依存関係定義
+│   ├── uv.lock                    # ロックファイル
 │   └── src/
 │       ├── lift/                  # 統一シミュレータインターフェース
 │       ├── robot/                 # 共有ロボットアセット（MJCF、メッシュ）
@@ -265,7 +291,8 @@ crane_x7_vla/
 │       ├── lift_genesis/          # Genesis実装
 │       └── lift_isaacsim/         # Isaac Sim実装（スケルトン）
 ├── vla-rl/                        # VLA強化学習（SimpleVLA-RL方式）
-│   ├── Dockerfile.vla-rl.example  # 参考用Dockerfile
+│   ├── pyproject.toml             # uv依存関係定義
+│   ├── uv.lock                    # ロックファイル
 │   ├── configs/                   # 設定ファイル
 │   └── src/crane_x7_vla_rl/
 │       ├── training/              # VLARLTrainer, CLI
@@ -275,10 +302,14 @@ crane_x7_vla/
 │       ├── rewards/               # バイナリ報酬関数
 │       └── vla/                   # OpenVLAアダプター
 ├── lerobot/                       # LeRobot統合
+│   ├── pyproject.toml             # uv依存関係定義
+│   ├── uv.lock                    # ロックファイル
 │   ├── lerobot_robot_crane_x7/    # Robotプラグイン
 │   ├── lerobot_teleoperator_crane_x7/  # Teleoperatorプラグイン
 │   └── configs/                   # ポリシー設定（ACT, Diffusion）
 ├── lifter/                        # Slurmジョブ投下ツール
+│   ├── pyproject.toml             # uv依存関係定義
+│   ├── uv.lock                    # ロックファイル
 │   └── src/lifter/
 ├── data/                          # データ保存
 │   └── tfrecord_logs/             # 収集エピソード

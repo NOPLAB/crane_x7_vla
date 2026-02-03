@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2025 nop
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crane_x7_vla_rl"
+version = "0.1.0"
+description = "VLA Reinforcement Learning for CRANE-X7 Robot"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "nop" }]
+keywords = ["robotics", "reinforcement-learning", "vla", "crane-x7", "ppo"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # Deep learning
+    "torch>=2.5.1",
+    "accelerate>=1.0.0",
+    "peft>=0.13.0",
+    "transformers>=4.45.0",
+    # RL utilities
+    "numpy>=1.24.0",
+    "tensordict>=0.3.0",
+    # Logging
+    "wandb>=0.16.0",
+    "tqdm>=4.66.0",
+    # Configuration
+    "PyYAML>=6.0",
+    # Image processing
+    "Pillow>=10.0.0",
+    # OpenVLA dependencies
+    "timm>=0.9.10,<1.0.0",
+    "einops>=0.7.0",
+]
+
+[project.scripts]
+crane-x7-vla-rl = "crane_x7_vla_rl.training.cli:main"
+
+[project.urls]
+Repository = "https://github.com/nop/crane_x7_vla"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crane_x7_vla_rl"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu128"]
+index-strategy = "unsafe-best-match"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
