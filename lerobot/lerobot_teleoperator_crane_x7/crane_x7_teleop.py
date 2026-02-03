@@ -153,7 +153,13 @@ class CraneX7Teleop(Teleoperator):
                 range_max=range_maxes[motor],
             )
 
-        self.bus.write_calibration(self.calibration)
+        # Write only Homing_Offset to motors (Min/Max_Position_Limit may have negative values
+        # which LeRobot 0.4.3 doesn't allow, and CRANE-X7 has hardware limits anyway)
+        for motor, cal in self.calibration.items():
+            self.bus.write("Homing_Offset", motor, cal.homing_offset)
+
+        # Cache calibration for normalization
+        self.bus.calibration = self.calibration
         self._save_calibration()
         print(f"\n[Leader Calibration] Saved to: {self.calibration_fpath}")
 
