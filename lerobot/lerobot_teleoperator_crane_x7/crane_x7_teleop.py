@@ -166,23 +166,14 @@ class CraneX7Teleop(Teleoperator):
         logger.info(f"Calibration saved to {self.calibration_fpath}")
 
     def configure(self) -> None:
-        """Configure leader arm for teleoperation (torque OFF, except gripper)."""
+        """Configure leader arm for teleoperation (torque OFF)."""
         # Leader arm operates with torque disabled for manual positioning
         self.bus.disable_torque()
         self.bus.configure_motors()
 
         for motor in self.bus.motors:
-            if motor != "gripper":
-                # Set position control mode (for reading)
-                self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-
-        # Use 'position control current based' for gripper to be limited by current.
-        # This allows using the gripper as a physical trigger - squeeze to close,
-        # and it springs back to open position when released.
-        self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value)
-        self.bus.enable_torque("gripper")
-        if self.is_calibrated:
-            self.bus.write("Goal_Position", "gripper", self.config.gripper_open_pos)
+            # Set position control mode (for reading)
+            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
 
     # -------------------------------------------------------------------------
     # Action and Feedback

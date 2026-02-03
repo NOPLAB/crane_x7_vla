@@ -20,7 +20,6 @@ class CraneX7TeleopConfig(TeleoperatorConfig):
         port: USB port for Dynamixel communication (e.g., "/dev/ttyUSB1")
         baudrate: Communication baudrate (CRANE-X7 uses 3Mbps)
         use_degrees: If True, use degrees for joint positions; otherwise normalized values
-        gripper_open_pos: Gripper position when open (0-100, used for spring-back trigger)
     """
 
     # Required: Dynamixel port (typically different from follower robot)
@@ -31,7 +30,3 @@ class CraneX7TeleopConfig(TeleoperatorConfig):
 
     # Joint position mode
     use_degrees: bool = True
-
-    # Sets the gripper motor to this position with torque enabled.
-    # This makes it possible to squeeze the gripper and have it spring back to open.
-    gripper_open_pos: float = 50.0
