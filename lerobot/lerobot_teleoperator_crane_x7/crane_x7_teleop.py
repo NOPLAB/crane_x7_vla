@@ -167,9 +167,9 @@ class CraneX7Teleop(Teleoperator):
                 # Set position control mode (for reading)
                 self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
                 # Low PID gains (not used since torque is off, but set for safety)
-                self.bus.write("P_Coefficient", motor, 5)
-                self.bus.write("I_Coefficient", motor, 0)
-                self.bus.write("D_Coefficient", motor, 0)
+                self.bus.write("Position_P_Gain", motor, 5)
+                self.bus.write("Position_I_Gain", motor, 0)
+                self.bus.write("Position_D_Gain", motor, 0)
 
     # -------------------------------------------------------------------------
     # Action and Feedback

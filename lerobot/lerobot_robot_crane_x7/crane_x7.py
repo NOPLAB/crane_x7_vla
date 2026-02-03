@@ -204,9 +204,9 @@ class CraneX7Robot(Robot):
                 # Set position control mode
                 self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
                 # Set PID gains (tuned for CRANE-X7)
-                self.bus.write("P_Coefficient", motor, 800)
-                self.bus.write("I_Coefficient", motor, 0)
-                self.bus.write("D_Coefficient", motor, 0)
+                self.bus.write("Position_P_Gain", motor, 800)
+                self.bus.write("Position_I_Gain", motor, 0)
+                self.bus.write("Position_D_Gain", motor, 0)
 
     # -------------------------------------------------------------------------
     # Observation and Action
