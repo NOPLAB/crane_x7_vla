@@ -6,16 +6,14 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from lerobot.common.cameras import CameraConfig
-from lerobot.common.cameras.configs import ColorMode
-from lerobot.common.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-from lerobot.common.robots.config import RobotConfig
+from lerobot.cameras import CameraConfig
+from lerobot.cameras.configs import ColorMode
+from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.robots import RobotConfig
 
 # Try to import RealSense config, fallback if not available
 try:
-    from lerobot.common.cameras.realsense.configuration_realsense import (
-        RealSenseCameraConfig,
-    )
+    from lerobot.cameras.realsense import RealSenseCameraConfig
 
     HAS_REALSENSE = True
 except ImportError:

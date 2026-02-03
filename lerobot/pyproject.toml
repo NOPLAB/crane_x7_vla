@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "crane-x7-lerobot"
+name = "lerobot_robot_crane_x7"
 version = "0.1.0"
 description = "LeRobot integration for CRANE-X7 robot arm"
 license = "MIT"
@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "lerobot[dynamixel]>=0.4.0",
+    "lerobot[dynamixel] @ git+https://github.com/huggingface/lerobot.git",
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "pyrealsense2>=2.54.0",
@@ -39,6 +39,9 @@ dependencies = [
     "tqdm>=4.65.0",
     "pyyaml>=6.0.0",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["lerobot_robot_crane_x7", "lerobot_teleoperator_crane_x7"]

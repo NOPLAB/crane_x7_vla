@@ -7,10 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from lerobot.common.cameras import make_cameras_from_configs
-from lerobot.common.motors import Motor, MotorNormMode
-from lerobot.common.motors.dynamixel import DynamixelMotorsBus, OperatingMode
-from lerobot.common.robots.robot import Robot
+from lerobot.cameras import make_cameras_from_configs
+from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
+from lerobot.robots import Robot
 
 from .config_crane_x7 import JOINT_LIMITS_DEG, CraneX7RobotConfig
 
@@ -155,7 +155,7 @@ class CraneX7Robot(Robot):
         1. Records homing offsets at the center position
         2. Records range of motion for each joint
         """
-        from lerobot.common.motors.dynamixel import MotorCalibration
+        from lerobot.motors.dynamixel import MotorCalibration
 
         # Disable torque for manual positioning
         self.bus.disable_torque()

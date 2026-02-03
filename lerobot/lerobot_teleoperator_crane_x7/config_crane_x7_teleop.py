@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 
-from lerobot.common.teleoperators.teleoperator import TeleoperatorConfig
+from lerobot.teleoperators import TeleoperatorConfig
 
 
 @TeleoperatorConfig.register_subclass("crane_x7_teleop")

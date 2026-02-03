@@ -5,9 +5,9 @@
 
 from typing import Any
 
-from lerobot.common.motors import Motor, MotorNormMode
-from lerobot.common.motors.dynamixel import DynamixelMotorsBus, OperatingMode
-from lerobot.common.teleoperators.teleoperator import Teleoperator
+from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
+from lerobot.teleoperators import Teleoperator
 
 from .config_crane_x7_teleop import CraneX7TeleopConfig
 
@@ -115,7 +115,7 @@ class CraneX7Teleop(Teleoperator):
 
         Same procedure as the robot calibration.
         """
-        from lerobot.common.motors.dynamixel import MotorCalibration
+        from lerobot.motors.dynamixel import MotorCalibration
 
         # Disable torque for manual positioning
         self.bus.disable_torque()

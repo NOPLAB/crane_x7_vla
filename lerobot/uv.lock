@@ -364,55 +364,6 @@ toml = [
 ]
 
 [[package]]
-name = "crane-x7-lerobot"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "huggingface-hub" },
-    { name = "lerobot", extra = ["dynamixel"] },
-    { name = "numpy" },
-    { name = "opencv-python" },
-    { name = "pyrealsense2" },
-    { name = "pyyaml" },
-    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.7.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform != 'darwin'" },
-    { name = "torchvision", version = "0.22.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-    { name = "torchvision", version = "0.22.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
-    { name = "tqdm" },
-    { name = "wandb" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "huggingface-hub", specifier = ">=0.20.0" },
-    { name = "lerobot", extras = ["dynamixel"], specifier = ">=0.4.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "opencv-python", specifier = ">=4.8.0" },
-    { name = "pyrealsense2", specifier = ">=2.54.0" },
-    { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "torch", specifier = ">=2.0.0" },
-    { name = "torchvision", specifier = ">=0.15.0" },
-    { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "wandb", specifier = ">=0.15.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.0.0" },
-    { name = "pytest", specifier = ">=7.0.0" },
-    { name = "pytest-cov", specifier = ">=4.0.0" },
-    { name = "ruff", specifier = ">=0.1.0" },
-]
-
-[[package]]
 name = "datasets"
 version = "4.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -469,11 +420,11 @@ wheels = [
 
 [[package]]
 name = "dill"
-version = "0.3.8"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/17/4d/ac7ffa80c69ea1df30a8aa11b3578692a5118e7cd1aa157e3ef73b092d15/dill-0.3.8.tar.gz", hash = "sha256:3ebe3c479ad625c4553aca177444d89b486b1d84982eeacded644afc0cf797ca", size = 184847, upload-time = "2024-01-27T23:42:16.145Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/80/630b4b88364e9a8c8c5797f4602d0f76ef820909ee32f0bacb9f90654042/dill-0.4.0.tar.gz", hash = "sha256:0633f1d2df477324f53a895b02c901fb961bdbf65a17122586ea7019292cbcf0", size = 186976, upload-time = "2025-04-16T00:41:48.867Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/7a/cef76fd8438a42f96db64ddaa85280485a9c395e7df3db8158cfec1eee34/dill-0.3.8-py3-none-any.whl", hash = "sha256:c36ca9ffb54365bdd2f8eb3eff7d2a21237f8452b57ace88b1ac615b7e815bd7", size = 116252, upload-time = "2024-01-27T23:42:14.239Z" },
+    { url = "https://files.pythonhosted.org/packages/50/3d/9373ad9c56321fdab5b41197068e1d8c25883b3fea29dd361f9b55116869/dill-0.4.0-py3-none-any.whl", hash = "sha256:44f54bf6412c2c8464c14e8243eb163690a9800dbe2c367330883b19c7561049", size = 119668, upload-time = "2025-04-16T00:41:47.671Z" },
 ]
 
 [[package]]
@@ -612,11 +563,11 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2025.3.0"
+version = "2025.9.0"
 source = { registry = "https://download.pytorch.org/whl/cu128" }
-sdist = { url = "https://files.pythonhosted.org/packages/34/f4/5721faf47b8c499e776bc34c6a8fc17efdf7fdef0b00f398128bc5dcb4ac/fsspec-2025.3.0.tar.gz", hash = "sha256:a935fd1ea872591f2b5148907d103488fc523295e6c64b835cfad8c3eca44972" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/e0/bab50af11c2d75c9c4a2a26a5254573c0bd97cea152254401510950486fa/fsspec-2025.9.0.tar.gz", hash = "sha256:19fd429483d25d28b65ec68f9f4adc16c17ea2c7c7bf54ec61360d478fb19c19" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/53/eb690efa8513166adef3e0669afd31e95ffde69fb3c52ec2ac7223ed6018/fsspec-2025.3.0-py3-none-any.whl", hash = "sha256:efb87af3efa9103f94ca91a7f8cb7a4df91af9f74fc106c9c7ea0efd7277c1b3" },
+    { url = "https://files.pythonhosted.org/packages/47/71/70db47e4f6ce3e5c37a607355f80da8860a33226be640226ac52cb05ef2e/fsspec-2025.9.0-py3-none-any.whl", hash = "sha256:530dc2a2af60a414a832059574df4a6e10cce927f6f4a78209390fe38955cfb7" },
 ]
 
 [package.optional-dependencies]
@@ -845,8 +796,8 @@ wheels = [
 
 [[package]]
 name = "lerobot"
-version = "0.4.3"
-source = { registry = "https://pypi.org/simple" }
+version = "0.4.4"
+source = { git = "https://github.com/huggingface/lerobot.git#14a15f90e762170209d283c3545523549841ca3d" }
 dependencies = [
     { name = "accelerate" },
     { name = "av" },
@@ -875,14 +826,59 @@ dependencies = [
     { name = "torchvision", version = "0.22.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
     { name = "wandb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/9e/75411d19663d385c36d7c40db078482fa4f0bbea2872fdf5c7d816861e66/lerobot-0.4.3.tar.gz", hash = "sha256:608a81c38b48ad9c32d4f3f17cd789e9fd3a27bf621398b089210294cc3b325a", size = 781866, upload-time = "2026-01-22T10:59:49.215Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/c9/c38f0bfe33527d1b139f67850d6a4c113d42d630cbf4846d02e3d6372d97/lerobot-0.4.3-py3-none-any.whl", hash = "sha256:b08c1c15b2356bd4e658122deabfb9dacd2d7447de4a4327720991723d4edf2c", size = 993646, upload-time = "2026-01-22T10:59:47.591Z" },
-]
 
 [package.optional-dependencies]
 dynamixel = [
     { name = "dynamixel-sdk" },
+]
+
+[[package]]
+name = "lerobot-robot-crane-x7"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "lerobot", extra = ["dynamixel"] },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pyrealsense2" },
+    { name = "pyyaml" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.7.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform != 'darwin'" },
+    { name = "torchvision", version = "0.22.1", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'" },
+    { name = "tqdm" },
+    { name = "wandb" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.20.0" },
+    { name = "lerobot", extras = ["dynamixel"], git = "https://github.com/huggingface/lerobot.git" },
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "opencv-python", specifier = ">=4.8.0" },
+    { name = "pyrealsense2", specifier = ">=2.54.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "torch", specifier = ">=2.0.0" },
+    { name = "torchvision", specifier = ">=0.15.0" },
+    { name = "tqdm", specifier = ">=4.65.0" },
+    { name = "wandb", specifier = ">=0.15.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=7.0.0" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "ruff", specifier = ">=0.1.0" },
 ]
 
 [[package]]
