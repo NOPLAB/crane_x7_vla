@@ -111,9 +111,9 @@ class CraneX7Robot(Robot):
         """
         # Connect motor bus with custom baudrate
         # LeRobot defaults to 1Mbps, but CRANE-X7 uses 3Mbps
-        self.bus.connect(handshake=False)
-        self.bus.set_baudrate(self.config.baudrate)
-        self.bus._handshake()
+        # Set baudrate BEFORE openPort() since it's used during port initialization
+        self.bus.port_handler.baudrate = self.config.baudrate
+        self.bus.connect()
 
         # Run calibration if needed
         if not self.is_calibrated and calibrate:
