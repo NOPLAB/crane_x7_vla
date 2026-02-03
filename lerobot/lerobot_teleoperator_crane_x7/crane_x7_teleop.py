@@ -3,13 +3,16 @@
 
 """CRANE-X7 Teleoperator (Leader arm) implementation for LeRobot."""
 
-from typing import Any
+import logging
 
-from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
 from lerobot.teleoperators import Teleoperator
+from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from .config_crane_x7_teleop import CraneX7TeleopConfig
+
+logger = logging.getLogger(__name__)
 
 # Same motor configuration as the robot
 CRANE_X7_MOTORS = {
@@ -59,12 +62,12 @@ class CraneX7Teleop(Teleoperator):
     # -------------------------------------------------------------------------
 
     @property
-    def action_features(self) -> dict:
+    def action_features(self) -> dict[str, type]:
         """Define action space (motor position commands)."""
-        return {f"{name}.pos": float for name in CRANE_X7_MOTORS}
+        return {f"{motor}.pos": float for motor in self.bus.motors}
 
     @property
-    def feedback_features(self) -> dict:
+    def feedback_features(self) -> dict[str, type]:
         """Define feedback space (empty - no force feedback on CRANE-X7)."""
         return {}
 
@@ -77,6 +80,7 @@ class CraneX7Teleop(Teleoperator):
         """Check if teleoperator is connected."""
         return self.bus.is_connected
 
+    @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """Connect to leader arm hardware.
 
@@ -90,20 +94,20 @@ class CraneX7Teleop(Teleoperator):
         self.bus.connect()
 
         if not self.is_calibrated and calibrate:
+            logger.info(
+                "Mismatch between calibration values in the motor and the calibration file "
+                "or no calibration file found"
+            )
             self.calibrate()
 
         self.configure()
+        logger.info(f"{self} connected.")
 
+    @check_if_not_connected
     def disconnect(self) -> None:
         """Disconnect from leader arm hardware."""
-        # Ensure torque is off before disconnecting
-        if self.bus.is_connected:
-            try:
-                self.bus.disable_torque()
-            except Exception:
-                pass
-
         self.bus.disconnect()
+        logger.info(f"{self} disconnected.")
 
     # -------------------------------------------------------------------------
     # Calibration
@@ -115,30 +119,34 @@ class CraneX7Teleop(Teleoperator):
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
-        """Run calibration procedure for leader arm.
-
-        Same procedure as the robot calibration.
-        """
-        from lerobot.motors import MotorCalibration
-
-        # Disable torque for manual positioning
+        """Run calibration procedure for leader arm."""
         self.bus.disable_torque()
+
+        if self.calibration:
+            # Calibration file exists, ask user whether to use it or run new calibration
+            user_input = input(
+                f"Press ENTER to use provided calibration file associated with the id {self.id}, "
+                "or type 'c' and press ENTER to run calibration: "
+            )
+            if user_input.strip().lower() != "c":
+                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
+                self.bus.write_calibration(self.calibration)
+                return
+
+        logger.info(f"\nRunning calibration of {self}")
 
         # Set position control mode
         for motor in self.bus.motors:
             self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
 
-        # Step 1: Record homing offsets
-        input(
-            "\n[Leader Calibration] Move the leader arm to the CENTER of its range.\n"
-            "Press ENTER when ready..."
-        )
+        # Step 1: Record homing offsets at center position
+        input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
         # Step 2: Record range of motion
         print(
-            "\n[Leader Calibration] Move each joint through its FULL range.\n"
-            "Recording... Press ENTER when done."
+            "Move all joints sequentially through their entire ranges of motion.\n"
+            "Recording positions. Press ENTER to stop..."
         )
         range_mins, range_maxes = self.bus.record_ranges_of_motion()
 
@@ -153,60 +161,50 @@ class CraneX7Teleop(Teleoperator):
                 range_max=range_maxes[motor],
             )
 
-        # Write only Homing_Offset to motors (Min/Max_Position_Limit may have negative values
-        # which LeRobot 0.4.3 doesn't allow, and CRANE-X7 has hardware limits anyway)
-        for motor, cal in self.calibration.items():
-            self.bus.write("Homing_Offset", motor, cal.homing_offset)
-
-        # Cache calibration for normalization
-        self.bus.calibration = self.calibration
+        self.bus.write_calibration(self.calibration)
         self._save_calibration()
-        print(f"\n[Leader Calibration] Saved to: {self.calibration_fpath}")
+        logger.info(f"Calibration saved to {self.calibration_fpath}")
 
     def configure(self) -> None:
-        """Configure leader arm for teleoperation (torque OFF)."""
+        """Configure leader arm for teleoperation (torque OFF, except gripper)."""
         # Leader arm operates with torque disabled for manual positioning
-        # NOTE: Do NOT use torque_disabled() context manager here, as it would
-        # re-enable torque on exit. We want torque to remain disabled.
         self.bus.disable_torque()
+        self.bus.configure_motors()
 
         for motor in self.bus.motors:
-            # Set position control mode (for reading)
-            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-            # Low PID gains (not used since torque is off, but set for safety)
-            self.bus.write("Position_P_Gain", motor, 5)
-            self.bus.write("Position_I_Gain", motor, 0)
-            self.bus.write("Position_D_Gain", motor, 0)
+            if motor != "gripper":
+                # Set position control mode (for reading)
+                self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+
+        # Use 'position control current based' for gripper to be limited by current.
+        # This allows using the gripper as a physical trigger - squeeze to close,
+        # and it springs back to open position when released.
+        self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value)
+        self.bus.enable_torque("gripper")
+        if self.is_calibrated:
+            self.bus.write("Goal_Position", "gripper", self.config.gripper_open_pos)
 
     # -------------------------------------------------------------------------
     # Action and Feedback
     # -------------------------------------------------------------------------
 
-    def get_action(self) -> dict[str, Any]:
+    @check_if_not_connected
+    def get_action(self) -> dict[str, float]:
         """Get current position of leader arm as action command.
 
         Returns:
             Dictionary of motor positions to be sent to follower robot
         """
-        if not self.is_connected:
-            raise ConnectionError(f"{self} is not connected.")
+        action = self.bus.sync_read("Present_Position")
+        return {f"{motor}.pos": val for motor, val in action.items()}
 
-        positions = self.bus.sync_read("Present_Position")
-        return {f"{motor}.pos": val for motor, val in positions.items()}
-
-    def send_feedback(self, feedback: dict[str, Any]) -> dict[str, Any]:
+    def send_feedback(self, feedback: dict[str, float]) -> None:
         """Send feedback to teleoperator (not implemented for CRANE-X7).
 
         CRANE-X7 does not have force feedback capability.
-
-        Args:
-            feedback: Feedback data (ignored)
-
-        Returns:
-            The same feedback data (no-op)
         """
         # No force feedback on CRANE-X7
-        return feedback
+        raise NotImplementedError
 
     def __repr__(self) -> str:
         return f"CraneX7Teleop(port={self.config.port!r}, connected={self.is_connected})"

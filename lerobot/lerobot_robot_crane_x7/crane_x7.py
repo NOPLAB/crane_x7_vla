@@ -3,16 +3,20 @@
 
 """CRANE-X7 Robot implementation for LeRobot."""
 
-from typing import Any
+import logging
+import time
 
 import numpy as np
 
 from lerobot.cameras import make_cameras_from_configs
-from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
 from lerobot.robots import Robot
+from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from .config_crane_x7 import JOINT_LIMITS_DEG, CraneX7RobotConfig
+
+logger = logging.getLogger(__name__)
 
 # CRANE-X7 motor configuration
 # Reference: ros2/src/crane_x7_ros/crane_x7_control/config/manipulator_config.yaml
@@ -68,7 +72,7 @@ class CraneX7Robot(Robot):
     @property
     def _motors_ft(self) -> dict[str, type]:
         """Motor position feature definitions."""
-        return {f"{name}.pos": float for name in CRANE_X7_MOTORS}
+        return {f"{motor}.pos": float for motor in self.bus.motors}
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
@@ -103,6 +107,7 @@ class CraneX7Robot(Robot):
         cameras_connected = all(cam.is_connected for cam in self.cameras.values())
         return motors_connected and cameras_connected
 
+    @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """Connect to robot hardware.
 
@@ -117,6 +122,10 @@ class CraneX7Robot(Robot):
 
         # Run calibration if needed
         if not self.is_calibrated and calibrate:
+            logger.info(
+                "Mismatch between calibration values in the motor and the calibration file "
+                "or no calibration file found"
+            )
             self.calibrate()
 
         # Connect cameras
@@ -125,11 +134,13 @@ class CraneX7Robot(Robot):
 
         # Configure motors
         self.configure()
+        logger.info(f"{self} connected.")
 
+    @check_if_not_connected
     def disconnect(self) -> None:
         """Disconnect from robot hardware."""
         # Disable torque before disconnecting (safety)
-        if self.config.torque_off_on_disconnect and self.bus.is_connected:
+        if self.config.torque_off_on_disconnect:
             try:
                 self.bus.disable_torque()
             except Exception:
@@ -142,6 +153,8 @@ class CraneX7Robot(Robot):
         for cam in self.cameras.values():
             cam.disconnect()
 
+        logger.info(f"{self} disconnected.")
+
     # -------------------------------------------------------------------------
     # Calibration
     # -------------------------------------------------------------------------
@@ -152,32 +165,34 @@ class CraneX7Robot(Robot):
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
-        """Run calibration procedure.
-
-        This procedure:
-        1. Records homing offsets at the center position
-        2. Records range of motion for each joint
-        """
-        from lerobot.motors import MotorCalibration
-
-        # Disable torque for manual positioning
+        """Run calibration procedure."""
         self.bus.disable_torque()
+
+        if self.calibration:
+            # Calibration file exists, ask user whether to use it or run new calibration
+            user_input = input(
+                f"Press ENTER to use provided calibration file associated with the id {self.id}, "
+                "or type 'c' and press ENTER to run calibration: "
+            )
+            if user_input.strip().lower() != "c":
+                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
+                self.bus.write_calibration(self.calibration)
+                return
+
+        logger.info(f"\nRunning calibration of {self}")
 
         # Set position control mode
         for motor in self.bus.motors:
             self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
 
-        # Step 1: Record homing offsets
-        input(
-            "\n[Calibration] Move the arm to the CENTER of its range of motion.\n"
-            "Press ENTER when ready..."
-        )
+        # Step 1: Record homing offsets at center position
+        input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
         # Step 2: Record range of motion
         print(
-            "\n[Calibration] Move each joint through its FULL range of motion.\n"
-            "Recording positions... Press ENTER when done."
+            "Move all joints sequentially through their entire ranges of motion.\n"
+            "Recording positions. Press ENTER to stop..."
         )
         range_mins, range_maxes = self.bus.record_ranges_of_motion()
 
@@ -192,15 +207,9 @@ class CraneX7Robot(Robot):
                 range_max=range_maxes[motor],
             )
 
-        # Write only Homing_Offset to motors (Min/Max_Position_Limit may have negative values
-        # which LeRobot 0.4.3 doesn't allow, and CRANE-X7 has hardware limits anyway)
-        for motor, cal in self.calibration.items():
-            self.bus.write("Homing_Offset", motor, cal.homing_offset)
-
-        # Cache calibration for normalization
-        self.bus.calibration = self.calibration
+        self.bus.write_calibration(self.calibration)
         self._save_calibration()
-        print(f"\n[Calibration] Saved to: {self.calibration_fpath}")
+        logger.info(f"Calibration saved to {self.calibration_fpath}")
 
     def configure(self) -> None:
         """Configure motors for operation."""
@@ -218,26 +227,26 @@ class CraneX7Robot(Robot):
     # Observation and Action
     # -------------------------------------------------------------------------
 
-    def get_observation(self) -> dict[str, Any]:
+    @check_if_not_connected
+    def get_observation(self) -> dict[str, any]:
         """Get current observation from robot.
 
         Returns:
             Dictionary containing motor positions and camera images
         """
-        if not self.is_connected:
-            raise ConnectionError(f"{self} is not connected.")
-
-        obs_dict = {}
-
-        # Read motor positions
-        positions = self.bus.sync_read("Present_Position")
-        for motor, val in positions.items():
-            obs_dict[f"{motor}.pos"] = val
+        start = time.perf_counter()
+        obs_dict = self.bus.sync_read("Present_Position")
+        obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        dt_ms = (time.perf_counter() - start) * 1e3
+        logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
         # Read camera images
         for cam_key, cam in self.cameras.items():
+            start = time.perf_counter()
             # RGB image
             obs_dict[cam_key] = cam.async_read()
+            dt_ms = (time.perf_counter() - start) * 1e3
+            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
             # Depth image (if available)
             if hasattr(cam, "read_depth") and hasattr(cam.config, "use_depth"):
@@ -246,7 +255,8 @@ class CraneX7Robot(Robot):
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
+    @check_if_not_connected
+    def send_action(self, action: dict[str, any]) -> dict[str, any]:
         """Send action to robot.
 
         Args:
@@ -255,11 +265,8 @@ class CraneX7Robot(Robot):
         Returns:
             Dictionary of actually sent commands (may be clipped for safety)
         """
-        if not self.is_connected:
-            raise ConnectionError(f"{self} is not connected.")
-
         # Extract goal positions
-        goal_pos = {key.removesuffix(".pos"): val for key, val in action.items()}
+        goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
         # Apply joint limits if enabled
         if self.config.enforce_joint_limits:
