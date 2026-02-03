@@ -158,7 +158,7 @@ class CraneX7Robot(Robot):
         1. Records homing offsets at the center position
         2. Records range of motion for each joint
         """
-        from lerobot.motors.dynamixel import MotorCalibration
+        from lerobot.motors import MotorCalibration
 
         # Disable torque for manual positioning
         self.bus.disable_torque()

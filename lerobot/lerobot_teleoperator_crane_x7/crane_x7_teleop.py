@@ -119,7 +119,7 @@ class CraneX7Teleop(Teleoperator):
 
         Same procedure as the robot calibration.
         """
-        from lerobot.motors.dynamixel import MotorCalibration
+        from lerobot.motors import MotorCalibration
 
         # Disable torque for manual positioning
         self.bus.disable_torque()
