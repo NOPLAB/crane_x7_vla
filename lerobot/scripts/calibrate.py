@@ -59,7 +59,12 @@ def calibrate_teleop(port: str):
 
 
 def calibrate_both(robot_port: str, teleop_port: str):
-    """Calibrate both robot and teleoperator at the same position."""
+    """Calibrate both robot and teleoperator at the same position.
+
+    Only the follower (robot) performs the range-of-motion calibration.
+    The leader (teleoperator) shares the same calibration data from the follower,
+    using its own homing offset but the follower's range of motion values.
+    """
     from lerobot.motors import MotorCalibration
     from lerobot.motors.dynamixel import OperatingMode
 
@@ -104,7 +109,8 @@ def calibrate_both(robot_port: str, teleop_port: str):
     print("CRANE-X7 Dual Calibration")
     print("=" * 60)
     print("\nBoth arms will be calibrated at the SAME position.")
-    print("This ensures position matching during teleoperation.")
+    print("Only the FOLLOWER performs range-of-motion calibration.")
+    print("The LEADER will share the same calibration data.")
 
     # Step 1: Move both to center position
     input(
@@ -114,23 +120,17 @@ def calibrate_both(robot_port: str, teleop_port: str):
     )
 
     # Record homing offsets for both
-    print("\nRecording homing offsets...")
+    print("\nRecording homing offsets for both arms...")
     robot_homing = robot.bus.set_half_turn_homings()
     teleop_homing = teleop.bus.set_half_turn_homings()
 
-    # Step 2: Record range of motion for robot
+    # Step 2: Record range of motion for robot (follower) only
     print(
         "\n[Step 2] Move the ROBOT (follower) through its full range of motion.\n"
+        "         The leader will use the same range values.\n"
         "         Recording positions. Press ENTER to stop..."
     )
     robot_mins, robot_maxes = robot.bus.record_ranges_of_motion()
-
-    # Step 3: Record range of motion for teleop
-    print(
-        "\n[Step 3] Move the TELEOP (leader) through its full range of motion.\n"
-        "         Recording positions. Press ENTER to stop..."
-    )
-    teleop_mins, teleop_maxes = teleop.bus.record_ranges_of_motion()
 
     # Save robot calibration
     robot.calibration = {}
@@ -146,15 +146,15 @@ def calibrate_both(robot_port: str, teleop_port: str):
     robot._save_calibration()
     print(f"\nRobot calibration saved to: {robot.calibration_fpath}")
 
-    # Save teleop calibration
+    # Save teleop calibration (using follower's range values)
     teleop.calibration = {}
     for motor, m in teleop.bus.motors.items():
         teleop.calibration[motor] = MotorCalibration(
             id=m.id,
             drive_mode=0,
             homing_offset=teleop_homing[motor],
-            range_min=teleop_mins[motor],
-            range_max=teleop_maxes[motor],
+            range_min=robot_mins[motor],  # Use follower's range
+            range_max=robot_maxes[motor],  # Use follower's range
         )
     teleop.bus.write_calibration(teleop.calibration)
     teleop._save_calibration()
@@ -166,7 +166,7 @@ def calibrate_both(robot_port: str, teleop_port: str):
 
     print("\n" + "=" * 60)
     print("Dual calibration complete!")
-    print("Both arms are now calibrated at the same reference position.")
+    print("Both arms share the same range-of-motion calibration.")
     print("=" * 60)
 
 

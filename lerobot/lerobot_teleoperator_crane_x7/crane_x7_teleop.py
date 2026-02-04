@@ -5,9 +5,12 @@
 
 import logging
 
+import draccus
+
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.dynamixel import DynamixelMotorsBus, OperatingMode
 from lerobot.teleoperators import Teleoperator
+from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, ROBOTS
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from .config_crane_x7_teleop import CraneX7TeleopConfig
@@ -119,7 +122,14 @@ class CraneX7Teleop(Teleoperator):
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
-        """Run calibration procedure for leader arm."""
+        """Run calibration procedure for leader arm.
+
+        This method attempts to load calibration data from the follower robot
+        (CraneX7Robot) to share the same range-of-motion values. Only the homing
+        offset is recorded independently for the leader arm.
+
+        If no follower calibration exists, falls back to full calibration.
+        """
         self.bus.disable_torque()
 
         if self.calibration:
@@ -133,6 +143,9 @@ class CraneX7Teleop(Teleoperator):
                 self.bus.write_calibration(self.calibration)
                 return
 
+        # Try to load follower robot's calibration for range values
+        robot_calibration = self._load_robot_calibration()
+
         logger.info(f"\nRunning calibration of {self}")
 
         # Set position control mode
@@ -143,12 +156,22 @@ class CraneX7Teleop(Teleoperator):
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
-        # Step 2: Record range of motion
-        print(
-            "Move all joints sequentially through their entire ranges of motion.\n"
-            "Recording positions. Press ENTER to stop..."
-        )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion()
+        if robot_calibration:
+            # Use follower's range-of-motion values
+            logger.info("Using range-of-motion values from follower robot calibration.")
+            range_mins = {motor: robot_calibration[motor].range_min for motor in self.bus.motors}
+            range_maxes = {motor: robot_calibration[motor].range_max for motor in self.bus.motors}
+        else:
+            # Fallback: record own range of motion
+            logger.warning(
+                "Follower robot calibration not found. "
+                "Recording range of motion for leader arm (fallback)."
+            )
+            print(
+                "Move all joints sequentially through their entire ranges of motion.\n"
+                "Recording positions. Press ENTER to stop..."
+            )
+            range_mins, range_maxes = self.bus.record_ranges_of_motion()
 
         # Save calibration data
         self.calibration = {}
@@ -164,6 +187,25 @@ class CraneX7Teleop(Teleoperator):
         self.bus.write_calibration(self.calibration)
         self._save_calibration()
         logger.info(f"Calibration saved to {self.calibration_fpath}")
+
+    def _load_robot_calibration(self) -> dict[str, MotorCalibration] | None:
+        """Load calibration data from the follower robot (CraneX7Robot).
+
+        Returns:
+            Calibration dictionary if found, None otherwise.
+        """
+        # Compute follower robot's calibration file path
+        # Robot uses: HF_LEROBOT_CALIBRATION / "robots" / "crane_x7" / f"{id}.json"
+        robot_calibration_dir = HF_LEROBOT_CALIBRATION / ROBOTS / "crane_x7"
+        robot_calibration_fpath = robot_calibration_dir / f"{self.id}.json"
+
+        if not robot_calibration_fpath.is_file():
+            logger.info(f"Follower robot calibration not found at: {robot_calibration_fpath}")
+            return None
+
+        logger.info(f"Loading follower robot calibration from: {robot_calibration_fpath}")
+        with open(robot_calibration_fpath) as f, draccus.config_type("json"):
+            return draccus.load(dict[str, MotorCalibration], f)
 
     def configure(self) -> None:
         """Configure leader arm for teleoperation (torque OFF)."""
