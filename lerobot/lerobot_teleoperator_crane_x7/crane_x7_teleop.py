@@ -118,17 +118,22 @@ class CraneX7Teleop(Teleoperator):
 
     @property
     def is_calibrated(self) -> bool:
-        """Check if teleoperator is calibrated."""
-        return self.bus.is_calibrated
+        """Check if teleoperator is calibrated.
+
+        CRANE-X7 uses hardware-configured calibration values, so we only check
+        if a calibration file exists and the bus has calibration data.
+        """
+        # Don't compare with motor registers - just check if we have calibration data
+        return bool(self.calibration) and bool(self.bus.calibration)
 
     def calibrate(self) -> None:
         """Run calibration procedure for leader arm.
 
-        This method attempts to load calibration data from the follower robot
-        (CraneX7Robot) to share the same range-of-motion values. Only the homing
-        offset is recorded independently for the leader arm.
+        CRANE-X7 preserves hardware-configured motor settings (Homing_Offset,
+        Min/Max Position Limit). This method reads the current motor settings
+        and saves them as calibration data without modifying motor registers.
 
-        If no follower calibration exists, falls back to full calibration.
+        If follower robot calibration exists, uses its range values for consistency.
         """
         self.bus.disable_torque()
 
@@ -139,52 +144,40 @@ class CraneX7Teleop(Teleoperator):
                 "or type 'c' and press ENTER to run calibration: "
             )
             if user_input.strip().lower() != "c":
-                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
-                self.bus.write_calibration(self.calibration)
+                logger.info(f"Using calibration file associated with the id {self.id}")
+                # Just cache the calibration data without writing to motors
+                self.bus.calibration = self.calibration
                 return
+
+        logger.info(f"\nRunning calibration of {self}")
+        logger.info("Reading current motor settings (hardware values will be preserved)")
+
+        # Read current motor settings from hardware
+        hw_calibration = self.bus.read_calibration()
 
         # Try to load follower robot's calibration for range values
         robot_calibration = self._load_robot_calibration()
 
-        logger.info(f"\nRunning calibration of {self}")
-
-        # Set position control mode
-        for motor in self.bus.motors:
-            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-
-        # Step 1: Record homing offsets at center position
-        input(f"Move {self} to the middle of its range of motion and press ENTER....")
-        homing_offsets = self.bus.set_half_turn_homings()
-
         if robot_calibration:
-            # Use follower's range-of-motion values
+            # Use follower's range-of-motion values for consistency
             logger.info("Using range-of-motion values from follower robot calibration.")
-            range_mins = {motor: robot_calibration[motor].range_min for motor in self.bus.motors}
-            range_maxes = {motor: robot_calibration[motor].range_max for motor in self.bus.motors}
+            self.calibration = {}
+            for motor, m in self.bus.motors.items():
+                self.calibration[motor] = MotorCalibration(
+                    id=m.id,
+                    drive_mode=hw_calibration[motor].drive_mode,
+                    homing_offset=hw_calibration[motor].homing_offset,
+                    range_min=robot_calibration[motor].range_min,
+                    range_max=robot_calibration[motor].range_max,
+                )
         else:
-            # Fallback: record own range of motion
-            logger.warning(
-                "Follower robot calibration not found. "
-                "Recording range of motion for leader arm (fallback)."
-            )
-            print(
-                "Move all joints sequentially through their entire ranges of motion.\n"
-                "Recording positions. Press ENTER to stop..."
-            )
-            range_mins, range_maxes = self.bus.record_ranges_of_motion()
+            # Use hardware settings directly
+            logger.info("Using hardware calibration settings.")
+            self.calibration = hw_calibration
 
-        # Save calibration data
-        self.calibration = {}
-        for motor, m in self.bus.motors.items():
-            self.calibration[motor] = MotorCalibration(
-                id=m.id,
-                drive_mode=0,
-                homing_offset=homing_offsets[motor],
-                range_min=range_mins[motor],
-                range_max=range_maxes[motor],
-            )
+        # Cache calibration in bus (without writing to motors)
+        self.bus.calibration = self.calibration
 
-        self.bus.write_calibration(self.calibration)
         self._save_calibration()
         logger.info(f"Calibration saved to {self.calibration_fpath}")
 

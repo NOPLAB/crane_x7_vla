@@ -161,11 +161,21 @@ class CraneX7Robot(Robot):
 
     @property
     def is_calibrated(self) -> bool:
-        """Check if robot is calibrated."""
-        return self.bus.is_calibrated
+        """Check if robot is calibrated.
+
+        CRANE-X7 uses hardware-configured calibration values, so we only check
+        if a calibration file exists and the bus has calibration data.
+        """
+        # Don't compare with motor registers - just check if we have calibration data
+        return bool(self.calibration) and bool(self.bus.calibration)
 
     def calibrate(self) -> None:
-        """Run calibration procedure."""
+        """Run calibration procedure.
+
+        CRANE-X7 preserves hardware-configured motor settings (Homing_Offset,
+        Min/Max Position Limit). This method reads the current motor settings
+        and saves them as calibration data without modifying motor registers.
+        """
         self.bus.disable_torque()
 
         if self.calibration:
@@ -175,39 +185,21 @@ class CraneX7Robot(Robot):
                 "or type 'c' and press ENTER to run calibration: "
             )
             if user_input.strip().lower() != "c":
-                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
-                self.bus.write_calibration(self.calibration)
+                logger.info(f"Using calibration file associated with the id {self.id}")
+                # Just cache the calibration data without writing to motors
+                self.bus.calibration = self.calibration
                 return
 
         logger.info(f"\nRunning calibration of {self}")
+        logger.info("Reading current motor settings (hardware values will be preserved)")
 
-        # Set position control mode
-        for motor in self.bus.motors:
-            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+        # Read current motor settings from hardware
+        # This preserves factory/user-configured Homing_Offset and Position Limits
+        self.calibration = self.bus.read_calibration()
 
-        # Step 1: Record homing offsets at center position
-        input(f"Move {self} to the middle of its range of motion and press ENTER....")
-        homing_offsets = self.bus.set_half_turn_homings()
+        # Cache calibration in bus (without writing to motors)
+        self.bus.calibration = self.calibration
 
-        # Step 2: Record range of motion
-        print(
-            "Move all joints sequentially through their entire ranges of motion.\n"
-            "Recording positions. Press ENTER to stop..."
-        )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion()
-
-        # Save calibration data
-        self.calibration = {}
-        for motor, m in self.bus.motors.items():
-            self.calibration[motor] = MotorCalibration(
-                id=m.id,
-                drive_mode=0,
-                homing_offset=homing_offsets[motor],
-                range_min=range_mins[motor],
-                range_max=range_maxes[motor],
-            )
-
-        self.bus.write_calibration(self.calibration)
         self._save_calibration()
         logger.info(f"Calibration saved to {self.calibration_fpath}")
 
