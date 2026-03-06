@@ -12,7 +12,7 @@ setuptools==58.5.3
 numpy>=1.24.0,<2.0.0
 
 # TensorFlow (for data processing)
-tensorflow==2.20.0
+tensorflow==2.21.0
 
 # Transformers stack (must match vla/requirements-openvla.txt)
 transformers==4.57.3
