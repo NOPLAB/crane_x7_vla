@@ -10,7 +10,7 @@
 transformers==4.57.3
 tokenizers==0.22.1
 timm==0.9.16
-sentencepiece==0.2.1
+sentencepiece==0.2.2
 
 # ==============================================================================
 # Training and fine-tuning
