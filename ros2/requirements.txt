@@ -15,7 +15,7 @@ numpy>=1.24.0,<2.0.0
 tensorflow==2.20.0
 
 # Transformers stack (must match vla/requirements-openvla.txt)
-transformers==4.57.3
+transformers==5.17.0
 tokenizers==0.22.1
 timm==0.9.16
 sentencepiece==0.2.1
