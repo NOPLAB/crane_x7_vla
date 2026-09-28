@@ -2,7 +2,7 @@
 
 VLAモデルを強化学習でファインチューニングするためのフレームワーク。SimpleVLA-RL方式を採用し、PPOアルゴリズムとLiftシミュレータを統合。
 
-> **現状:** PPOコードは `vla/src/crane_x7_vla_rl/` にあります。`sim/` と旧 `vla-rl/` を削除したため、Liftに依存する学習・評価コマンドは、このリポジトリのままでは実行できません。VLA-RL用DockerイメージとComposeプロファイルは提供していません。以下の学習・評価手順はシミュレータ実装が別途用意された場合の参考です。
+> **現状:** PPOコードとLiftシミュレータは `vla/src/` にあります。ManiSkill・Genesisの実行には各バックエンドの追加依存が必要です。Isaac Simアダプタは未実装です。VLA-RL用DockerイメージとComposeプロファイルは提供していません。以下の学習・評価手順はGPU・モデル・シミュレータの動作を検証したものではありません。
 
 ## 目次
 
@@ -16,13 +16,13 @@ VLAモデルを強化学習でファインチューニングするためのフ�
 
 ## クイックスタート
 
-VLA-RLコードは `vla/` のPythonパッケージに含まれます。シミュレータを提供する `sim/` がないため、Docker ComposeにVLA-RL用プロファイルはありません。CLIのヘルプ表示と設定ファイル生成は利用できます。
+VLA-RLコードとLiftは `vla/` のPythonパッケージに含まれます。使用するシミュレータの追加依存を指定してインストールします。Docker ComposeにVLA-RL用プロファイルはありません。
 
 ### 手動実行
 
 ```bash
 cd vla
-pip install -e .
+pip install -e '.[sim-maniskill]'
 
 # SFTチェックポイントからトレーニング
 python -m crane_x7_vla_rl.training.cli train \
@@ -47,7 +47,8 @@ python -m crane_x7_vla_rl.training.cli config --output my_config.yaml
 
 ```bash
 cd vla
-pip install -e .
+pip install -e '.[sim-maniskill]'
+# Genesisを使う場合: pip install -e '.[sim-genesis]'
 ```
 
 ### 必要環境
@@ -55,7 +56,7 @@ pip install -e .
 - Python 3.10+
 - PyTorch 2.5.1+
 - CUDA 12.x（GPU使用時）
-- Liftシミュレータ（現在はリポジトリに含まれていません）
+- Liftシミュレータ（`vla/src/` に含まれます）と対象バックエンドの追加依存
 
 ## CLI引数一覧
 
@@ -239,6 +240,11 @@ reward = 1.0 if info.get("success", False) else 0.0
 ```
 vla/
 └── src/
+    ├── lift/                    # 共通シミュレータAPI
+    ├── lift_maniskill/          # ManiSkillバックエンド
+    ├── lift_genesis/            # Genesisバックエンド
+    ├── lift_isaacsim/           # Isaac Simアダプタ（未実装）
+    ├── robot/                   # CRANE-X7モデルとメッシュ
     └── crane_x7_vla_rl/
         ├── training/               # トレーニング
         │   ├── cli.py              # CLIエントリーポイント
@@ -286,7 +292,7 @@ python -m crane_x7_vla_rl.training.cli train --num-parallel-envs 2
 
 ### シミュレータエラー
 
-VLA-RLは`lift`パッケージに依存します。現在は`sim/`がないため、学習・評価を行うには互換シミュレータを別途用意し、`lift`をインポートできるようにする必要があります。
+Liftは`vla/src/`にあります。`ModuleNotFoundError`が出る場合は`vla/`で`pip install -e '.[sim-maniskill]'`または`pip install -e '.[sim-genesis]'`を実行し、対象バックエンドの依存を確認してください。
 
 ### W&Bログインエラー
 

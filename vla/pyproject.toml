@@ -71,6 +71,13 @@ openpi = [
     "flax",
     "optax",
 ]
+sim-maniskill = [
+    "mani-skill>=3.0.0b20",
+    "sapien",
+]
+sim-genesis = [
+    "genesis-world",
+]
 
 [project.scripts]
 crane_x7_vla = "crane_x7_vla.training.cli:main"
@@ -81,7 +88,16 @@ Homepage = "https://github.com/NOPLAB/crane_x7_vla"
 Repository = "https://github.com/NOPLAB/crane_x7_vla"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/crane_x7_vla", "src/crane_x7_vla_rl"]
+packages = [
+    "src/crane_x7_vla",
+    "src/crane_x7_vla_rl",
+    "src/lift",
+    "src/lift_genesis",
+    "src/lift_isaacsim",
+    "src/lift_maniskill",
+    "src/robot",
+]
+artifacts = ["src/robot/assets/**/*.xml", "src/robot/assets/**/*.stl"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
