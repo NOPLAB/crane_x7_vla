@@ -60,21 +60,7 @@ VLA_MODEL_PATH=                     # マージ済みモデルのパス（※LoR
 VLA_TASK_INSTRUCTION=               # タスク指示（自然言語）
 VLA_DEVICE=cuda                     # cuda / cpu
 
-# Liftシミュレーション（統一シミュレータ抽象化）
-LIFT_SIMULATOR=maniskill            # maniskill / genesis
-LIFT_BACKEND=cpu                    # gpu / cpu
-LIFT_RENDER_MODE=none               # rgb_array / human / none
 ```
-
-### Lift環境変数
-
-| 変数 | 説明 | デフォルト |
-|------|------|-----------|
-| `LIFT_SIMULATOR` | シミュレータ（`maniskill`/`genesis`） | `maniskill` |
-| `LIFT_BACKEND` | バックエンド（`gpu`/`cpu`） | `cpu` |
-| `LIFT_RENDER_MODE` | レンダリング（`rgb_array`/`human`/`none`） | `none` |
-
-**注意**: `rgb_array`と`human`モードはGPU必須。GPUなし環境では`cpu` + `none`を使用。
 
 ## 利用可能なプロファイル
 
@@ -92,7 +78,7 @@ LIFT_RENDER_MODE=none               # rgb_array / human / none
 | `lerobot` | LeRobot開発シェル | `docker compose --profile lerobot up` |
 | `lerobot-train` | LeRobotトレーニング | `docker compose --profile lerobot-train up` |
 
-`vla-rl`、`vla-rl-dev`、`lift`、`lift-vla`、`lift-logger` プロファイルはCompose設定に残っていますが、削除された `sim/` または旧 `vla-rl/` に依存するため現在は利用できません。
+LiftとVLA-RLのComposeプロファイルは、シミュレータ実装が削除されたため提供していません。
 
 ## 使用例
 
@@ -153,24 +139,6 @@ docker compose --profile vla up
 
 # シミュレーション + VLA
 docker compose --profile vla-sim up
-```
-
-### Liftシミュレーション
-
-統一シミュレータ抽象化レイヤー（ManiSkill、Genesis対応）。
-
-```bash
-# ManiSkill（デフォルト）
-docker compose --profile lift up
-
-# Genesisシミュレータ使用
-LIFT_SIMULATOR=genesis LIFT_BACKEND=gpu docker compose --profile lift up
-
-# Lift + VLA推論
-docker compose --profile lift-vla up
-
-# Lift + データロギング
-docker compose --profile lift-logger up
 ```
 
 ## ROS 2パッケージ
@@ -287,12 +255,9 @@ crane_x7_vla/
 ├── docker/                        # Docker環境
 │   ├── Dockerfile.ros2            # ROS 2統合環境
 │   ├── Dockerfile.remote-inference # リモートGPU推論
-│   ├── Dockerfile.remote-vla-rl   # リモートVLA-RLトレーニング
-│   ├── Dockerfile.vla-rl          # VLA-RL学習
 │   ├── Dockerfile.lerobot         # LeRobot統合
 │   ├── entrypoint-ros2.sh         # ROS 2用エントリーポイント
 │   ├── entrypoint-remote-inference.sh # 推論用エントリーポイント
-│   ├── entrypoint-remote-vla-rl.sh # VLA-RL用エントリーポイント
 │   └── wait-for-peer.sh           # Tailscale待機スクリプト
 │
 ├── ros2/                          # ROS 2ワークスペース
@@ -373,16 +338,6 @@ xhost +local:docker
 
 # WSL2の場合
 export DISPLAY=:0
-```
-
-### Liftシミュレータエラー
-
-```bash
-# GPU使用時にレンダリングが必要な場合
-LIFT_BACKEND=gpu LIFT_RENDER_MODE=rgb_array docker compose --profile lift up
-
-# GPUなしの場合はnoneモードを使用
-LIFT_BACKEND=cpu LIFT_RENDER_MODE=none docker compose --profile lift up
 ```
 
 ## ライセンス

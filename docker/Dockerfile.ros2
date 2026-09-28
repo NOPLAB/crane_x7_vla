@@ -84,11 +84,8 @@ COPY vla/src /workspace/vla/src
 RUN cp -r /workspace/vla/src/crane_x7_vla/backends/pi0/models_pytorch/transformers_replace/* \
     /workspace/vla/.venv/lib/python3.10/site-packages/transformers/
 
-# Copy ManiSkill CRANE-X7 environment
-COPY sim/src /workspace/sim/src
-
 # Environment variables
-ENV PYTHONPATH="/workspace/vla/src:/workspace/vla/src/openvla:/workspace/sim/src:${PYTHONPATH}" \
+ENV PYTHONPATH="/workspace/vla/src:/workspace/vla/src/openvla:${PYTHONPATH}" \
     NUMBA_CACHE_DIR="/tmp/numba_cache" \
     XDG_CACHE_HOME="/tmp/cache" \
     GS_CACHE_FILE_PATH="/tmp/cache/genesis" \

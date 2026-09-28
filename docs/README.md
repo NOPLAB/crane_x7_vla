@@ -19,11 +19,11 @@ CRANE-X7ロボットアームの制御とVLAファインチューニングのた
 | [vla-rl.md](vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO。現在はLift依存で実行不可） |
 | [lerobot.md](lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
 
-### 推論・リモートトレーニング
+### リモート推論
 
 | ドキュメント | 説明 |
 |-------------|------|
-| [remote.md](remote.md) | リモートGPU推論・VLA-RLトレーニング（Vast.ai、Runpod） |
+| [remote.md](remote.md) | リモートGPU推論（Vast.ai、Runpod） |
 
 ## クイックスタート
 

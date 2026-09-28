@@ -23,7 +23,7 @@ CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 | [docs/vla.md](docs/vla.md) | VLAファインチューニング（OpenVLA、MiniVLA、Pi0/Pi0.5） |
 | [docs/vla-rl.md](docs/vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO。現在はLift依存で実行不可） |
 | [docs/lerobot.md](docs/lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
-| [docs/remote.md](docs/remote.md) | リモートGPU推論・VLA-RLトレーニング（Vast.ai、Runpod） |
+| [docs/remote.md](docs/remote.md) | リモートGPU推論（Vast.ai、Runpod） |
 
 ## ディレクトリ構成
 

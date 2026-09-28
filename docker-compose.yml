@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 #
-# Unified Docker Compose configuration for ROS 2 and VLA-RL environments.
+# Unified Docker Compose configuration for ROS 2 environments.
 #
 # Usage:
 #   docker compose --profile <profile> up
@@ -19,11 +19,6 @@
 x-build-ros2: &build-ros2
   context: .
   dockerfile: docker/Dockerfile.ros2
-
-# Build configuration for VLA-RL
-x-build-vla-rl: &build-vla-rl
-  context: .
-  dockerfile: docker/Dockerfile.vla-rl
 
 # Build configuration for Remote Inference
 x-build-inference: &build-inference
@@ -52,25 +47,6 @@ x-vla-volumes: &vla-volumes
   - ./ros2/src:/workspace/ros2/src:ro
   - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
   - ${HOME}/.cache/crane_x7_vla:/home/${USERNAME:-ros2}/.cache/crane_x7_vla:rw
-
-x-lift-volumes: &lift-volumes
-  - /tmp/.X11-unix:/tmp/.X11-unix:rw
-  - /mnt/wslg:/mnt/wslg:ro
-  - ./sim/src:/workspace/sim/src:ro
-  - ./vla/src:/workspace/vla/src:ro
-  - ./vla/outputs:/workspace/vla/outputs:ro
-  - ./data:/workspace/data:rw
-  - ./ros2/src:/workspace/ros2/src:ro
-  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/home/${USERNAME:-ros2}/.cache/huggingface:rw
-  - ${HOME}/.cache/crane_x7_vla:/home/${USERNAME:-ros2}/.cache/crane_x7_vla:rw
-
-x-vla-rl-volumes: &vla-rl-volumes
-  - ./vla-rl:/workspace/vla-rl:rw
-  - ./sim:/workspace/sim:ro
-  - ./vla/outputs:/workspace/vla/outputs:ro
-  - ./data:/workspace/data:rw
-  - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
-  - ${HOME}/.cache/crane_x7_vla:/root/.cache/crane_x7_vla:rw
 
 x-inference-volumes: &inference-volumes
   - ./vla/outputs:/workspace/models:ro
@@ -101,22 +77,6 @@ x-vla-env: &vla-env
   HF_HOME: /home/${USERNAME:-ros2}/.cache/huggingface
   VLA_TASK_INSTRUCTION: ${VLA_TASK_INSTRUCTION}
   VLA_DEVICE: ${VLA_DEVICE:-cuda}
-
-x-lift-env: &lift-env
-  DISPLAY: ${DISPLAY}
-  PULSE_SERVER: unix:/run/user/1000/pulse/native
-  TF_CPP_MIN_LOG_LEVEL: "2"
-  LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
-  LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
-  LIFT_RENDER_MODE: ${LIFT_RENDER_MODE:-none}
-
-x-vla-rl-env: &vla-rl-env
-  LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
-  LIFT_BACKEND: ${LIFT_BACKEND:-gpu}
-  WANDB_API_KEY: ${WANDB_API_KEY:-}
-  HF_TOKEN: ${HF_TOKEN:-}
-  # EGL for headless GPU rendering (Genesis)
-  PYOPENGL_PLATFORM: egl
 
 x-inference-env: &inference-env
   TS_AUTHKEY: ${TS_AUTHKEY:-}
@@ -295,101 +255,6 @@ services:
         model_path:='${VLA_MODEL_PATH}'
         task_instruction:='${VLA_TASK_INSTRUCTION}'
         device:='${VLA_DEVICE:-cuda}'
-
-  # --------------------------------------------------------------------------
-  # Lift Simulation Services (unified simulator abstraction)
-  # --------------------------------------------------------------------------
-  lift:
-    <<: *base
-    profiles: [lift]
-    volumes: *lift-volumes
-    environment:
-      <<: *lift-env
-    command: >
-      ros2 launch crane_x7_bringup lift.launch.py
-        simulator:='${LIFT_SIMULATOR:-maniskill}'
-        backend:='${LIFT_BACKEND:-cpu}'
-        render_mode:='${LIFT_RENDER_MODE:-none}'
-
-  lift-vla:
-    <<: *base
-    profiles: [lift-vla]
-    volumes: *lift-volumes
-    environment:
-      <<: *vla-env
-      LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
-    deploy:
-      <<: *gpu-deploy
-    command: >
-      ros2 launch crane_x7_bringup lift_vla.launch.py
-        simulator:='${LIFT_SIMULATOR:-maniskill}'
-        model_path:='${VLA_MODEL_PATH}'
-        task_instruction:='${VLA_TASK_INSTRUCTION}'
-        device:='${VLA_DEVICE:-cuda}'
-
-  lift-logger:
-    <<: *base
-    profiles: [lift-logger]
-    volumes: *lift-volumes
-    environment:
-      <<: *lift-env
-    deploy:
-      <<: *gpu-deploy
-    command: >
-      ros2 launch crane_x7_bringup lift_logger.launch.py
-        simulator:='${LIFT_SIMULATOR:-maniskill}'
-        backend:='${LIFT_BACKEND:-gpu}'
-
-  # --------------------------------------------------------------------------
-  # VLA-RL Training Services
-  # --------------------------------------------------------------------------
-  vla-rl:
-    profiles: [vla-rl]
-    build:
-      <<: *build-vla-rl
-      target: base
-    volumes: *vla-rl-volumes
-    environment:
-      <<: *vla-rl-env
-    deploy:
-      <<: *gpu-deploy
-    working_dir: /workspace/vla-rl
-    command: >
-      python -m crane_x7_vla_rl.training.cli train
-        --simulator ${LIFT_SIMULATOR:-maniskill}
-        --env-id PickPlace-CRANE-X7
-        --backend ${LIFT_BACKEND:-gpu}
-        --num-parallel-envs ${VLA_RL_NUM_ENVS:-4}
-        --use-wandb
-
-  vla-rl-dev:
-    profiles: [vla-rl-dev]
-    build:
-      <<: *build-vla-rl
-      target: dev
-    volumes:
-      - ./vla-rl:/workspace/vla-rl:rw
-      - ./sim:/workspace/sim:rw
-      - ./vla/outputs:/workspace/vla/outputs:ro
-      - ./data:/workspace/data:rw
-      - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:rw
-      # X11 for real-time visualization
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /mnt/wslg:/mnt/wslg:ro
-    environment:
-      DISPLAY: ${DISPLAY}
-      LIFT_SIMULATOR: ${LIFT_SIMULATOR:-maniskill}
-      LIFT_BACKEND: ${LIFT_BACKEND:-cpu}
-      WANDB_API_KEY: ${WANDB_API_KEY:-}
-      HF_TOKEN: ${HF_TOKEN:-}
-      # EGL for headless GPU rendering (Genesis)
-      PYOPENGL_PLATFORM: egl
-    deploy:
-      <<: *gpu-deploy
-    working_dir: /workspace/vla-rl
-    stdin_open: true
-    tty: true
-    command: /bin/bash
 
   # --------------------------------------------------------------------------
   # Rosbridge Services (for remote inference)

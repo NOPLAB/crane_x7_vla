@@ -87,9 +87,6 @@ RUN uv sync --frozen
 COPY lerobot/configs/ /workspace/lerobot/configs/
 COPY lerobot/scripts/ /workspace/lerobot/scripts/
 
-# udev rules for Dynamixel USB access (optional, file may not exist)
-COPY lerobot/99-dynamixel.rules* /etc/udev/rules.d/
-
 # Create user with matching host UID/GID
 ARG USER_ID=1000
 ARG GROUP_ID=1000

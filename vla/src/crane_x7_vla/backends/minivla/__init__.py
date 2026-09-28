@@ -10,28 +10,27 @@ MiniVLA features:
 - ~12.5Hz inference (2.5x faster than OpenVLA)
 """
 
-from crane_x7_vla.backends.minivla.action_tokenizer import (
-    BinActionTokenizer,
-    ResidualVQ,
-    VectorQuantize,
-    VQActionTokenizer,
-)
-from crane_x7_vla.backends.minivla.backend import (
-    MiniVLABackend,
-    MiniVLAFinetuneConfig,
-    MiniVLAModel,
-)
 from crane_x7_vla.backends.minivla.config import (
     MiniVLAConfig,
     MiniVLASpecificConfig,
     MultiImageConfig,
     VQConfig,
 )
-from crane_x7_vla.backends.minivla.dataset import (
-    MiniVLABatchTransform,
-    MiniVLADataset,
-    MiniVLADatasetConfig,
-)
+
+
+def __getattr__(name: str):
+    """Delay model and dataset imports until the backend is used."""
+    from importlib import import_module
+
+    modules = {
+        "action_tokenizer": {"BinActionTokenizer", "ResidualVQ", "VectorQuantize", "VQActionTokenizer"},
+        "backend": {"MiniVLABackend", "MiniVLAFinetuneConfig", "MiniVLAModel"},
+        "dataset": {"MiniVLABatchTransform", "MiniVLADataset", "MiniVLADatasetConfig"},
+    }
+    for module, names in modules.items():
+        if name in names:
+            return getattr(import_module(f".{module}", __name__), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [

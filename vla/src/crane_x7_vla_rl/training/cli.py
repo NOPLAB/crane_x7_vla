@@ -33,7 +33,6 @@ import yaml
 from crane_x7_vla_rl.config.base import VLARLConfig
 from crane_x7_vla_rl.config.ppo_config import PPOConfig
 from crane_x7_vla_rl.config.rollout_config import RolloutConfig
-from crane_x7_vla_rl.training.trainer import VLARLTrainer
 
 # Configure logging
 logging.basicConfig(
@@ -262,6 +261,8 @@ def _add_config_args(parser: argparse.ArgumentParser) -> None:
 
 def cmd_train(args: argparse.Namespace) -> int:
     """Execute training command."""
+    from crane_x7_vla_rl.training.trainer import VLARLTrainer
+
     logger.info("Starting VLA-RL training...")
 
     # Load or create config
