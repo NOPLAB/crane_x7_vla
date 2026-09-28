@@ -16,26 +16,14 @@ CRANE-X7ロボットアームの制御とVLAファインチューニングのた
 | ドキュメント | 説明 |
 |-------------|------|
 | [vla.md](vla.md) | VLAファインチューニング（OpenVLA、OpenVLA-OFT、MiniVLA、Pi0/Pi0.5） |
-| [vla-rl.md](vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO） |
+| [vla-rl.md](vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO。現在はLift依存で実行不可） |
 | [lerobot.md](lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
-
-### シミュレーション
-
-| ドキュメント | 説明 |
-|-------------|------|
-| [sim.md](sim.md) | Liftシミュレータ抽象化（ManiSkill、Genesis） |
 
 ### 推論・リモートトレーニング
 
 | ドキュメント | 説明 |
 |-------------|------|
 | [remote.md](remote.md) | リモートGPU推論・VLA-RLトレーニング（Vast.ai、Runpod） |
-
-### ツール
-
-| ドキュメント | 説明 |
-|-------------|------|
-| [lifter.md](lifter.md) | lifter（Slurmジョブ投下ツール、W&B Sweep連携） |
 
 ## クイックスタート
 

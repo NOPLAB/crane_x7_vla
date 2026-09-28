@@ -1,6 +1,6 @@
 # CRANE-X7 ROS 2
 
-CRANE-X7ロボットアームのROS 2 Humbleベース制御環境。実機制御、Gazeboシミュレーション、Liftシミュレーション、VLA推論をサポート。
+CRANE-X7ロボットアームのROS 2 Humbleベース制御環境。実機制御、Gazeboシミュレーション、VLA推論をサポート。
 
 ## 目次
 
@@ -86,16 +86,13 @@ LIFT_RENDER_MODE=none               # rgb_array / human / none
 | `log` | テレオペ + カメラ + データロガー | `docker compose --profile log up` |
 | `vla` | 実機 + VLA推論（GPU） | `docker compose --profile vla up` |
 | `vla-sim` | シミュレーション + VLA推論 | `docker compose --profile vla-sim up` |
-| `vla-rl` | VLA-RLトレーニング（GPU） | `docker compose --profile vla-rl up` |
-| `vla-rl-dev` | VLA-RL開発シェル | `docker compose --profile vla-rl-dev up` |
-| `lift` | Liftシミュレーション | `docker compose --profile lift up` |
-| `lift-vla` | Lift + VLA推論 | `docker compose --profile lift-vla up` |
-| `lift-logger` | Lift + データロギング | `docker compose --profile lift-logger up` |
 | `rosbridge` | rosbridgeサーバー（実機） | `docker compose --profile rosbridge up` |
 | `rosbridge-sim` | rosbridgeサーバー（シミュ） | `docker compose --profile rosbridge-sim up` |
 | `remote-inference` | リモートGPU推論 | `docker compose --profile remote-inference up` |
 | `lerobot` | LeRobot開発シェル | `docker compose --profile lerobot up` |
 | `lerobot-train` | LeRobotトレーニング | `docker compose --profile lerobot-train up` |
+
+`vla-rl`、`vla-rl-dev`、`lift`、`lift-vla`、`lift-logger` プロファイルはCompose設定に残っていますが、削除された `sim/` に依存するため現在は利用できません。
 
 ## 使用例
 
@@ -273,6 +270,8 @@ Google Gemini Robotics-ER API統合パッケージ。
 ### crane_x7_lift
 
 Liftシミュレーション統合パッケージ（統一シミュレータ抽象化）。
+
+`sim/` の削除により、ノードが参照する `lift` パッケージは現在このリポジトリにありません。この launch ファイルは互換シミュレータを別途導入するまで実行できません。
 
 | launchファイル | 説明 |
 |---------------|------|

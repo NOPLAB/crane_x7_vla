@@ -2,6 +2,8 @@
 
 VLAモデルを強化学習でファインチューニングするためのフレームワーク。SimpleVLA-RL方式を採用し、PPOアルゴリズムとLiftシミュレータを統合。
 
+> **現状:** `sim/` を削除したため、Liftに依存する学習・評価コマンドとVLA-RL用Dockerイメージは、このリポジトリのままでは実行できません。以下の手順はシミュレータ実装が別途用意された場合の参考です。
+
 ## 目次
 
 - [クイックスタート](#クイックスタート)
@@ -62,7 +64,7 @@ pip install -e .
 - Python 3.10+
 - PyTorch 2.5.1+
 - CUDA 12.x（GPU使用時）
-- Liftシミュレータ（`sim/`からインストール）
+- Liftシミュレータ（現在はリポジトリに含まれていません）
 
 ## CLI引数一覧
 
@@ -296,15 +298,7 @@ python -m crane_x7_vla_rl.training.cli train --num-parallel-envs 2
 
 ### シミュレータエラー
 
-Liftシミュレータが正しくインストールされているか確認:
-
-```bash
-cd sim
-pip install -e .
-
-# テスト
-python -c "from lift import make_env; env = make_env('maniskill', 'PickPlace-CRANE-X7')"
-```
+VLA-RLは`lift`パッケージに依存します。現在は`sim/`がないため、学習・評価を行うには互換シミュレータを別途用意し、`lift`をインポートできるようにする必要があります。
 
 ### W&Bログインエラー
 

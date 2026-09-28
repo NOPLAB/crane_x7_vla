@@ -497,23 +497,6 @@ python -m crane_x7_vla.training.cli agent openvla \
   --data-root /workspace/data/tfrecord_logs
 ```
 
-### lifterでの実行（Slurmクラスター）
-
-```bash
-cd lifter
-
-# リモートSlurmクラスターでSweep開始
-lifter sweep start examples/sweeps/sweep_openvla.yaml --max-runs 10
-
-# ローカル環境でSweep実行
-lifter sweep start examples/sweeps/sweep_pi0.yaml \
-  --local \
-  --template examples/templates_local/pi0_sweep.sh \
-  --max-runs 5
-```
-
-詳細は[lifter.md](lifter.md)を参照。
-
 ## 推論（ROS 2統合）
 
 学習済みモデルをROS 2で使用する場合：

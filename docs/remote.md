@@ -2,6 +2,8 @@
 
 Vast.ai、Runpod等のクラウドGPUサービスでVLA推論やVLA-RLトレーニングを実行する方法。
 
+> **現状:** VLA-RLトレーニング用イメージは削除された `sim/` を参照します。関連するビルド・学習手順は、互換シミュレータを別途用意するまで利用できません。
+
 ## 目次
 
 - [VLA推論（rosbridge経由）](#vla推論rosbridge経由)
@@ -629,7 +631,6 @@ python -m crane_x7_vla_rl.training.cli train \
 
 - [vla.md](vla.md) - VLAファインチューニング（SFT）
 - [vla-rl.md](vla-rl.md) - VLA-RL詳細（アルゴリズム、設定）
-- [sim.md](sim.md) - Liftシミュレータ
 - [ros2.md](ros2.md) - ROS 2環境詳細
 
 ## ライセンス
