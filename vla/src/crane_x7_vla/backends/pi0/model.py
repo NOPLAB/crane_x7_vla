@@ -529,12 +529,12 @@ class Pi0Model(nn.Module):
         state: torch.Tensor | None,
         num_steps: int = 10,
         noise: torch.Tensor | None = None,
-        use_kv_cache: bool = True,
+        use_kv_cache: bool = False,
     ) -> torch.Tensor:
         """Sample actions using flow matching ODE integration.
 
-        When use_kv_cache=True (default), computes prefix KV cache once and
-        reuses it for all denoising steps, significantly improving inference speed.
+        The optional prefix KV cache is experimental. The full attention path
+        is the default so sampling matches the training forward pass.
 
         Args:
             images: List of image tensors [B, C, H, W]
@@ -544,7 +544,7 @@ class Pi0Model(nn.Module):
             state: Robot state [B, state_dim]. Required for Pi0, None for Pi0.5
             num_steps: Number of integration steps (default: 10)
             noise: Optional initial noise
-            use_kv_cache: Whether to use KV caching for inference (default: True)
+            use_kv_cache: Whether to use experimental KV caching for inference
 
         Returns:
             Sampled action chunk [B, horizon, action_dim]
@@ -758,7 +758,7 @@ class Pi0Model(nn.Module):
         full_att_2d_4d = self._prepare_attention_masks_4d(att_2d_masks)
 
         # Forward through both models with joint attention
-        (prefix_out, suffix_out), _ = self.paligemma_with_expert.forward(
+        (_, suffix_out), _ = self.paligemma_with_expert.forward(
             attention_mask=full_att_2d_4d,
             position_ids=position_ids,
             past_key_values=None,

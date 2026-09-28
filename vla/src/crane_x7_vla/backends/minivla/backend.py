@@ -30,6 +30,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
 )
+from transformers.utils import is_flash_attn_2_available
 
 from crane_x7_vla.backends.minivla.action_tokenizer.vq_tokenizer import (
     BinActionTokenizer,
@@ -154,7 +155,10 @@ class MiniVLAModel(torch.nn.Module):
         self.num_images = num_images
 
         # Load LLM
-        attn_impl = "flash_attention_2" if use_flash_attention else "eager"
+        flash_available = is_flash_attn_2_available()
+        if use_flash_attention and not flash_available:
+            logger.warning("FlashAttention 2 is unavailable; using PyTorch SDPA for MiniVLA")
+        attn_impl = "flash_attention_2" if use_flash_attention and flash_available else "sdpa"
         self.llm = AutoModelForCausalLM.from_pretrained(
             llm_model_id,
             torch_dtype=torch_dtype,
@@ -465,13 +469,14 @@ class MiniVLABackend(VLABackend):
         )
 
     def train(self) -> dict[str, Any]:
-        """
-        Execute the training loop.
+        """Refuse to report model initialization as completed training."""
+        raise NotImplementedError(
+            "MiniVLA training is not implemented: the dataset, dataloader, and optimizer loop are missing"
+        )
 
-        Returns:
-            Dictionary containing training metrics and results
-        """
-        logger.info("Starting MiniVLA training...")
+    def initialize(self) -> dict[str, Any]:
+        """Initialize the model and optimizer without performing training steps."""
+        logger.info("Initializing MiniVLA model...")
         cfg = self._create_finetune_config()
 
         # Validate GPU

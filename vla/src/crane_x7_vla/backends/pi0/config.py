@@ -116,6 +116,9 @@ class Pi0SpecificConfig:
     lora_rslora: bool = False
     """Use Rank-Stabilized LoRA (scaling = alpha / sqrt(rank))"""
 
+    lora_target_modules: list[str] | None = None
+    """Gemma modules to adapt; None uses the backend defaults."""
+
     freeze_vlm: bool = True
     """Whether to freeze VLM (PaliGemma) weights"""
 
@@ -218,6 +221,7 @@ class Pi0Config(UnifiedVLAConfig):
             "expert_lora_alpha": self.pi0.expert_lora_alpha,
             "lora_dropout": self.pi0.lora_dropout,
             "lora_rslora": self.pi0.lora_rslora,
+            "lora_target_modules": self.pi0.lora_target_modules,
             "lora_apply_to_vlm": self.pi0.lora_apply_to_vlm,
             "lora_apply_to_expert": self.pi0.lora_apply_to_expert,
             "freeze_vlm": self.pi0.freeze_vlm,

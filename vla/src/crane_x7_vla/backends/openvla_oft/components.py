@@ -165,37 +165,36 @@ class L1RegressionActionHead(nn.Module):
         self.action_dim = action_dim
         self.action_horizon = action_horizon
 
-        # Input: flattened hidden states for all action tokens in a chunk
-        # For each timestep, we have action_dim hidden states
-        input_dim = llm_hidden_dim * action_dim
+        # The OFT dataset contains a prompt and continuous action targets,
+        # not discrete action tokens. Condition each future step on the last
+        # prompt hidden state and a learned horizon embedding.
+        self.horizon_embedding = nn.Embedding(action_horizon, llm_hidden_dim)
 
         self.model = MLPResNet(
             num_blocks=num_blocks,
-            input_dim=input_dim,
+            input_dim=llm_hidden_dim,
             hidden_dim=llm_hidden_dim,
             output_dim=action_dim,
             dropout=dropout,
         )
 
-    def forward(self, actions_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, prompt_hidden_states: torch.Tensor) -> torch.Tensor:
         """
         Predict action chunk from LLM hidden states.
 
         Args:
-            actions_hidden_states: Hidden states for action tokens
-                Shape: (batch_size, action_horizon * action_dim, llm_hidden_dim)
+            prompt_hidden_states: Last valid prompt hidden state (batch_size, llm_hidden_dim)
 
         Returns:
             Predicted actions: (batch_size, action_horizon, action_dim)
         """
-        batch_size = actions_hidden_states.shape[0]
-
-        # Reshape: (B, chunk_len * action_dim, hidden_dim)
-        #       -> (B, chunk_len, action_dim * hidden_dim)
-        x = actions_hidden_states.reshape(batch_size, self.action_horizon, -1)
+        steps = torch.arange(self.action_horizon, device=prompt_hidden_states.device)
+        x = prompt_hidden_states[:, None, :] + self.horizon_embedding(steps)[None].to(
+            prompt_hidden_states.dtype
+        )
 
         # Predict actions for each timestep
-        # (B, chunk_len, action_dim * hidden_dim) -> (B, chunk_len, action_dim)
+        # (B, horizon, hidden_dim) -> (B, horizon, action_dim)
         actions = self.model(x)
 
         return actions
@@ -289,8 +288,14 @@ class FiLMedVisionTransformerBlock(nn.Module):
 
         # Initialize gamma and beta projectors
         # These project average language embedding to visual space
-        self.scale = nn.Linear(llm_dim, vision_dim)  # gamma
-        self.shift = nn.Linear(llm_dim, vision_dim)  # beta
+        film_rank = min(128, vision_dim)
+        self.condition = nn.Linear(llm_dim, film_rank)
+        self.scale = nn.Linear(film_rank, vision_dim)  # gamma
+        self.shift = nn.Linear(film_rank, vision_dim)  # beta
+        nn.init.zeros_(self.scale.weight)
+        nn.init.zeros_(self.scale.bias)
+        nn.init.zeros_(self.shift.weight)
+        nn.init.zeros_(self.shift.bias)
 
     def forward(
         self,
@@ -308,8 +313,9 @@ class FiLMedVisionTransformerBlock(nn.Module):
             Modulated visual features (batch_size, seq_len, vision_dim)
         """
         # Project language embedding to get gamma and beta
-        gamma = self.scale(average_language_embedding)  # (B, vision_dim)
-        beta = self.shift(average_language_embedding)  # (B, vision_dim)
+        condition = self.condition(average_language_embedding)
+        gamma = self.scale(condition)  # (B, vision_dim)
+        beta = self.shift(condition)  # (B, vision_dim)
 
         # Pass through attention portion of original block
         # Assuming standard timm ViT block structure
@@ -473,11 +479,15 @@ class FiLMedVisionBackbone(nn.Module):
 
     def get_num_patches(self) -> int:
         """Returns the number of vision patches output by the vision backbone."""
-        return self.vision_backbone.get_num_patches()
+        if hasattr(self.vision_backbone, "get_num_patches"):
+            return self.vision_backbone.get_num_patches()
+        return self.vision_backbone.featurizer.patch_embed.num_patches
 
     def get_num_images_in_input(self) -> int:
         """Returns the number of input images for the vision backbone."""
-        return self.vision_backbone.get_num_images_in_input()
+        if hasattr(self.vision_backbone, "get_num_images_in_input"):
+            return self.vision_backbone.get_num_images_in_input()
+        return 1
 
     def set_num_images_in_input(self, num_images_in_input: int) -> None:
         """Sets the number of input images for the vision backbone."""

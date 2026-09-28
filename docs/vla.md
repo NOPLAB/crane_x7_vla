@@ -6,15 +6,26 @@ CRANE-X7ロボットアーム用のVision-Language-Action（VLA）モデルを�
 
 このディレクトリでは、以下のVLAバックエンドをサポートしています：
 
-| バックエンド | 説明 | パラメータ | 推論速度 | 状態 |
-|-------------|------|-----------|---------|------|
-| **OpenVLA** | Prismatic VLMベースの7Bパラメータモデル | ~7B | ~5Hz | 実装済み |
-| **OpenVLA-OFT** | L1 Regression + Action Chunking + FiLM | ~7B | ~8Hz | 実装済み |
-| **MiniVLA** | Qwen 2.5 0.5B + VQ Action Chunking | ~1B | ~12.5Hz | 実装済み |
-| **Pi0** | PaliGemma + Expert Gemma + Flow Matching | ~2.3B | ~3Hz | 実装済み |
-| **Pi0.5** | Pi0 + adaRMSNorm + Discrete State | ~2.3B | ~3Hz | 実装済み |
+| バックエンド | 説明 | 2026-09-28 の実行結果 |
+|-------------|------|---------------------|
+| **OpenVLA** | Prismatic VLM、7B | 公式重みで 1 GPU 学習ステップ成功。評価は未実装 |
+| **OpenVLA-OFT** | 7B、連続アクション、FiLM | 公式 OpenVLA 重みで 1 GPU 学習ステップ成功。評価・チェックポイント読み込み・推論は未実装 |
+| **MiniVLA** | Qwen 2.5、VQ Action Chunking | Qwen + DINOv2 + SigLIP の GPU 初期化成功。学習ループ・評価は未実装 |
+| **Pi0** | PaliGemma + Expert Gemma + Flow Matching | 小型ランダムモデルで学習・評価・推論成功 |
+| **Pi0.5** | Pi0 + adaRMSNorm + 離散状態 | 小型ランダムモデルで学習・評価・推論成功 |
 
 すべてのバックエンドは統一Dockerfile（`vla/Dockerfile`）に含まれています。
+
+5種類すべてで設定生成・読み込みと CLI 起動を確認しました。GPU 実行は Slurm の RTX 5070 Ti 16 GB、合成 TFRecord 2 エピソードで行いました。Pi0/Pi0.5 は `dummy` サイズのランダム初期化モデルで各 1 ステップ学習し、保存したチェックポイントから別の合成データで評価と 8 次元アクション推論を確認しました。OpenVLA と OpenVLA-OFT は公式 `openvla/openvla-7b` を 4 bit 量子化し、LoRA で各 1 ステップ更新しました。いずれも実機動作・実データでの性能・公式 Pi0/Pi0.5 重みでの推論を示す結果ではありません。
+
+MiniVLA は Qwen 2.5 0.5B と DINOv2/SigLIP の GPU 初期化に成功しました。FlashAttention 2 がない環境では PyTorch SDPA を使用します。`train` はデータローダーと更新ループが存在しないため明示的に `NotImplementedError` で停止します。OpenVLA の `evaluate` と OpenVLA-OFT の `evaluate`/`infer`/`load_checkpoint` も未実装です。OpenVLA の現在の `infer` はアクショントークン ID を返す簡易処理で、ロボットの連続アクションとして検証されていません。Pi0/Pi0.5 の推論は全系列での attention を使用します。KV cache 経路は attention mask の不一致があり、未検証です。
+
+ネイティブ Python 環境では、依存関係のインストール後に Dockerfile と同じ Transformers 置換ファイルを適用してください（`uv sync` 後に再適用）：
+
+```bash
+cp -a vla/src/crane_x7_vla/backends/pi0/models_pytorch/transformers_replace/. \
+  vla/.venv/lib/python3.11/site-packages/transformers/
+```
 
 ### OpenVLA-OFT（Optimized Fine-Tuning）の特徴
 
@@ -191,8 +202,8 @@ python -m crane_x7_vla.training.cli train openvla \
 # 設定ファイル + CLI引数でオーバーライド
 python -m crane_x7_vla.training.cli train openvla \
   --config /workspace/vla/configs/openvla_default.yaml \
-  --batch-size 32 \
-  --learning-rate 1e-4
+  --training-batch-size 32 \
+  --training-learning-rate 1e-4
 ```
 
 ### 利用可能なバックエンド
@@ -220,13 +231,15 @@ python -m crane_x7_vla.training.cli train openvla \
 
 | 引数 | デフォルト | 説明 |
 |------|-----------|------|
-| `--batch-size` | 16 | バッチサイズ |
-| `--learning-rate` | 5e-4 | 学習率 |
-| `--num-epochs` | 100 | エポック数 |
-| `--max-steps` | - | 最大ステップ数 |
-| `--grad-accumulation-steps` | 1 | 勾配累積ステップ |
+| `--training-batch-size` | 16 | バッチサイズ |
+| `--training-learning-rate` | 5e-4 | 学習率 |
+| `--training-num-epochs` | 100 | エポック数 |
+| `--training-max-steps` | 200000 | 最大ステップ数 |
+| `--training-gradient-accumulation-steps` | 1 | 勾配累積ステップ |
 
 ### 設定ファイルの生成
+
+生成したYAMLは `--config` でそのまま読み込めます。バックエンド固有の設定は `openvla`、`openvla_oft`、`minivla`、`pi0` の各セクションに保存されます。既存の `backend_config` 形式と、MiniVLAのトップレベル `vq`／`multi_image` 形式も読み込めます。`--lora-*` 引数は各バックエンドの実際の設定に反映されます。Pi0/Pi0.5の `--lora-rank` と `--lora-alpha` はVLMとExpertの両方に適用されます。
 
 ```bash
 # OpenVLAデフォルト設定ファイルを生成

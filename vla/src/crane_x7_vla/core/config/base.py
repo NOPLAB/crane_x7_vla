@@ -8,11 +8,40 @@ This module provides a common configuration interface that works across
 different VLA backends (OpenVLA, OpenPI, etc.).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Literal
 
 import yaml
+
+
+def _configuration_from_dict(default, values: dict):
+    """Build a nested configuration from plain YAML values."""
+    known = {item.name for item in fields(default)}
+    converted = {}
+    for name, value in values.items():
+        if name not in known:
+            continue  # Older example configs may contain retired options.
+        current = getattr(default, name)
+        if is_dataclass(current) and isinstance(value, dict):
+            value = _configuration_from_dict(current, value)
+        elif isinstance(current, tuple) and isinstance(value, list):
+            value = tuple(value)
+        converted[name] = value
+    return type(default)(**converted)
+
+
+def _plain_yaml_value(value):
+    """Convert tuples and dataclasses to YAML safe types."""
+    if is_dataclass(value):
+        value = asdict(value)
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _plain_yaml_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_yaml_value(item) for item in value]
+    return value
 
 
 @dataclass
@@ -261,6 +290,50 @@ class UnifiedVLAConfig:
         lora_config_dict = config_dict.pop("lora", {})
         lora_config = LoRAConfig(**lora_config_dict) if lora_config_dict else LoRAConfig()
 
+        # The CLI first reads the base class to discover the backend, then
+        # reads its subclass. Accept both current nested settings and older
+        # flat backend_config files in either pass.
+        backend_settings = config_dict.pop("backend_config", None) or {}
+        nested_name = {
+            "openvla": "openvla",
+            "openvla-oft": "openvla_oft",
+            "minivla": "minivla",
+            "pi0": "pi0",
+            "pi0.5": "pi0",
+        }.get(config_dict.get("backend"))
+        for name in ("openvla", "openvla_oft", "minivla", "pi0"):
+            if name != nested_name:
+                config_dict.pop(name, None)
+        legacy_vq = config_dict.pop("vq", None)
+        legacy_multi_image = config_dict.pop("multi_image", None)
+        if nested_name and any(item.name == nested_name for item in fields(cls)):
+            specific_field = next(item for item in fields(cls) if item.name == nested_name)
+            default_specific = specific_field.default_factory()
+            settings = dict(backend_settings)
+            settings.update(config_dict.pop(nested_name, None) or {})
+            if nested_name == "minivla":
+                for prefix, key in (("vq_", "vq"), ("multi_image_", "multi_image")):
+                    nested = settings.setdefault(key, {})
+                    for setting in list(settings):
+                        if setting.startswith(prefix):
+                            nested[setting[len(prefix):]] = settings.pop(setting)
+                if legacy_vq:
+                    settings.setdefault("vq", {}).update(legacy_vq)
+                if legacy_multi_image:
+                    settings.setdefault("multi_image", {}).update(legacy_multi_image)
+            elif nested_name == "openvla_oft":
+                for key, field_name in (("film_enabled", "film"), ("proprio_enabled", "proprio"),
+                                        ("multi_image_enabled", "multi_image"), ("num_images", "multi_image")):
+                    if key in settings:
+                        target = "num_images" if key == "num_images" else "enabled"
+                        settings.setdefault(field_name, {})[target] = settings.pop(key)
+            if nested_name == "pi0" and config_dict["backend"] == "pi0.5":
+                settings.setdefault("model_type", "pi0.5")
+            config_dict[nested_name] = _configuration_from_dict(default_specific, settings)
+        else:
+            config_dict.pop(nested_name, None)
+            config_dict["backend_config"] = backend_settings or None
+
         # Create main config
         return cls(
             data=data_config,
@@ -337,8 +410,14 @@ class UnifiedVLAConfig:
                 "bias": self.lora.bias,
                 "skip_merge_on_save": self.lora.skip_merge_on_save,
             },
-            "backend_config": self.backend_config,
         }
 
+        for name in ("openvla", "openvla_oft", "minivla", "pi0"):
+            if hasattr(self, name):
+                config_dict[name] = _plain_yaml_value(getattr(self, name))
+                break
+        else:
+            config_dict["backend_config"] = _plain_yaml_value(self.backend_config)
+
         with Path(yaml_path).open("w") as f:
-            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+            yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)

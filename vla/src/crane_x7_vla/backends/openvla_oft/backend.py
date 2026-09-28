@@ -52,15 +52,10 @@ from crane_x7_vla.backends.openvla_oft.components import (
     ProprioProjector,
 )
 from crane_x7_vla.backends.openvla_oft.config import OpenVLAOFTConfig
-from crane_x7_vla.backends.openvla_oft.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
 from crane_x7_vla.backends.openvla_oft.dataset import (
     CraneX7OFTDataset,
     OpenVLAOFTBatchTransform,
     PaddedCollatorForOFT,
-)
-from crane_x7_vla.backends.openvla_oft.train_utils import (
-    get_current_action_mask,
-    get_next_actions_mask,
 )
 from crane_x7_vla.core.base import VLABackend
 from crane_x7_vla.core.utils.logging import get_logger
@@ -245,12 +240,12 @@ class OpenVLAOFTTrainer:
 
         # Load processor and base model
         processor = AutoProcessor.from_pretrained(self.cfg.vla_path, trust_remote_code=True)
-        vla = AutoModelForVision2Seq.from_pretrained(
+        vla = OpenVLAForActionPrediction.from_pretrained(
             self.cfg.vla_path,
+            config=HFOpenVLAConfig.from_pretrained(self.cfg.vla_path),
             torch_dtype=torch.bfloat16,
             quantization_config=quantization_config,
             low_cpu_mem_usage=True,
-            trust_remote_code=True,
             attn_implementation="eager",
         )
 
@@ -274,7 +269,7 @@ class OpenVLAOFTTrainer:
                 self.cfg.use_multi_image = False
 
         # Get LLM hidden dimension
-        llm_dim = vla.llm_dim  # Usually 4096 for Llama-2 7B
+        llm_dim = vla.config.text_config.hidden_size
 
         # Apply LoRA to LLM layers
         if self.cfg.use_lora:
@@ -635,7 +630,7 @@ class OpenVLAOFTTrainer:
                 input_ids=batch["input_ids"].to(device_id),
                 attention_mask=batch["attention_mask"].to(device_id),
                 pixel_values=batch["pixel_values"].to(torch.bfloat16).to(device_id),
-                labels=batch["labels"],
+                labels=batch["labels"].to(device_id),
                 output_hidden_states=True,
                 proprio=proprio,
                 proprio_projector=proprio_projector,
@@ -645,29 +640,20 @@ class OpenVLAOFTTrainer:
         # Get last hidden states
         last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
 
-        # Compute action masks from ground truth labels
-        # Labels are shifted by 1 relative to input_ids
-        ground_truth_token_ids = batch["labels"][:, 1:].to(device_id)
-        current_action_mask = get_current_action_mask(ground_truth_token_ids)
-        next_actions_mask = get_next_actions_mask(ground_truth_token_ids)
-
-        # Get hidden states for text portion of prompt+response (after vision patches)
-        # Note: Use -1 to exclude the last token (EOS)
-        text_hidden_states = last_hidden_states[:, num_patches:-1]
-
-        # Get hidden states for action portion of response using action masks
-        # The masks select positions corresponding to action tokens
-        combined_mask = current_action_mask | next_actions_mask
-        actions_hidden_states = (
-            text_hidden_states[combined_mask].reshape(batch_size, NUM_ACTIONS_CHUNK * ACTION_DIM, -1).to(torch.bfloat16)
-        )  # (B, act_chunk_len, D)
+        # OFT examples contain prompt tokens and continuous action targets.
+        # Select the last non-padding text token after the visual/proprio prefix.
+        text_hidden_states = last_hidden_states[:, num_patches:]
+        prompt_lengths = batch["attention_mask"].sum(dim=1).to(device_id)
+        prompt_hidden_states = text_hidden_states[
+            torch.arange(batch_size, device=device_id), prompt_lengths - 1
+        ].to(torch.bfloat16)
 
         # Predict actions through action head
         # Get the module if wrapped in DDP
         if hasattr(action_head, "module"):
-            predicted_actions = action_head.module.predict_action(actions_hidden_states)
+            predicted_actions = action_head.module.predict_action(prompt_hidden_states)
         else:
-            predicted_actions = action_head.predict_action(actions_hidden_states)
+            predicted_actions = action_head.predict_action(prompt_hidden_states)
 
         # Compute L1 loss
         loss = torch.nn.L1Loss()(predicted_actions, gt_actions)

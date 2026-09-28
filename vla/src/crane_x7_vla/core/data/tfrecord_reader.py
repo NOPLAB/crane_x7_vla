@@ -117,31 +117,15 @@ class TFRecordReader:
         Yields:
             Parsed example dictionaries
         """
-        try:
-            loader = tfrecord_loader(
-                data_path=str(path),
-                index_path=None,
-                description=self.feature_spec,
-            )
-            for example in loader:
-                yield self._post_process_example(example)
-        except Exception as e:
+        # Feature specs in the backends include optional cameras. Reading only
+        # fields stored in each example supports episodes with different cameras
+        # without restarting a partially consumed file or duplicating samples.
+        loader = tfrecord_loader(data_path=str(path), index_path=None, description=None)
+        for example in loader:
             if self.use_alternative_keys:
-                # Try with alternative feature names
-                try:
-                    loader = tfrecord_loader(
-                        data_path=str(path),
-                        index_path=None,
-                        description=self.CRANE_X7_FEATURES_ALT,
-                    )
-                    for example in loader:
-                        yield self._normalize_alternative_keys(example)
-                except Exception as e2:
-                    logger.error(f"Failed to read {path} with alternative keys: {e2}")
-                    raise
+                yield self._normalize_alternative_keys(example)
             else:
-                logger.error(f"Failed to read {path}: {e}")
-                raise
+                yield self._post_process_example(example)
 
     def _post_process_example(self, example: dict[str, Any]) -> dict[str, Any]:
         """
@@ -215,11 +199,7 @@ class TFRecordReader:
             if not path.exists():
                 continue
             try:
-                loader = tfrecord_loader(
-                    data_path=str(path),
-                    index_path=None,
-                    description=self.feature_spec,
-                )
+                loader = tfrecord_loader(data_path=str(path), index_path=None, description=None)
                 count += sum(1 for _ in loader)
             except Exception as e:
                 logger.warning(f"Failed to count records in {path}: {e}")

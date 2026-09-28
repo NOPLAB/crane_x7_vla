@@ -25,6 +25,8 @@ CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 | [docs/lerobot.md](docs/lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
 | [docs/remote.md](docs/remote.md) | リモートGPU推論（Vast.ai、Runpod） |
 
+VLA学習CLIの設定生成・読み込みと各バックエンドの実行確認状況は [docs/vla.md](docs/vla.md) を参照してください。
+
 ## ディレクトリ構成
 
 | ディレクトリ | 説明 |

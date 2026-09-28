@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader
 from transformers import get_cosine_schedule_with_warmup
 
 from crane_x7_vla.backends.pi0.config import Pi0Config
-from crane_x7_vla.backends.pi0.dataset import CraneX7Pi0Dataset, collate_pi0_batch
+from crane_x7_vla.backends.pi0.dataset import CraneX7Pi0Dataset, PaliGemmaTokenizer, collate_pi0_batch
 from crane_x7_vla.backends.pi0.model import Pi0Model, Pi0ModelConfig
 from crane_x7_vla.core.base import VLABackend
 from crane_x7_vla.core.transforms.action_transforms import ActionNormalizer, ActionPadder
@@ -610,8 +610,8 @@ class Pi0Backend(VLABackend):
         # Use Pi0-specific LoRA config (OpenPI準拠)
         use_lora = pi0_cfg.use_lora
         lora_dropout = pi0_cfg.lora_dropout
-        lora_target_modules = None  # Use default Gemma modules
-        lora_skip_merge = True
+        lora_target_modules = pi0_cfg.lora_target_modules
+        lora_skip_merge = cfg.lora.skip_merge_on_save
 
         return Pi0TrainerConfig(
             model_type=pi0_cfg.model_type,
@@ -776,8 +776,12 @@ class Pi0Backend(VLABackend):
 
         device = next(self.model.parameters()).device
 
-        # Prepare state
+        # Prepare state exactly as the training dataset does.
         state = observation["state"]
+        if self.config.pi0.normalize_actions:
+            if not self.action_normalizer.stats:
+                raise RuntimeError("Action normalization statistics are missing from the checkpoint")
+            state = self.action_normalizer.normalize(state)
         if state.shape[-1] == self._action_dim:
             state = self.action_padder.pad(state)
 
@@ -788,25 +792,22 @@ class Pi0Backend(VLABackend):
         if image.ndim == 3:
             image = image.transpose(2, 0, 1)  # HWC -> CHW
 
-        # Tokenize prompt
+        # Use the same tokenizer and state encoding as the training dataset.
         prompt = language_instruction or self.config.pi0.default_prompt
-        from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b", trust_remote_code=True)
-        encoding = tokenizer(
-            prompt,
-            max_length=self.config.pi0.max_token_len,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
+        tokenizer = PaliGemmaTokenizer(max_len=self.config.pi0.max_token_len)
+        token_ids, token_mask = tokenizer.tokenize(
+            prompt, state if self.config.pi0.discrete_state_input else None
         )
 
         # Convert to tensors
-        images = [torch.tensor(image, dtype=torch.float32).unsqueeze(0).to(device)]
-        img_masks = [torch.tensor([True]).to(device)]
-        lang_tokens = encoding["input_ids"].to(device)
-        lang_masks = encoding["attention_mask"].bool().to(device)
-        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
+        camera_names = self.config.pi0.camera_names or ["base_0_rgb"]
+        images = [torch.tensor(image, dtype=torch.float32).unsqueeze(0).to(device) for _ in camera_names]
+        img_masks = [torch.tensor([True], device=device) for _ in camera_names]
+        lang_tokens = torch.tensor(token_ids, dtype=torch.long, device=device).unsqueeze(0)
+        lang_masks = torch.tensor(token_mask, dtype=torch.bool, device=device).unsqueeze(0)
+        state_tensor = None if self.config.pi0.discrete_state_input else torch.tensor(
+            state, dtype=torch.float32, device=device
+        ).unsqueeze(0)
 
         # Sample actions
         self.model.eval()
@@ -865,6 +866,26 @@ class Pi0Backend(VLABackend):
         )
         self.model = Pi0Model(model_config)
         self.model.load_state_dict(checkpoint["model_state_dict"])
+
+        stats_path = path / "dataset_statistics.json"
+        if stats_path.exists():
+            with stats_path.open() as f:
+                stats = json.load(f)
+            action_stats = stats.get("crane_x7", stats).get("action", {})
+            if self.action_normalizer.mode == "quantile" and {"q01", "q99"} <= action_stats.keys():
+                low = np.asarray(action_stats["q01"], dtype=np.float32)
+                high = np.asarray(action_stats["q99"], dtype=np.float32)
+                self.action_normalizer.stats = {
+                    "q_low": low,
+                    "q_high": high,
+                    "range": np.where(high - low < 1e-6, 1.0, high - low),
+                }
+            elif self.action_normalizer.mode == "zscore" and {"mean", "std"} <= action_stats.keys():
+                std = np.asarray(action_stats["std"], dtype=np.float32)
+                self.action_normalizer.stats = {
+                    "mean": np.asarray(action_stats["mean"], dtype=np.float32),
+                    "std": np.where(std < 1e-6, 1.0, std),
+                }
 
         if torch.cuda.is_available():
             self.model = self.model.cuda()

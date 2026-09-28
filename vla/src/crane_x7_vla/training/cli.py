@@ -402,22 +402,38 @@ def _add_lora_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _apply_lora_args_to_config(args: argparse.Namespace, config: UnifiedVLAConfig) -> None:
     """Apply LoRA arguments from CLI to config."""
-    if hasattr(args, "lora_enabled") and args.lora_enabled is not None:
-        config.lora.enabled = args.lora_enabled
-    if hasattr(args, "lora_rank") and args.lora_rank is not None:
-        config.lora.rank = args.lora_rank
-    if hasattr(args, "lora_alpha") and args.lora_alpha is not None:
-        config.lora.alpha = args.lora_alpha
-    if hasattr(args, "lora_dropout") and args.lora_dropout is not None:
-        config.lora.dropout = args.lora_dropout
-    if hasattr(args, "lora_target_modules") and args.lora_target_modules is not None:
-        config.lora.target_modules = args.lora_target_modules
-    if hasattr(args, "lora_use_rslora") and args.lora_use_rslora is not None:
-        config.lora.use_rslora = args.lora_use_rslora
-    if hasattr(args, "lora_use_dora") and args.lora_use_dora is not None:
-        config.lora.use_dora = args.lora_use_dora
-    if hasattr(args, "lora_skip_merge_on_save") and args.lora_skip_merge_on_save is not None:
-        config.lora.skip_merge_on_save = args.lora_skip_merge_on_save
+    options = {
+        "lora_enabled": ("enabled", "use_lora"),
+        "lora_rank": ("rank", "lora_rank"),
+        "lora_alpha": ("alpha", "lora_alpha"),
+        "lora_dropout": ("dropout", "lora_dropout"),
+        "lora_target_modules": ("target_modules", "lora_target_modules"),
+        "lora_use_rslora": ("use_rslora", "lora_rslora"),
+        "lora_use_dora": ("use_dora", None),
+        "lora_skip_merge_on_save": ("skip_merge_on_save", "skip_merge_on_save"),
+    }
+    specific = next((getattr(config, name) for name in ("openvla", "openvla_oft", "minivla", "pi0")
+                     if hasattr(config, name)), None)
+    if getattr(args, "lora_use_dora", None):
+        raise ValueError("DoRA is not implemented by the VLA backends")
+    if getattr(args, "lora_use_rslora", None) and not hasattr(config, "pi0"):
+        raise ValueError("rsLoRA is only implemented by the Pi0/Pi0.5 backend")
+    for argument, (base_name, specific_name) in options.items():
+        value = getattr(args, argument, None)
+        if value is None:
+            continue
+        setattr(config.lora, base_name, value)
+        if specific is not None and specific_name and hasattr(specific, specific_name):
+            setattr(specific, specific_name, value)
+
+    # Pi0 has separate adapters for the VLM and action expert.
+    if hasattr(config, "pi0"):
+        for argument, names in (("lora_rank", ("vlm_lora_rank", "expert_lora_rank")),
+                                ("lora_alpha", ("vlm_lora_alpha", "expert_lora_alpha"))):
+            value = getattr(args, argument, None)
+            if value is not None:
+                for name in names:
+                    setattr(config.pi0, name, value)
 
 
 def _apply_pi0_args_to_config(args: argparse.Namespace, config: UnifiedVLAConfig) -> None:

@@ -109,7 +109,10 @@ class CraneX7BatchTransform:
         """Converts a RLDS batch to the format expected by the OpenVLA collator/models."""
         dataset_name, action = rlds_batch["dataset_name"], rlds_batch["action"][0]
         img = Image.fromarray(rlds_batch["observation"]["image_primary"][0])
-        lang = rlds_batch["task"]["language_instruction"].decode().lower()
+        lang = rlds_batch["task"]["language_instruction"]
+        if isinstance(lang, bytes):
+            lang = lang.decode("utf-8", errors="replace")
+        lang = lang.lower()
 
         # Construct Chat-based Prompt =>> Input is default query + language instruction, output are the action tokens
         prompt_builder = self.prompt_builder_fn("openvla")
