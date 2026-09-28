@@ -74,13 +74,14 @@ openpi = [
 
 [project.scripts]
 crane_x7_vla = "crane_x7_vla.training.cli:main"
+crane-x7-vla-rl = "crane_x7_vla_rl.training.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/NOPLAB/crane_x7_vla"
 Repository = "https://github.com/NOPLAB/crane_x7_vla"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/crane_x7_vla"]
+packages = ["src/crane_x7_vla", "src/crane_x7_vla_rl"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""

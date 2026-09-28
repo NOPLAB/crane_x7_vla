@@ -30,8 +30,7 @@ CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 | ディレクトリ | 説明 |
 |-------------|------|
 | `ros2/` | ROS 2ワークスペース。CRANE-X7の実機制御、Gazeboシミュレーション、テレオペレーション、データロギング（RLDS/TFRecord形式）、VLA推論ノードを含む |
-| `vla/` | VLAファインチューニング環境。OpenVLA、MiniVLA、Pi0/Pi0.5を用いたモデルトレーニング、LoRAアダプター管理、設定ファイル生成を行う。 |
-| `vla-rl/` | VLA強化学習のコード。Liftシミュレータへの依存が残り、現在は学習・評価を実行できない。 |
+| `vla/` | VLAファインチューニング環境と `src/crane_x7_vla_rl/` のPPOコード。後者はLiftシミュレータへの依存が残り、現在は学習・評価を実行できない。 |
 | `lerobot/` | LeRobot統合。CRANE-X7用のRobotプラグイン、Teleoperatorプラグイン、ACT/Diffusionポリシー設定を含む。 |
 
 ## 必要なもの

@@ -16,7 +16,7 @@ Usage:
 
     # Evaluate checkpoint
     python -m crane_x7_vla_rl.training.cli evaluate \\
-        --checkpoint /workspace/vla-rl/outputs/crane_x7_vla_rl/checkpoint_best
+        --checkpoint /workspace/vla/outputs/crane_x7_vla_rl/checkpoint_best
 
     # Generate config file
     python -m crane_x7_vla_rl.training.cli config \\

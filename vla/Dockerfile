@@ -130,6 +130,7 @@ RUN mkdir -p /workspace/vla /workspace/data /workspace/checkpoints /workspace/lo
 
 # Copy application source code
 COPY --chown=root:root src/crane_x7_vla/ /workspace/vla/src/crane_x7_vla/
+COPY --chown=root:root src/crane_x7_vla_rl/ /workspace/vla/src/crane_x7_vla_rl/
 COPY --chown=root:root configs/ /workspace/vla/configs/
 
 # Install transformers_replace for Pi0/Pi0.5 (OpenPI compatibility)

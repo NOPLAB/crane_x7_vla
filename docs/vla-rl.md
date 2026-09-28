@@ -2,7 +2,7 @@
 
 VLAモデルを強化学習でファインチューニングするためのフレームワーク。SimpleVLA-RL方式を採用し、PPOアルゴリズムとLiftシミュレータを統合。
 
-> **現状:** `sim/` を削除したため、Liftに依存する学習・評価コマンドとVLA-RL用Dockerイメージは、このリポジトリのままでは実行できません。以下の手順はシミュレータ実装が別途用意された場合の参考です。
+> **現状:** PPOコードは `vla/src/crane_x7_vla_rl/` にあります。`sim/` と旧 `vla-rl/` を削除したため、Liftに依存する学習・評価コマンドとVLA-RL用Dockerイメージは、このリポジトリのままでは実行できません。以下の学習・評価手順はシミュレータ実装が別途用意された場合の参考です。
 
 ## 目次
 
@@ -16,21 +16,12 @@ VLAモデルを強化学習でファインチューニングするためのフ�
 
 ## クイックスタート
 
-```bash
-# プロジェクトルートから実行
-cd crane_x7_vla
-
-# VLA-RLトレーニング
-docker compose --profile vla-rl up
-
-# VLA-RL開発モード（インタラクティブシェル）
-docker compose --profile vla-rl-dev up
-```
+VLA-RLコードは `vla/` のPythonパッケージに含まれます。現在のComposeプロファイル `vla-rl` と `vla-rl-dev` は削除済みディレクトリを参照するため使用できません。
 
 ### 手動実行
 
 ```bash
-cd vla-rl
+cd vla
 pip install -e .
 
 # SFTチェックポイントからトレーニング
@@ -55,7 +46,7 @@ python -m crane_x7_vla_rl.training.cli config --output my_config.yaml
 ## インストール
 
 ```bash
-cd vla-rl
+cd vla
 pip install -e .
 ```
 
@@ -246,32 +237,29 @@ reward = 1.0 if info.get("success", False) else 0.0
 ## ディレクトリ構成
 
 ```
-vla-rl/
-├── configs/                    # 設定ファイル
-│   └── default.yaml            # デフォルト設定
-├── src/crane_x7_vla_rl/
-│   ├── training/               # トレーニング
-│   │   ├── cli.py              # CLIエントリーポイント
-│   │   └── trainer.py          # VLARLTrainer
-│   ├── algorithms/             # アルゴリズム
-│   │   ├── ppo.py              # PPO実装
-│   │   └── advantage.py        # GAE計算
-│   ├── rollout/                # ロールアウト管理
-│   │   ├── rollout_manager.py  # 並列ロールアウト
-│   │   └── trajectory_buffer.py # トラジェクトリバッファ
-│   ├── environments/           # 環境ラッパー
-│   │   ├── lift_wrapper.py     # Liftシミュレータラッパー
-│   │   └── parallel_envs.py    # 並列環境管理
-│   ├── rewards/                # 報酬関数
-│   │   └── binary_reward.py    # バイナリ報酬
-│   ├── vla/                    # VLAアダプター
-│   │   └── openvla_adapter.py  # OpenVLAラッパー
-│   └── config/                 # 設定クラス
-│       ├── base.py             # VLARLConfig
-│       ├── ppo_config.py       # PPOConfig
-│       └── rollout_config.py   # RolloutConfig
-├── setup.py
-└── requirements.txt
+vla/
+└── src/
+    └── crane_x7_vla_rl/
+        ├── training/               # トレーニング
+        │   ├── cli.py              # CLIエントリーポイント
+        │   └── trainer.py          # VLARLTrainer
+        ├── algorithms/             # アルゴリズム
+        │   ├── ppo.py              # PPO実装
+        │   └── advantage.py        # GAE計算
+        ├── rollout/                # ロールアウト管理
+        │   ├── rollout_manager.py  # 並列ロールアウト
+        │   └── trajectory_buffer.py # トラジェクトリバッファ
+        ├── environments/           # 環境ラッパー
+        │   ├── lift_wrapper.py     # Liftシミュレータラッパー
+        │   └── parallel_envs.py    # 並列環境管理
+        ├── rewards/                # 報酬関数
+        │   └── binary_reward.py    # バイナリ報酬
+        ├── vla/                    # VLAアダプター
+        │   └── openvla_adapter.py  # OpenVLAラッパー
+        └── config/                 # 設定クラス
+            ├── base.py            # VLARLConfig
+            ├── ppo_config.py      # PPOConfig
+            └── rollout_config.py  # RolloutConfig
 ```
 
 ## トラブルシューティング

@@ -92,7 +92,7 @@ LIFT_RENDER_MODE=none               # rgb_array / human / none
 | `lerobot` | LeRobot開発シェル | `docker compose --profile lerobot up` |
 | `lerobot-train` | LeRobotトレーニング | `docker compose --profile lerobot-train up` |
 
-`vla-rl`、`vla-rl-dev`、`lift`、`lift-vla`、`lift-logger` プロファイルはCompose設定に残っていますが、削除された `sim/` に依存するため現在は利用できません。
+`vla-rl`、`vla-rl-dev`、`lift`、`lift-vla`、`lift-logger` プロファイルはCompose設定に残っていますが、削除された `sim/` または旧 `vla-rl/` に依存するため現在は利用できません。
 
 ## 使用例
 
