@@ -162,7 +162,8 @@ docker run --gpus all \
 
 ```bash
 cd crane_x7_vla
-docker build -f docker/Dockerfile.remote-inference -t crane_x7_remote_inference .
+docker build --build-context usim=../usim \
+  -f docker/Dockerfile.remote-inference -t crane_x7_remote_inference .
 ```
 
 ### Docker Hubにプッシュ

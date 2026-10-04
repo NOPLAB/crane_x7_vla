@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-Liftシミュレーション + VLA推論のbringup launchファイル。
+Usimシミュレーション + VLA推論のbringup launchファイル。
 
 引数:
   - model_path: VLAモデルのパス
@@ -24,10 +24,10 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch lift simulation with VLA inference."""
+    """Launch usim simulation with VLA inference."""
 
-    pkg_dir = get_package_share_directory('crane_x7_lift')
-    config_file = os.path.join(pkg_dir, 'config', 'lift_config.yaml')
+    pkg_dir = get_package_share_directory('crane_x7_bringup')
+    config_file = os.path.join(pkg_dir, 'config', 'usim_config.yaml')
 
     declare_model_path = DeclareLaunchArgument(
         'model_path',
@@ -59,10 +59,10 @@ def generate_launch_description():
         description='Simulation backend (cpu or gpu)'
     )
 
-    lift_sim_node = Node(
-        package='crane_x7_lift',
-        executable='lift_sim_node',
-        name='lift_sim_node',
+    usim_sim_node = Node(
+        package='usim_sim',
+        executable='usim_sim_node',
+        name='usim_sim_node',
         output='screen',
         parameters=[
             config_file,
@@ -94,6 +94,6 @@ def generate_launch_description():
         declare_device,
         declare_simulator,
         declare_backend,
-        lift_sim_node,
+        usim_sim_node,
         vla_control,
     ])

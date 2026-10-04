@@ -58,11 +58,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /workspace
 
 # Copy VLA pyproject.toml and uv.lock for dependency installation
-COPY vla/pyproject.toml vla/uv.lock /workspace/vla/
+COPY vla/pyproject.toml /workspace/vla/
+COPY --from=usim / /usim/
 
 # Install dependencies using uv
 WORKDIR /workspace/vla
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --no-dev --no-install-project
 
 # Install roslibpy for rosbridge communication
 RUN uv pip install roslibpy

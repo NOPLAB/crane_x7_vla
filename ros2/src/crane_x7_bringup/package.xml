@@ -17,6 +17,7 @@
   <exec_depend>crane_x7_teleop</exec_depend>
   <exec_depend>crane_x7_vla</exec_depend>
   <exec_depend>crane_x7_gemini</exec_depend>
+  <exec_depend>usim_sim</exec_depend>
   <exec_depend>crane_x7_examples</exec_depend>
   <exec_depend>crane_x7_gazebo</exec_depend>
 

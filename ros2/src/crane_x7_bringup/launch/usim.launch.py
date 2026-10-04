@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-Liftシミュレーションのbringup launchファイル。
+Usimシミュレーションのbringup launchファイル。
 
-crane_x7_lift/sim.launch.pyをラップする。
+外部usim_simの汎用ノードにCRANE-X7用の設定を渡す。
 
 引数:
   - simulator (default: maniskill): シミュレータバックエンド
@@ -17,14 +17,14 @@ crane_x7_lift/sim.launch.pyをラップする。
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Launch lift simulation."""
+    """Launch usim simulation."""
     declare_simulator = DeclareLaunchArgument(
         'simulator',
         default_value='maniskill',
@@ -61,22 +61,24 @@ def generate_launch_description():
         description='Render mode (rgb_array, human, none)'
     )
 
-    lift_sim = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
+    usim_sim = Node(
+        package='usim_sim',
+        executable='usim_sim_node',
+        name='usim_sim_node',
+        output='screen',
+        parameters=[
             PathJoinSubstitution([
-                FindPackageShare('crane_x7_lift'),
-                'launch',
-                'sim.launch.py'
-            ])
-        ]),
-        launch_arguments={
+                FindPackageShare('crane_x7_bringup'), 'config', 'usim_config.yaml'
+            ]),
+            {
             'simulator': LaunchConfiguration('simulator'),
             'backend': LaunchConfiguration('backend'),
             'sim_rate': LaunchConfiguration('sim_rate'),
             'env_id': LaunchConfiguration('env_id'),
             'auto_reset': LaunchConfiguration('auto_reset'),
             'render_mode': LaunchConfiguration('render_mode'),
-        }.items()
+            },
+        ],
     )
 
     return LaunchDescription([
@@ -86,5 +88,5 @@ def generate_launch_description():
         declare_env_id,
         declare_auto_reset,
         declare_render_mode,
-        lift_sim,
+        usim_sim,
     ])

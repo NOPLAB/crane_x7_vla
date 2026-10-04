@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from crane_x7_vla_rl.config.rollout_config import RolloutConfig
-from crane_x7_vla_rl.environments.parallel_envs import ParallelLiftEnvironments
+from crane_x7_vla_rl.environments.parallel_envs import ParallelUsimEnvironments
 from crane_x7_vla_rl.rollout.trajectory_buffer import Trajectory, TrajectoryBuffer
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class RolloutManager:
         self.device = torch.device(device) if isinstance(device, str) else device
 
         # Create parallel environments
-        self.envs = ParallelLiftEnvironments(
+        self.envs = ParallelUsimEnvironments(
             num_envs=config.num_parallel_envs,
             config=config,
         )
@@ -202,9 +202,9 @@ class RolloutManager:
             Dict with evaluation metrics.
         """
         # Use single env for evaluation to ensure sequential execution
-        from crane_x7_vla_rl.environments.lift_wrapper import LiftRolloutEnvironment
+        from crane_x7_vla_rl.environments.usim_wrapper import UsimRolloutEnvironment
 
-        eval_env = LiftRolloutEnvironment.from_config(
+        eval_env = UsimRolloutEnvironment.from_config(
             env_id=self.config.env_id,
             simulator_name=self.config.simulator,
             backend=self.config.backend,

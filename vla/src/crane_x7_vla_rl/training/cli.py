@@ -321,7 +321,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     import numpy as np
     import torch
 
-    from crane_x7_vla_rl.environments.lift_wrapper import LiftRolloutEnvironment
+    from crane_x7_vla_rl.environments.usim_wrapper import UsimRolloutEnvironment
     from crane_x7_vla_rl.vla.openvla_adapter import OpenVLAAdapter
 
     logger.info(f"Evaluating checkpoint: {args.checkpoint}")
@@ -335,7 +335,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
     # Create environment
     render_mode = "human" if args.render else "rgb_array"
-    env = LiftRolloutEnvironment.from_config(
+    env = UsimRolloutEnvironment.from_config(
         env_id=args.env_id,
         simulator_name=args.simulator,
         render_mode=render_mode,

@@ -16,7 +16,7 @@ CRANE-X7ロボットアームの制御とVLAファインチューニングのた
 | ドキュメント | 説明 |
 |-------------|------|
 | [vla.md](vla.md) | VLAファインチューニング（OpenVLA、OpenVLA-OFT、MiniVLA、Pi0/Pi0.5） |
-| [vla-rl.md](vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO、Liftシミュレータ） |
+| [vla-rl.md](vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO、Usimシミュレータ） |
 | [lerobot.md](lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
 
 ### リモート推論
@@ -46,7 +46,7 @@ docker compose --profile sim up
 
 ```bash
 cd vla
-docker build -t crane_x7_vla .
+docker build --build-context usim=../../usim --build-arg USIM_BACKEND=maniskill -t crane_x7_vla .
 # コンテナ内でトレーニング実行
 ```
 

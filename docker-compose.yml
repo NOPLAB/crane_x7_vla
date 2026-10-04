@@ -19,11 +19,17 @@
 x-build-ros2: &build-ros2
   context: .
   dockerfile: docker/Dockerfile.ros2
+  additional_contexts:
+    usim: ${USIM_SOURCE:-../usim}
+  args:
+    USIM_BACKEND: ${USIM_BACKEND:-none}
 
 # Build configuration for Remote Inference
 x-build-inference: &build-inference
   context: .
   dockerfile: docker/Dockerfile.remote-inference
+  additional_contexts:
+    usim: ${USIM_SOURCE:-../usim}
 
 # Build configuration for LeRobot
 x-build-lerobot: &build-lerobot

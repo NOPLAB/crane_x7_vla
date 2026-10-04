@@ -31,7 +31,7 @@ class VLARLTrainer:
 
     This trainer combines:
     - OpenVLA model with LoRA fine-tuning
-    - Parallel environment rollouts using lift simulator
+    - Parallel environment rollouts using usim
     - PPO updates with GAE
     - W&B logging and checkpointing
 

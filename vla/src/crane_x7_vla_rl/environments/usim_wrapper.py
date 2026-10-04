@@ -1,51 +1,15 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2025 nop
 
-"""Wrapper for lift simulator integration with VLA-RL."""
+"""Wrapper for usim simulator integration with VLA-RL."""
 
-import importlib
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-
-from lift import Simulator, SimulatorConfig, create_simulator
-from lift.types import Observation, StepResult
-
-logger = logging.getLogger(__name__)
-
-# Mapping from simulator name to module name
-_SIMULATOR_MODULES = {
-    "maniskill": "lift_maniskill",
-    "genesis": "lift_genesis",
-    "isaacsim": "lift_isaacsim",
-}
-
-
-def _ensure_simulator_registered(simulator_name: str) -> None:
-    """Import the simulator module to ensure it's registered.
-
-    Args:
-        simulator_name: Name of the simulator (maniskill, genesis, isaacsim).
-
-    Raises:
-        ImportError: If the simulator module cannot be imported.
-    """
-    if simulator_name not in _SIMULATOR_MODULES:
-        logger.warning(f"Unknown simulator: {simulator_name}")
-        return
-
-    module_name = _SIMULATOR_MODULES[simulator_name]
-    try:
-        importlib.import_module(module_name)
-        logger.debug(f"Successfully imported {module_name}")
-    except ImportError as e:
-        raise ImportError(
-            f"Could not import simulator module '{module_name}' for simulator "
-            f"'{simulator_name}'. Please ensure the required dependencies are "
-            f"installed. Error: {e}"
-        ) from e
+from usim import SimulatorConfig, create_simulator
+from usim.interface import EpisodeSimulator
+from usim.types import Observation, StepResult
 
 
 @dataclass
@@ -62,26 +26,28 @@ class VLARLObservation:
     """Additional information (task metrics, etc.)."""
 
 
-class LiftRolloutEnvironment:
-    """Adapter between lift Simulator and VLA-RL rollout interface.
+class UsimRolloutEnvironment:
+    """Adapter between usim Simulator and VLA-RL rollout interface.
 
-    This class wraps the lift simulator to provide a consistent interface
+    This class wraps the usim simulator to provide a consistent interface
     for VLA-RL training, converting observations and handling episode logic.
     """
 
     def __init__(
         self,
-        simulator: Simulator,
+        simulator: EpisodeSimulator,
         use_binary_reward: bool = True,
         dense_reward_weight: float = 0.0,
     ):
-        """Initialize the lift rollout environment.
+        """Initialize the usim rollout environment.
 
         Args:
-            simulator: lift Simulator instance.
+            simulator: usim Simulator instance.
             use_binary_reward: Whether to use binary (0/1) success reward.
             dense_reward_weight: Weight for dense reward (added to binary).
         """
+        if simulator.config.n_envs != 1:
+            raise ValueError("UsimRolloutEnvironment requires a single environment")
         self.simulator = simulator
         self.use_binary_reward = use_binary_reward
         self.dense_reward_weight = dense_reward_weight
@@ -97,7 +63,7 @@ class LiftRolloutEnvironment:
         render_mode: str = "rgb_array",
         max_episode_steps: int = 200,
         **kwargs,
-    ) -> "LiftRolloutEnvironment":
+    ) -> "UsimRolloutEnvironment":
         """Create environment from configuration.
 
         Args:
@@ -106,14 +72,11 @@ class LiftRolloutEnvironment:
             backend: Compute backend (cpu, gpu).
             render_mode: Render mode (rgb_array, human, none).
             max_episode_steps: Maximum steps per episode.
-            **kwargs: Additional arguments for LiftRolloutEnvironment.
+            **kwargs: Additional arguments for UsimRolloutEnvironment.
 
         Returns:
-            Configured LiftRolloutEnvironment instance.
+            Configured UsimRolloutEnvironment instance.
         """
-        # Import the simulator module to ensure it's registered
-        _ensure_simulator_registered(simulator_name)
-
         config = SimulatorConfig(
             env_id=env_id,
             backend=backend,
@@ -137,9 +100,7 @@ class LiftRolloutEnvironment:
         self._episode_reward = 0.0
         return self._convert_observation(obs), info
 
-    def step(
-        self, action: np.ndarray
-    ) -> tuple[VLARLObservation, float, bool, bool, dict[str, Any]]:
+    def step(self, action: np.ndarray) -> tuple[VLARLObservation, float, bool, bool, dict[str, Any]]:
         """Execute one step in the environment.
 
         Args:
@@ -152,24 +113,31 @@ class LiftRolloutEnvironment:
         self._step_count += 1
 
         # Compute reward
-        reward = self._compute_reward(result)
+        native_info = result.info[0] if isinstance(result.info, list) else result.info
+        reward = self._compute_reward(result, native_info)
         self._episode_reward += reward
 
         # Convert observation
         obs = self._convert_observation(result.observation)
 
         # Add episode info
-        info = result.info.copy()
+        info = native_info.copy()
         info["step_count"] = self._step_count
         info["episode_reward"] = self._episode_reward
 
-        return obs, reward, result.terminated, result.truncated, info
+        return (
+            obs,
+            reward,
+            bool(np.asarray(result.terminated).item()),
+            bool(np.asarray(result.truncated).item()),
+            info,
+        )
 
     def _convert_observation(self, obs: Observation) -> VLARLObservation:
-        """Convert lift Observation to VLARLObservation.
+        """Convert usim Observation to VLARLObservation.
 
         Args:
-            obs: lift Observation object.
+            obs: usim Observation object.
 
         Returns:
             VLARLObservation for VLA model input.
@@ -183,6 +151,10 @@ class LiftRolloutEnvironment:
 
         # Get robot state
         state = obs.qpos if obs.qpos is not None else np.zeros(9)
+        if image.ndim == 4 and image.shape[0] == 1:
+            image = image[0]
+        if state.ndim == 2 and state.shape[0] == 1:
+            state = state[0]
 
         return VLARLObservation(
             image=image,
@@ -190,7 +162,7 @@ class LiftRolloutEnvironment:
             extra=obs.extra or {},
         )
 
-    def _compute_reward(self, result: StepResult) -> float:
+    def _compute_reward(self, result: StepResult, info: dict[str, Any]) -> float:
         """Compute reward from step result.
 
         Args:
@@ -203,7 +175,7 @@ class LiftRolloutEnvironment:
 
         if self.use_binary_reward:
             # Binary reward: 1.0 on success, 0.0 otherwise
-            success = result.info.get("success", False)
+            success = info.get("success", False)
             if isinstance(success, np.ndarray):
                 success = success.item() if success.size == 1 else success[0]
             reward = 1.0 if success else 0.0
@@ -212,9 +184,7 @@ class LiftRolloutEnvironment:
             # Add weighted dense reward from simulator
             dense_reward = result.reward
             if isinstance(dense_reward, np.ndarray):
-                dense_reward = (
-                    dense_reward.item() if dense_reward.size == 1 else dense_reward[0]
-                )
+                dense_reward = dense_reward.item() if dense_reward.size == 1 else dense_reward[0]
             reward += self.dense_reward_weight * dense_reward
 
         return reward

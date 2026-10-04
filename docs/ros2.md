@@ -78,7 +78,9 @@ VLA_DEVICE=cuda                     # cuda / cpu
 | `lerobot` | LeRobot開発シェル | `docker compose --profile lerobot up` |
 | `lerobot-train` | LeRobotトレーニング | `docker compose --profile lerobot-train up` |
 
-LiftとVLA-RLのComposeプロファイルは、シミュレータ実装が削除されたため提供していません。
+UsimとVLA-RL専用Composeプロファイルはありません。Usimは外部usimと
+下記のCRANE用launchを使います。Composeのビルドには隣接する `../usim` が必要です。
+別配置なら `USIM_SOURCE=/path/to/usim` を指定してください。
 
 ## 使用例
 
@@ -159,9 +161,9 @@ docker compose --profile vla-sim up
 | `vla_sim.launch.py` | VLA推論（Gazebo） |
 | `rosbridge_real.launch.py` | 実機 + rosbridge（リモートVLA用） |
 | `rosbridge_sim.launch.py` | Gazebo + rosbridge（リモートVLA用） |
-| `lift.launch.py` | Liftシミュレーション |
-| `lift_vla.launch.py` | Lift + VLA推論 |
-| `lift_logger.launch.py` | Lift + データロガー |
+| `usim.launch.py` | Usimシミュレーション |
+| `usim_vla.launch.py` | Usim + VLA推論 |
+| `usim_logger.launch.py` | Usim + データロガー |
 
 ```bash
 # 使用例
@@ -235,15 +237,54 @@ Google Gemini Robotics-ER API統合パッケージ。
 |---------------|------|
 | `pick_and_place.launch.py` | Pick & Place環境 |
 
-### crane_x7_lift
+### usim_sim
 
-Liftシミュレーション統合パッケージ（統一シミュレータ抽象化）。
+Usimシミュレーション統合パッケージ（統一シミュレータ抽象化）。
 
-`lift` は `vla/src/` にあります。ROS 2 の Lift ノードを使う環境では `vla/` と使用するシミュレータの追加依存をインストールしてください。launch ファイルの実行には ROS 2 と対象バックエンドの動作確認が別途必要です。
+実行実装はcoreの `usim.bridges.simulation_ros2` にあります。外部ROS package
+`usim/ros2/src/usim_sim` はその `main` を `usim_sim_node` として公開します。
+CRANE-X7用設定 `config/usim_config.yaml` と3つの `usim*.launch.py` は
+`crane_x7_bringup` が所有します。bridgeは `usim.create_simulator` の遅延登録を使い、
+VLA学習依存をimportしません。汎用bridgeは `env_id`、`camera_uid`、`camera_frame`、
+トピックとサービス名をパラメータで指定できます。
+
+ネイティブ（ROS 2をsourceした同じPython環境で実行）：
+
+```bash
+cd crane_x7_vla
+python -m pip install -e '../usim' -e '../usim/packages/maniskill[native]'
+cd ros2
+colcon build --symlink-install --base-paths src ../../usim/ros2/src
+source install/setup.bash
+python -c "import usim, usim_sim; print(usim.__file__, usim_sim.__file__)"
+ros2 launch crane_x7_bringup usim.launch.py simulator:=maniskill
+```
+
+Docker（Compose 2.17+ / BuildKit、プロジェクトルートから）：
+
+```bash
+USIM_BACKEND=maniskill docker compose build real
+docker compose run --rm real ros2 launch crane_x7_bringup usim.launch.py simulator:=maniskill backend:=cpu
+# GPU利用時はNVIDIA Container ToolkitとGPU割り当てが必要
+```
+
+Dockerfileは外部usimを `/usim` にインストールし、usimのROS packageも同じ
+colcon workspaceでビルドします。Genesisの場合は `USIM_BACKEND=genesis` に変更します。
+ROS/コンテナ/バックエンドの実行はこの移動の静的検査とは別途検証が必要です。
+バックエンドのnative依存とcapabilityに対応する実行環境が必要です。
+
+ノード名は `usim_sim_node`。入力は `/vla/predicted_action`
+(`std_msgs/Float32MultiArray`、バックエンドのアクション表現)、出力は
+`/camera/color/image_raw` (`sensor_msgs/Image`, rgb8)、
+`/joint_states` (`sensor_msgs/JointState`)、
+`/usim/episode_done` (`std_msgs/Bool`) と `/usim/task_info` (`std_msgs/String`)。
+サービスは `/usim/reset` (`std_srvs/Trigger`) と `/usim/pause` (`std_srvs/SetBool`)。
+CRANE設定は `PickPlace-CRANE-X7`、`/vla/predicted_action` と
+`hand_camera_link` を指定し、汎用bridgeの既定値には依存しません。
 
 | launchファイル | 説明 |
 |---------------|------|
-| `sim.launch.py` | Liftシミュレータノード |
+| `crane_x7_bringup/usim.launch.py` | usimシミュレータノード |
 
 ## ディレクトリ構成
 
@@ -270,7 +311,7 @@ crane_x7_vla/
 │       ├── crane_x7_vla/          # VLA推論ノード
 │       ├── crane_x7_gemini/       # Gemini API統合
 │       ├── crane_x7_sim_gazebo/   # Gazebo環境
-│       └── crane_x7_lift/         # Lift統合（統一シミュレータ）
+│       └── crane_x7_bringup/config/usim_config.yaml # CRANE用usim設定
 │
 ├── requirements.txt               # Python依存関係
 └── rosdep_packages.txt            # ROS 2パッケージ依存

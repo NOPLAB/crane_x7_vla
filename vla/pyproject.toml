@@ -10,7 +10,7 @@ name = "crane_x7_vla"
 version = "0.1.0"
 description = "Unified VLA training framework for CRANE-X7 robot"
 license = "MIT"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10,<3.13"
 authors = [{ name = "nop" }]
 keywords = ["robotics", "vla", "crane-x7", "openvla", "minivla", "pi0"]
 classifiers = [
@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "usim==0.1.0",
     # Transformers stack
     "transformers==4.57.3",
     "tokenizers==0.22.1",
@@ -67,16 +68,16 @@ openvla = [
     "tensorflow-datasets>=4.9.0",
 ]
 openpi = [
-    "jax[cuda12]",
+    "jax[cuda12]>=0.4.35,<0.5",
     "flax",
     "optax",
+    "orbax-checkpoint>=0.11.0,<0.12",
 ]
 sim-maniskill = [
-    "mani-skill>=3.0.0b20",
-    "sapien",
+    "usim-maniskill[native]==0.1.0",
 ]
 sim-genesis = [
-    "genesis-world",
+    "usim-genesis[native]==0.1.0",
 ]
 
 [project.scripts]
@@ -91,13 +92,7 @@ Repository = "https://github.com/NOPLAB/crane_x7_vla"
 packages = [
     "src/crane_x7_vla",
     "src/crane_x7_vla_rl",
-    "src/lift",
-    "src/lift_genesis",
-    "src/lift_isaacsim",
-    "src/lift_maniskill",
-    "src/robot",
 ]
-artifacts = ["src/robot/assets/**/*.xml", "src/robot/assets/**/*.stl"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
@@ -115,7 +110,12 @@ dev = [
 extra-index-url = ["https://download.pytorch.org/whl/cu128"]
 index-strategy = "unsafe-best-match"
 override-dependencies = ["numpy>=1.24.0,<2.0.0"]
-environments = ["python_version >= '3.10' and python_version < '3.14'"]
+environments = ["python_version >= '3.10' and python_version < '3.13'"]
+
+[tool.uv.sources]
+usim = { path = "../../usim", editable = true }
+usim-maniskill = { path = "../../usim/packages/maniskill", editable = true }
+usim-genesis = { path = "../../usim/packages/genesis", editable = true }
 
 # =============================================================================
 # Ruff Configuration (Linter & Formatter)

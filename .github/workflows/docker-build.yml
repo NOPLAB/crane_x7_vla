@@ -24,6 +24,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Checkout external usim
+        uses: actions/checkout@v6
+        with:
+          repository: NOPLAB/usim
+          path: .build-usim
+
       - name: Azure Login
         run: |
           az login --service-principal \
@@ -59,15 +65,16 @@ jobs:
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Generated tags: $TAGS"
 
-      - name: Build with Azure ACR
+      - name: Build and push to Azure ACR
         run: |
-          # ACRでビルド（最初のタグを使用）
           FIRST_TAG=$(echo "${{ steps.tags.outputs.tags }}" | awk '{print $1}')
-          az acr build \
-            --registry ${{ env.ACR_NAME }} \
-            --image ${{ env.IMAGE_NAME }}:$FIRST_TAG \
+          az acr login --name ${{ env.ACR_NAME }}
+          docker build \
+            --build-context usim=.build-usim \
+            --tag ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:$FIRST_TAG \
             --file vla/Dockerfile \
             vla/
+          docker push ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:$FIRST_TAG
 
       - name: Tag additional images in ACR
         run: |

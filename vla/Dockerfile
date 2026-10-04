@@ -48,12 +48,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /build
 
 # Copy pyproject.toml and uv.lock for dependency installation
-COPY pyproject.toml uv.lock /build/
+COPY pyproject.toml /build/
+COPY --from=usim / /usim/
 
 # Install dependencies using uv (frozen from lock file)
 # --no-dev excludes development dependencies
 # --system installs to system Python instead of venv
-RUN uv sync --frozen --no-dev --no-install-project --python ${PYTHON_VERSION}
+ARG USIM_BACKEND=none
+RUN uv sync --no-dev --no-install-project --python ${PYTHON_VERSION} && \
+    if [ "${USIM_BACKEND}" != "none" ]; then \
+        uv pip install --no-sources --python /build/.venv/bin/python \
+            -e "/usim/packages/${USIM_BACKEND}[native]"; \
+    fi
 
 # Install Flash Attention from prebuilt wheel
 # Source: https://github.com/mjun0812/flash-attention-prebuild-wheels/releases
@@ -118,6 +124,7 @@ WORKDIR /workspace/vla
 
 # Copy Python packages from builder
 COPY --from=builder /build/.venv /workspace/vla/.venv
+COPY --from=builder /usim /usim
 
 # Final cleanup in runtime stage
 RUN find /workspace/vla/.venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \

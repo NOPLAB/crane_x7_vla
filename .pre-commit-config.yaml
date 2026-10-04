@@ -33,11 +33,11 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
-        files: ^(vla/src/crane_x7_vla|lifter/src/lifter|vla-rl/src/crane_x7_vla_rl|sim/src)/
+        files: ^vla/src/(crane_x7_vla|crane_x7_vla_rl)/
       # Run the formatter
       - id: ruff-format
         types_or: [python, pyi]
-        files: ^(vla/src/crane_x7_vla|lifter/src/lifter|vla-rl/src/crane_x7_vla_rl|sim/src)/
+        files: ^vla/src/(crane_x7_vla|crane_x7_vla_rl)/
 
   # Type checking with Pyright (optional, can be slow)
   # - repo: https://github.com/RobertCraiwordie/pyright-python

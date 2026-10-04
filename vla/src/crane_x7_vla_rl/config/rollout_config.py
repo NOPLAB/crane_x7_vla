@@ -12,7 +12,7 @@ class RolloutConfig:
 
     # Environment settings
     env_id: str = "PickPlace-CRANE-X7"
-    """Environment identifier for lift simulator."""
+    """Environment identifier for usim."""
 
     simulator: str = "maniskill"
     """Simulator backend (maniskill, genesis, isaacsim)."""

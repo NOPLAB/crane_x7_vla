@@ -71,8 +71,8 @@ OpenPIのPyTorch実装に基づくPi0/Pi0.5モデル：
 ```bash
 cd /path/to/crane_x7_vla/vla
 
-# 統一イメージをビルド（全バックエンド含む）
-docker build -t crane_x7_vla .
+# 統一イメージをビルド（外部usimを指定）
+docker build --build-context usim=../../usim --build-arg USIM_BACKEND=maniskill -t crane_x7_vla .
 ```
 
 ### 2. トレーニングの実行
@@ -126,10 +126,11 @@ python -m crane_x7_vla.training.cli train pi0.5 \
 
 ```bash
 # 統一イメージのビルド（推奨）
-docker build -t crane_x7_vla .
+docker build --build-context usim=../../usim --build-arg USIM_BACKEND=maniskill -t crane_x7_vla .
 
 # 異なるCUDAバージョンでビルド
-docker build --build-arg CUDA_VERSION=12.8.0 --build-arg CUDA_SHORT=cu128 -t crane_x7_vla .
+docker build --build-context usim=../../usim --build-arg USIM_BACKEND=maniskill \
+  --build-arg CUDA_VERSION=12.8.0 --build-arg CUDA_SHORT=cu128 -t crane_x7_vla .
 ```
 
 **環境仕様**:

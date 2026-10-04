@@ -8,24 +8,11 @@ from typing import Any
 
 import numpy as np
 
+# Import usim modules
+from usim import SimulatorConfig, create_simulator
+from usim.types import Observation
+
 from crane_x7_vla_rl.config.rollout_config import RolloutConfig
-
-# Import lift modules
-from lift import SimulatorConfig, create_simulator
-from lift.types import Observation
-
-
-def _ensure_simulator_registered(simulator_name: str) -> None:
-    """Import the simulator module to ensure it's registered."""
-    import importlib
-
-    module_map = {
-        "maniskill": "lift_maniskill",
-        "genesis": "lift_genesis",
-        "isaacsim": "lift_isaacsim",
-    }
-    if simulator_name in module_map:
-        importlib.import_module(module_map[simulator_name])
 
 
 @dataclass
@@ -62,7 +49,7 @@ class BatchStepResult:
     """List of info dicts."""
 
 
-class ParallelLiftEnvironments:
+class ParallelUsimEnvironments:
     """Manage parallel environments using Genesis batch parallelization.
 
     This class uses Genesis's native n_envs support for efficient parallel
@@ -82,9 +69,6 @@ class ParallelLiftEnvironments:
         """
         self.num_envs = num_envs
         self.config = config
-
-        # Ensure simulator module is registered
-        _ensure_simulator_registered(config.simulator)
 
         # Create single batched simulator
         sim_config = SimulatorConfig(
@@ -181,10 +165,10 @@ class ParallelLiftEnvironments:
         obs: Observation,
         info: Any,
     ) -> BatchObservation:
-        """Convert lift Observation to BatchObservation.
+        """Convert usim Observation to BatchObservation.
 
         Args:
-            obs: lift Observation object (with batched data).
+            obs: usim Observation object (with batched data).
             info: Info dict or list of dicts.
 
         Returns:
@@ -265,7 +249,7 @@ class ParallelLiftEnvironments:
         """Release resources."""
         self._simulator.close()
 
-    def __enter__(self) -> "ParallelLiftEnvironments":
+    def __enter__(self) -> "ParallelUsimEnvironments":
         """Context manager entry."""
         return self
 

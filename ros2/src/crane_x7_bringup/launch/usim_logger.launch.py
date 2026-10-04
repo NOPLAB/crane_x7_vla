@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2025 nop
 
 """
-Liftシミュレーション + データロガーのbringup launchファイル。
+Usimシミュレーション + データロガーのbringup launchファイル。
 
 引数:
   - output_dir (default: /workspace/data/tfrecord_logs): ログ保存先
@@ -21,12 +21,12 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch lift simulation with data logger."""
+    """Launch usim simulation with data logger."""
 
-    lift_pkg = get_package_share_directory('crane_x7_lift')
+    usim_pkg = get_package_share_directory('crane_x7_bringup')
     log_pkg = get_package_share_directory('crane_x7_log')
 
-    lift_config = os.path.join(lift_pkg, 'config', 'lift_config.yaml')
+    usim_config = os.path.join(usim_pkg, 'config', 'usim_config.yaml')
     logger_config = os.path.join(log_pkg, 'config', 'logger_config.yaml')
 
     declare_output_dir = DeclareLaunchArgument(
@@ -53,13 +53,13 @@ def generate_launch_description():
         description='Simulation backend (cpu or gpu)'
     )
 
-    lift_sim_node = Node(
-        package='crane_x7_lift',
-        executable='lift_sim_node',
-        name='lift_sim_node',
+    usim_sim_node = Node(
+        package='usim_sim',
+        executable='usim_sim_node',
+        name='usim_sim_node',
         output='screen',
         parameters=[
-            lift_config,
+            usim_config,
             {
                 'auto_reset': False,
                 'simulator': LaunchConfiguration('simulator'),
@@ -87,6 +87,6 @@ def generate_launch_description():
         declare_episode_length,
         declare_simulator,
         declare_backend,
-        lift_sim_node,
+        usim_sim_node,
         data_logger_node,
     ])

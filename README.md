@@ -21,18 +21,20 @@ CRANE-X7ロボットアームとVLAを使用した制御プログラムです。
 |-------------|------|
 | [docs/ros2.md](docs/ros2.md) | ROS 2環境（実機制御、Gazebo、Docker Composeプロファイル） |
 | [docs/vla.md](docs/vla.md) | VLAファインチューニング（OpenVLA、MiniVLA、Pi0/Pi0.5） |
-| [docs/vla-rl.md](docs/vla-rl.md) | VLA強化学習（SimpleVLA-RL方式、PPO、Liftシミュレータ） |
+| [docs/vla-rl.md](docs/vla-rl.md) | VLA強化学習（OpenVLA PPO実験コード、Pi0.5報酬重み付きflow matching、Usimシミュレータ） |
 | [docs/lerobot.md](docs/lerobot.md) | LeRobot統合（ACT、Diffusion Policy） |
 | [docs/remote.md](docs/remote.md) | リモートGPU推論（Vast.ai、Runpod） |
 
 VLA学習CLIの設定生成・読み込みと各バックエンドの実行確認状況は [docs/vla.md](docs/vla.md) を参照してください。
+
+Pi0.5 のシミュレータ内 RL ファインチューニングは、SFT済みチェックポイントを入力として `crane_x7_vla_rl.training.pi05_rwfm` から実行します。実行条件と評価方法は [docs/vla-rl.md](docs/vla-rl.md) を参照してください。
 
 ## ディレクトリ構成
 
 | ディレクトリ | 説明 |
 |-------------|------|
 | `ros2/` | ROS 2ワークスペース。CRANE-X7の実機制御、Gazeboシミュレーション、テレオペレーション、データロギング（RLDS/TFRecord形式）、VLA推論ノードを含む |
-| `vla/` | VLAファインチューニング環境、`src/crane_x7_vla_rl/` のPPOコード、`src/lift*/` のシミュレータと `src/robot/` のモデル資産。 |
+| `vla/` | VLAファインチューニング環境と `src/crane_x7_vla_rl/` のポリシーコード。usimシミュレータとロボット資産は外部の `usim==0.1.0` が提供。 |
 | `lerobot/` | LeRobot統合。CRANE-X7用のRobotプラグイン、Teleoperatorプラグイン、ACT/Diffusionポリシー設定を含む。 |
 
 ## 必要なもの
@@ -44,7 +46,22 @@ VLA学習CLIの設定生成・読み込みと各バックエンドの実行確�
 
 ```bash
 git clone --recursive https://github.com/NOPLAB/crane_x7_vla
+git clone https://github.com/NOPLAB/usim usim
 ```
+
+`usim` と `crane_x7_vla` は同じ親ディレクトリに配置します。`vla/` の
+`uv sync --extra sim-maniskill` は `../../usim` をeditableでインストールします。
+公開wheelの依存指定は `usim==0.1.0` で、ローカルパスを含みません。
+ROSの実行処理はcoreの `usim.bridges.simulation_ros2` が所有し、外部の
+`usim/ros2/src/usim_sim` が `usim_sim_node` を提供します。CRANE用設定と
+`usim.launch.py`、`usim_logger.launch.py`、`usim_vla.launch.py` は
+`crane_x7_bringup` にあります。互換パッケージはありません。
+バックエンドは `usim/packages/{genesis,maniskill,isaacsim,gazebo}` にある
+独立したPython distributionです。coreは `usim`、ManiSkillは `usim_maniskill`、
+Genesisは `usim_genesis`、Isaac Simは `usim_isaacsim`、
+ロボット資産は `usim.robots.crane_x7` からimportします。
+ネイティブ・Docker手順は [docs/ros2.md](docs/ros2.md) と
+[docs/vla.md](docs/vla.md) を参照してください。
 
 ## ライセンス
 

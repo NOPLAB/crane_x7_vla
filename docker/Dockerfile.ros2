@@ -71,11 +71,16 @@ RUN rm -rf /usr/lib/python3/dist-packages/sympy* && \
     rm -rf /usr/lib/python3/dist-packages/mpmath*
 
 # Copy VLA pyproject.toml and uv.lock for dependency installation
-COPY vla/pyproject.toml vla/uv.lock /workspace/vla/
+COPY vla/pyproject.toml /workspace/vla/
+COPY --from=usim / /usim/
 
 # Install dependencies using uv (uses vla's dependencies for ROS 2 nodes)
 WORKDIR /workspace/vla
-RUN uv sync --frozen --no-dev --no-install-project
+ARG USIM_BACKEND=none
+RUN uv sync --no-dev --no-install-project && \
+    if [ "${USIM_BACKEND}" != "none" ]; then \
+        uv pip install --no-sources -e "/usim/packages/${USIM_BACKEND}[native]"; \
+    fi
 
 # Copy VLA source code for model loading (OpenVLA, Pi0, etc.)
 COPY vla/src /workspace/vla/src
@@ -96,6 +101,7 @@ ENV PYTHONPATH="/workspace/vla/src:/workspace/vla/src/openvla:${PYTHONPATH}" \
 # Create ROS workspace and copy source packages
 WORKDIR /workspace/ros2/src
 COPY ros2/src /workspace/ros2/src
+COPY --from=usim /ros2/src/ /workspace/ros2/src/
 
 WORKDIR /workspace/ros2
 

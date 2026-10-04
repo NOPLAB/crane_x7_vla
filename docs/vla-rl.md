@@ -1,8 +1,8 @@
 # VLA-RL 強化学習
 
-VLAモデルを強化学習でファインチューニングするためのフレームワーク。SimpleVLA-RL方式を採用し、PPOアルゴリズムとLiftシミュレータを統合。
+VLAモデルを強化学習でファインチューニングするためのフレームワーク。SimpleVLA-RL方式を採用し、PPOアルゴリズムとusimを統合。
 
-> **現状:** PPOコードとLiftシミュレータは `vla/src/` にあります。ManiSkill・Genesisの実行には各バックエンドの追加依存が必要です。Isaac Simアダプタは未実装です。VLA-RL用DockerイメージとComposeプロファイルは提供していません。以下の学習・評価手順はGPU・モデル・シミュレータの動作を検証したものではありません。
+> **現状:** PPOコードは `vla/src/` にあります。シミュレータは外部のusimと独立したエンジンパッケージが所有します。各バックエンドの実行には追加依存が必要です。Isaacの実SDK検証にはNVIDIA EULAへの同意が必要です。VLA-RL用DockerイメージとComposeプロファイルは提供していません。以下の学習・評価手順はエンドツーエンドの動作を検証したものではありません。
 
 ## 目次
 
@@ -16,12 +16,13 @@ VLAモデルを強化学習でファインチューニングするためのフ�
 
 ## クイックスタート
 
-VLA-RLコードとLiftは `vla/` のPythonパッケージに含まれます。使用するシミュレータの追加依存を指定してインストールします。Docker ComposeにVLA-RL用プロファイルはありません。
+VLA-RLコードは `vla/` にあり、Usimとロボット資産は外部の `usim==0.1.0` が提供します。使用するシミュレータの追加依存を指定してインストールします。Docker ComposeにVLA-RL用プロファイルはありません。
 
 ### 手動実行
 
 ```bash
 cd vla
+pip install -e '../../usim' -e '../../usim/packages/maniskill[native]'
 pip install -e '.[sim-maniskill]'
 
 # SFTチェックポイントからトレーニング
@@ -47,8 +48,11 @@ python -m crane_x7_vla_rl.training.cli config --output my_config.yaml
 
 ```bash
 cd vla
+pip install -e '../../usim' -e '../../usim/packages/maniskill[native]'
 pip install -e '.[sim-maniskill]'
-# Genesisを使う場合: pip install -e '.[sim-genesis]'
+# Genesisを使う場合:
+# pip install -e '../../usim' -e '../../usim/packages/genesis[native]'
+# pip install -e '.[sim-genesis]'
 ```
 
 ### 必要環境
@@ -56,7 +60,7 @@ pip install -e '.[sim-maniskill]'
 - Python 3.10+
 - PyTorch 2.5.1+
 - CUDA 12.x（GPU使用時）
-- Liftシミュレータ（`vla/src/` に含まれます）と対象バックエンドの追加依存
+- Usimシミュレータ（外部 `usim==0.1.0`）と対象バックエンドの追加依存
 
 ## CLI引数一覧
 
@@ -240,11 +244,7 @@ reward = 1.0 if info.get("success", False) else 0.0
 ```
 vla/
 └── src/
-    ├── lift/                    # 共通シミュレータAPI
-    ├── lift_maniskill/          # ManiSkillバックエンド
-    ├── lift_genesis/            # Genesisバックエンド
-    ├── lift_isaacsim/           # Isaac Simアダプタ（未実装）
-    ├── robot/                   # CRANE-X7モデルとメッシュ
+    ├── crane_x7_vla/            # VLAポリシー
     └── crane_x7_vla_rl/
         ├── training/               # トレーニング
         │   ├── cli.py              # CLIエントリーポイント
@@ -256,7 +256,7 @@ vla/
         │   ├── rollout_manager.py  # 並列ロールアウト
         │   └── trajectory_buffer.py # トラジェクトリバッファ
         ├── environments/           # 環境ラッパー
-        │   ├── lift_wrapper.py     # Liftシミュレータラッパー
+        │   ├── usim_wrapper.py     # Usimシミュレータラッパー
         │   └── parallel_envs.py    # 並列環境管理
         ├── rewards/                # 報酬関数
         │   └── binary_reward.py    # バイナリ報酬
@@ -280,7 +280,7 @@ python -m crane_x7_vla_rl.training.cli train --backend cpu
 python -m crane_x7_vla_rl.training.cli train --backend gpu
 ```
 
-**注意**: GPU使用時はLiftシミュレータのGPUバックエンドも必要。
+**注意**: GPU使用時はUsimシミュレータのGPUバックエンドも必要。
 
 ### メモリ不足
 
@@ -292,7 +292,7 @@ python -m crane_x7_vla_rl.training.cli train --num-parallel-envs 2
 
 ### シミュレータエラー
 
-Liftは`vla/src/`にあります。`ModuleNotFoundError`が出る場合は`vla/`で`pip install -e '.[sim-maniskill]'`または`pip install -e '.[sim-genesis]'`を実行し、対象バックエンドの依存を確認してください。
+共通APIは外部usimパッケージにあります。`ModuleNotFoundError`が出る場合は`vla/`で`uv sync --extra sim-maniskill`または`uv sync --extra sim-genesis`を実行してください。pipではcoreの`../../usim`と選択した`../../usim/packages/maniskill`または`../../usim/packages/genesis`をインストールします。`python -c "import usim; print(usim.__file__)"` がusimのインストール先を指すことを確認してください。
 
 ### W&Bログインエラー
 
