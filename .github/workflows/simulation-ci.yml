@@ -1,0 +1,55 @@
+name: Simulation contracts
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'vla/src/crane_x7_vla_robot/**'
+      - 'vla/src/crane_x7_vla_rl/environments/**'
+      - 'vla/tests/test_robot_simulation.py'
+      - 'vla/pyproject.toml'
+      - 'ros2/src/crane_x7_bringup/**'
+      - 'ros2/src/crane_x7_vla/crane_x7_vla/simulation_node.py'
+      - '.github/workflows/simulation-ci.yml'
+  pull_request:
+    paths:
+      - 'vla/src/crane_x7_vla_robot/**'
+      - 'vla/src/crane_x7_vla_rl/environments/**'
+      - 'vla/tests/test_robot_simulation.py'
+      - 'vla/pyproject.toml'
+      - 'ros2/src/crane_x7_bringup/**'
+      - 'ros2/src/crane_x7_vla/crane_x7_vla/simulation_node.py'
+      - '.github/workflows/simulation-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v7
+      - name: Checkout robot-neutral core
+        uses: actions/checkout@v7
+        with:
+          repository: NOPLAB/usim
+          ref: main
+          path: .build-usim
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install CPU test dependencies
+        run: |
+          uv venv --python '${{ matrix.python }}' .ci-venv
+          uv pip install --python .ci-venv/bin/python \
+            -e .build-usim 'pytest>=9.1,<10' 'numpy>=1.26,<3'
+      - name: Build and install application wheel
+        run: |
+          uv build --wheel vla --out-dir dist
+          uv pip install --python .ci-venv/bin/python --no-deps dist/*.whl
+      - name: Test installed robot definitions and external injection
+        run: .ci-venv/bin/python -m pytest -q vla/tests/test_robot_simulation.py
