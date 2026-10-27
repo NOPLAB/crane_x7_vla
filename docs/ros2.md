@@ -247,16 +247,21 @@ CRANE-X7用設定 `config/usim_config.yaml` と3つの `usim*.launch.py` は
 `crane_x7_bringup` が所有します。bridgeは `usim.create_simulator` の遅延登録を使い、
 VLA学習依存をimportしません。汎用bridgeは `env_id`、`camera_uid`、`camera_frame`、
 トピックとサービス名をパラメータで指定できます。
+CRANE用launchは下流の `crane_x7_vla/crane_x7_sim_node` を起動します。
+このノードは汎用bridgeを継承し、`crane_x7_vla_robot` のモデル・タスク登録と
+数値制御設定を適用します。登録済みManiSkillエージェントのモデルパスと
+ゲインは下流が所有し、汎用アダプタに `robot_path` やゲイン上書きを渡しません。
 
 ネイティブ（ROS 2をsourceした同じPython環境で実行）：
 
 ```bash
 cd crane_x7_vla
 python -m pip install -e '../usim' -e '../usim/packages/maniskill[native]'
+python -m pip install -e './vla[sim-maniskill]'
 cd ros2
 colcon build --symlink-install --base-paths src ../../usim/ros2/src
 source install/setup.bash
-python -c "import usim, usim_sim; print(usim.__file__, usim_sim.__file__)"
+python -c "import usim, crane_x7_vla_robot; print(usim.__file__, crane_x7_vla_robot.__file__)"
 ros2 launch crane_x7_bringup usim.launch.py simulator:=maniskill
 ```
 
@@ -269,7 +274,8 @@ docker compose run --rm real ros2 launch crane_x7_bringup usim.launch.py simulat
 ```
 
 Dockerfileは外部usimを `/usim` にインストールし、usimのROS packageも同じ
-colcon workspaceでビルドします。Genesisの場合は `USIM_BACKEND=genesis` に変更します。
+colcon workspaceでビルドします。既存PickPlaceのlaunchはManiSkill用です。
+Genesis/Isaacの `JointControl` と9関節アクションには下流タスクの組み立てが必要です。
 ROS/コンテナ/バックエンドの実行はこの移動の静的検査とは別途検証が必要です。
 バックエンドのnative依存とcapabilityに対応する実行環境が必要です。
 

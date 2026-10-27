@@ -16,7 +16,7 @@ VLAモデルを強化学習でファインチューニングするためのフ�
 
 ## クイックスタート
 
-VLA-RLコードは `vla/` にあり、Usimとロボット資産は外部の `usim==0.1.0` が提供します。使用するシミュレータの追加依存を指定してインストールします。Docker ComposeにVLA-RL用プロファイルはありません。
+VLA-RLコードは `vla/` にあり、Usimエンジンは外部の `usim==0.1.0`、ロボット資産とタスクは下流の `crane_x7_vla_robot` が提供します。使用するシミュレータの追加依存を指定してインストールします。Docker ComposeにVLA-RL用プロファイルはありません。登録とモデル注入は [robot-simulation.md](robot-simulation.md) を参照してください。
 
 ### 手動実行
 

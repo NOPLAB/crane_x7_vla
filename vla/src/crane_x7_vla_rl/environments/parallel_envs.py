@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 # Import usim modules
-from usim import SimulatorConfig, create_simulator
+from crane_x7_vla_robot.simulation import simulator_config, create_simulator
 from usim.types import Observation
 
 from crane_x7_vla_rl.config.rollout_config import RolloutConfig
@@ -71,7 +71,7 @@ class ParallelUsimEnvironments:
         self.config = config
 
         # Create single batched simulator
-        sim_config = SimulatorConfig(
+        sim_config = simulator_config(
             env_id=config.env_id,
             backend=config.backend,
             render_mode=config.render_mode,

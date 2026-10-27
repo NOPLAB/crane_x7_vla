@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from usim import SimulatorConfig, create_simulator
+from crane_x7_vla_robot.simulation import simulator_config, create_simulator
 from usim.interface import EpisodeSimulator
 from usim.types import Observation, StepResult
 
@@ -77,7 +77,7 @@ class UsimRolloutEnvironment:
         Returns:
             Configured UsimRolloutEnvironment instance.
         """
-        config = SimulatorConfig(
+        config = simulator_config(
             env_id=env_id,
             backend=backend,
             render_mode=render_mode,
@@ -204,8 +204,8 @@ class UsimRolloutEnvironment:
 
     @property
     def action_dim(self) -> int:
-        """Get action dimension (8 for CRANE-X7: 7 arm + 1 gripper)."""
-        return 8
+        """Registered mimic control has eight targets; file control needs nine."""
+        return 9 if self.simulator.config.env_id == "JointControl" else 8
 
     @property
     def state_dim(self) -> int:

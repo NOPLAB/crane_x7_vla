@@ -60,8 +60,8 @@ def generate_launch_description():
     )
 
     usim_sim_node = Node(
-        package='usim_sim',
-        executable='usim_sim_node',
+        package='crane_x7_vla',
+        executable='crane_x7_sim_node',
         name='usim_sim_node',
         output='screen',
         parameters=[

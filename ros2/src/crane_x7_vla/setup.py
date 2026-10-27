@@ -33,6 +33,7 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
+            'crane_x7_sim_node = crane_x7_vla.simulation_node:main',
             'vla_inference_node = crane_x7_vla.vla_inference_node:main',
             'robot_controller = crane_x7_vla.robot_controller:main',
             'initial_position_node = crane_x7_vla.initial_position_node:main',

@@ -92,6 +92,7 @@ Repository = "https://github.com/NOPLAB/crane_x7_vla"
 packages = [
     "src/crane_x7_vla",
     "src/crane_x7_vla_rl",
+    "src/crane_x7_vla_robot",
 ]
 
 [tool.hatch.build.targets.wheel.sources]

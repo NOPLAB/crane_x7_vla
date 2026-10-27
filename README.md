@@ -34,7 +34,7 @@ Pi0.5 のシミュレータ内 RL ファインチューニングは、SFT済み�
 | ディレクトリ | 説明 |
 |-------------|------|
 | `ros2/` | ROS 2ワークスペース。CRANE-X7の実機制御、Gazeboシミュレーション、テレオペレーション、データロギング（RLDS/TFRecord形式）、VLA推論ノードを含む |
-| `vla/` | VLAファインチューニング環境と `src/crane_x7_vla_rl/` のポリシーコード。usimシミュレータとロボット資産は外部の `usim==0.1.0` が提供。 |
+| `vla/` | VLAファインチューニング環境とポリシーコード。`src/crane_x7_vla_robot/` がCRANE-X7定義・資産・タスクを所有し、usimエンジンは外部依存。 |
 | `lerobot/` | LeRobot統合。CRANE-X7用のRobotプラグイン、Teleoperatorプラグイン、ACT/Diffusionポリシー設定を含む。 |
 
 ## 必要なもの
@@ -59,7 +59,10 @@ ROSの実行処理はcoreの `usim.bridges.simulation_ros2` が所有し、外�
 バックエンドは `usim/packages/{genesis,maniskill,isaacsim,gazebo}` にある
 独立したPython distributionです。coreは `usim`、ManiSkillは `usim_maniskill`、
 Genesisは `usim_genesis`、Isaac Simは `usim_isaacsim`、
-ロボット資産は `usim.robots.crane_x7` からimportします。
+ロボット資産は `crane_x7_vla_robot.crane_x7` からimportします。
+CRANE用launchは `crane_x7_vla` の `crane_x7_sim_node` を起動し、
+下流のManiSkill登録を明示的に読み込んでから汎用ROS bridgeへ委譲します。
+インストールと新しいモデル注入APIは [docs/robot-simulation.md](docs/robot-simulation.md) を参照してください。
 ネイティブ・Docker手順は [docs/ros2.md](docs/ros2.md) と
 [docs/vla.md](docs/vla.md) を参照してください。
 
